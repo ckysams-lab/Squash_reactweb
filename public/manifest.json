@@ -1,0 +1,15 @@
+{
+  "short_name": "PJ Squash",
+  "name": "正覺壁球",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3592/3592233.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#2563eb",
+  "background_color": "#ffffff"
+}
