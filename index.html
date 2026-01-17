@@ -1,13 +1,81 @@
-npm run dev<!doctype html>
-<html lang="en">
+<!doctype html>
+<html lang="zh-HK">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>squash_react_web</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>PJ Squash Academy</title>
+    
+    <link rel="manifest" href="/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3592/3592233.png">
+    <link rel="apple-touch-startup-image" href="https://cdn-icons-png.flaticon.com/512/3592/3592233.png">
+
+    <style>
+      #pwa-splash {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.5s ease-out;
+      }
+      .splash-logo {
+        width: 120px;
+        height: 120px;
+        filter: drop-shadow(0 20px 30px rgba(0,0,0,0.2));
+        animation: pulse 2s infinite ease-in-out;
+      }
+      .splash-title {
+        color: white;
+        margin-top: 24px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-weight: 900;
+        font-size: 24px;
+        letter-spacing: 2px;
+      }
+      @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+      }
+    </style>
   </head>
   <body>
+    <div id="pwa-splash">
+      <img src="https://cdn-icons-png.flaticon.com/512/3592/3592233.png" class="splash-logo" alt="Logo">
+      <div class="splash-title">PJ SQUASH</div>
+    </div>
+
     <div id="root"></div>
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW register failed:', err));
+        });
+      }
+    </script>
+
+    <script>
+      window.addEventListener('load', () => {
+        const splash = document.getElementById('pwa-splash');
+        if (splash) {
+          setTimeout(() => {
+            splash.style.opacity = '0';
+            setTimeout(() => splash.remove(), 500);
+          }, 1200); // 顯示 1.2 秒
+        }
+      });
+    </script>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
