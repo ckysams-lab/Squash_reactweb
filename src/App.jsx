@@ -410,10 +410,13 @@ export default function App() {
     };
 
     try {
-      // 4. 更新狀態 (如果有 Firebase，請在這裡加入 addDoc)
-      // await addDoc(collection(db, 'attendance'), newRecord); 
+      // 4. 更新狀態 (修復：使用 setDoc 寫入正確的資料庫路徑)
+      // 這裡的路徑必須與您 useEffect 中讀取的一致：artifacts -> appId -> public -> data -> attendance
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', newRecord.id), newRecord);
       
-      setAttendance(prev => [newRecord, ...prev]);
+      // 注意：由於您的 useEffect 已經有監聽 onSnapshot，
+      // 資料庫寫入成功後，onSnapshot 會自動更新 attendance 狀態，
+      // 因此不需要手動 setAttendance (這樣可以確保畫面顯示的是資料庫真正存入的資料)
       
       // 5. 重置與通知
       setTempAttendance({});
