@@ -15,43 +15,41 @@ import {
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
 // --- Firebase 初始化 ---
-const firebaseConfig = {
-  apiKey: "AIzaSyAYm_63S9pKMZ51Qb2ZlCHRsfuGzy2gstw",
-  authDomain: "squashreact.firebaseapp.com",
-  projectId: "squashreact",
-  storageBucket: "squashreact.firebasestorage.app",
-  messagingSenderId: "342733564194",
-  appId: "1:342733564194:web:7345d90d7d22c0b605dd7b",
-  measurementId: "G-JRZ0QSFLLQ"
-};
+// 嘗試讀取環境變數，若無則使用預設值
+let firebaseConfig;
+try {
+  const envConfig = import.meta.env?.VITE_FIREBASE_CONFIG;
+  if (envConfig) {
+    firebaseConfig = JSON.parse(envConfig);
+  } else if (typeof __firebase_config !== 'undefined') {
+    firebaseConfig = JSON.parse(__firebase_config);
+  } else {
+    throw new Error('No env config');
+  }
+} catch (e) {
+  // 後備方案：使用預設金鑰
+  firebaseConfig = {
+    apiKey: "AIzaSyAYm_63S9pKMZ51Qb2ZlCHRsfuGzy2gstw",
+    authDomain: "squashreact.firebaseapp.com",
+    projectId: "squashreact",
+    storageBucket: "squashreact.firebasestorage.app",
+    messagingSenderId: "342733564194",
+    appId: "1:342733564194:web:7345d90d7d22c0b605dd7b",
+    measurementId: "G-JRZ0QSFLLQ"
+  };
+}
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'squash-management-v1';
 
-// --- [新代碼：等級勳章組件] ---
-const RankBadge = ({ rank, points }) => {
-  const getBadgeConfig = () => {
-    if (rank === 1) return { icon: <Trophy className="text-yellow-400" size={14}/>, label: "傳奇球王", color: "bg-yellow-50 text-yellow-700 border-yellow-200" };
-    if (rank === 2) return { icon: <Award className="text-slate-400" size={14}/>, label: "頂尖高手", color: "bg-slate-50 text-slate-700 border-slate-200" };
-    if (rank === 3) return { icon: <Award className="text-amber-600" size={14}/>, label: "領軍人物", color: "bg-amber-50 text-amber-700 border-amber-200" };
-    if (rank <= 8) return { icon: <Star className="text-blue-400" size={14}/>, label: "八強精英", color: "bg-blue-50 text-blue-700 border-blue-200" };
-    if (points >= 1000) return { icon: <CheckCircle2 className="text-emerald-500" size={14}/>, label: "精英球員", color: "bg-emerald-50 text-emerald-700 border-emerald-200" };
-    return null;
-  };
-  const badge = getBadgeConfig();
-  if (!badge) return null;
-  return (
-    <div className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-wider ${badge.color}`}>
-      {badge.icon} {badge.label}
-    </div>
-  );
-};
+// --- 版本控制 (Version Control) ---
+// Version 1.0: 基於 App (25).jsx，修正 Logo 顯示問題 (GitHub Raw Link)
+const CURRENT_VERSION = "1.0";
 
 export default function App() {
   // --- 狀態管理 ---
-  const [attendanceTab, setAttendanceTab] = useState('take'); // 'take' (點名) | 'history' (紀錄)
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null); // 'admin' | 'student'
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
@@ -59,7 +57,7 @@ export default function App() {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [competitions, setCompetitions] = useState([]);
-  const [schedules, setSchedules] = useState([]); // 訓練日程
+  const [schedules, setSchedules] = useState([]); 
   const [downloadFiles, setDownloadFiles] = useState([]); 
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
@@ -71,12 +69,11 @@ export default function App() {
   const [showLoginModal, setShowLoginModal] = useState(true);
   const [importEncoding, setImportEncoding] = useState('AUTO');
   const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
-  const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL'); // 點名頁專用篩選
-  const [tempAttendance, setTempAttendance] = useState({});
+  const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
-// 新增：財務參數
+  // [Fix 1.0] 財務參數
   const [financeConfig, setFinanceConfig] = useState({
     nTeam: 1, costTeam: 2750,
     nTrain: 3, costTrain: 1350,
@@ -84,25 +81,30 @@ export default function App() {
     totalStudents: 50, feePerStudent: 250
   });
 
-// 新增：自動計算總收支
+  // 自動計算總收支
   const financialSummary = useMemo(() => {
-  const revenue = financeConfig.totalStudents * financeConfig.feePerStudent;
-  const expense = (financeConfig.nTeam * financeConfig.costTeam) + 
-                  (financeConfig.nTrain * financeConfig.costTrain) + 
-                  (financeConfig.nHobby * financeConfig.costHobby);
-  return { revenue, expense, profit: revenue - expense };
-}, [financeConfig]);
+    const revenue = financeConfig.totalStudents * financeConfig.feePerStudent;
+    const expense = (financeConfig.nTeam * financeConfig.costTeam) + 
+                    (financeConfig.nTrain * financeConfig.costTrain) + 
+                    (financeConfig.nHobby * financeConfig.costHobby);
+    return { revenue, expense, profit: revenue - expense };
+  }, [financeConfig]);
 
-  // 章別數據與積分邏輯
+  // 章別數據
   const BADGE_DATA = {
     "白金章": { color: "text-slate-400", bg: "bg-slate-100", icon: "💎", border: "border-slate-200", shadow: "shadow-slate-100", bonus: 400, desc: "最高榮譽" },
     "金章": { color: "text-yellow-600", bg: "bg-yellow-50", icon: "🥇", border: "border-yellow-200", shadow: "shadow-yellow-100", bonus: 200, desc: "卓越表現" },
     "銀章": { color: "text-slate-500", bg: "bg-slate-100", icon: "🥈", border: "border-slate-200", shadow: "shadow-slate-100", bonus: 100, desc: "進步神速" },
     "銅章": { color: "text-orange-600", bg: "bg-orange-50", icon: "🥉", border: "border-orange-200", shadow: "shadow-orange-100", bonus: 50, desc: "初露鋒芒" },
     "無": { color: "text-slate-300", bg: "bg-slate-50", icon: "⚪", border: "border-slate-100", shadow: "shadow-transparent", bonus: 0, desc: "努力中" }
-};
+  };
+
   // --- Firebase Auth 監聽 ---
   useEffect(() => {
+    const safetyTimeout = setTimeout(() => {
+      if (loading) setLoading(false);
+    }, 5000);
+
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -110,61 +112,77 @@ export default function App() {
         } else {
           await signInAnonymously(auth);
         }
-      } catch (err) { console.error("Auth Error:", err); }
+      } catch (err) { 
+        console.error("Auth Error:", err);
+        setLoading(false);
+      }
     };
     initAuth();
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
+      clearTimeout(safetyTimeout);
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
   // --- Firestore 資料即時監聽 ---
   useEffect(() => {
     if (!user) return;
     
-    const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
-    const attendanceRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance');
-    const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
-    const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
-    const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'); 
-    const configDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
+    try {
+      const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
+      const attendanceRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance');
+      const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
+      const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
+      const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'); 
+      
+      const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
+      const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
 
-    // 系統配置監聽
-    const unsubConfig = onSnapshot(configDocRef, (docSnap) => {
-      if (docSnap.exists()) setSystemConfig(docSnap.data());
-      else setDoc(configDocRef, { adminPassword: 'admin', announcements: [], seasonalTheme: 'default' });
-    });
-    
-    // 學生資料監聽
-    const unsubStudents = onSnapshot(studentsRef, (snap) => {
-      setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+      const unsubSystemConfig = onSnapshot(systemConfigRef, (docSnap) => {
+        if (docSnap.exists()) setSystemConfig(docSnap.data());
+        else setDoc(systemConfigRef, { adminPassword: 'admin', announcements: [], seasonalTheme: 'default' });
+      }, (e) => console.error("Config err", e));
 
-    // 點名紀錄監聽
-    const unsubAttendance = onSnapshot(attendanceRef, (snap) => {
-      setAttendance(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+      const unsubFinanceConfig = onSnapshot(financeConfigRef, (docSnap) => {
+        if (docSnap.exists()) {
+          setFinanceConfig(prev => ({...prev, ...docSnap.data()}));
+        } else {
+          setDoc(financeConfigRef, financeConfig);
+        }
+      }, (e) => console.error("Finance err", e));
+      
+      const unsubStudents = onSnapshot(studentsRef, (snap) => {
+        setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
 
-    // 比賽資訊監聽
-    const unsubCompetitions = onSnapshot(competitionsRef, (snap) => {
-      setCompetitions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+      const unsubAttendance = onSnapshot(attendanceRef, (snap) => {
+        setAttendance(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
 
-    // 訓練日程監聽
-    const unsubSchedules = onSnapshot(schedulesRef, (snap) => {
-      setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+      const unsubCompetitions = onSnapshot(competitionsRef, (snap) => {
+        setCompetitions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
 
-    // 檔案下載監聽
-    const unsubFiles = onSnapshot(filesRef, (snap) => {
-      setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+      const unsubSchedules = onSnapshot(schedulesRef, (snap) => {
+        setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
 
-    return () => { 
-      unsubConfig(); unsubStudents(); unsubAttendance(); unsubCompetitions(); unsubSchedules(); unsubFiles(); 
-    };
+      const unsubFiles = onSnapshot(filesRef, (snap) => {
+        setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+
+      return () => { 
+        unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendance(); unsubCompetitions(); unsubSchedules(); unsubFiles(); 
+      };
+    } catch (e) {
+      console.error("Firestore Init Error:", e);
+    }
   }, [user]);
 
   // --- 登入邏輯 ---
@@ -204,92 +222,20 @@ export default function App() {
     });
   }, [students]);
 
- // --- 財務收支組件 (從 App.jsx 移植並適配樣式) ---
-  const FinancialView = () => (
-    <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-          <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6">
-            <TrendingUp size={32}/>
-          </div>
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總收入</p>
-          <h3 className="text-4xl font-black text-emerald-500">${financialSummary.revenue.toLocaleString()}</h3>
-        </div>
+  // --- 財務儲存 ---
+  const saveFinanceConfig = async () => {
+    setIsUpdating(true);
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance'), financeConfig);
+      alert('財務設定已儲存！');
+    } catch (e) {
+      console.error(e);
+      alert('儲存失敗');
+    }
+    setIsUpdating(false);
+  };
 
-        <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-          <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6">
-            <Trash2 size={32}/>
-          </div>
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總支出</p>
-          <h3 className="text-4xl font-black text-rose-500">${financialSummary.expense.toLocaleString()}</h3>
-        </div>
-
-        <div className={`p-10 rounded-[3.5rem] border shadow-sm flex flex-col justify-center items-center text-center ${financialSummary.profit >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
-          <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${financialSummary.profit >= 0 ? 'bg-white text-blue-600 shadow-sm' : 'bg-white text-rose-600 shadow-sm'}`}>
-            <DollarSign size={32}/>
-          </div>
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計資助</p>
-          <h3 className={`text-4xl font-black ${financialSummary.profit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-            ${financialSummary.profit.toLocaleString()}
-          </h3>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-4 mb-10">
-            <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center shadow-sm"><Trash2 size={24}/></div>
-            <h4 className="text-2xl font-black text-slate-800">支出設定 (教練費)</h4>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {[
-              { label: '校隊教練次數', key: 'nTeam' }, { label: '單次校隊成本', key: 'costTeam' },
-              { label: '進階班次數', key: 'nTrain' }, { label: '單次進階成本', key: 'costTrain' },
-              { label: '趣味班次數', key: 'nHobby' }, { label: '單次趣味成本', key: 'costHobby' },
-            ].map(item => (
-              <div key={item.key}>
-                <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">{item.label}</label>
-                <input 
-                  type="number" 
-                  className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-rose-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
-                  value={financeConfig[item.key]}
-                  onChange={e => setFinanceConfig({...financeConfig, [item.key]: Number(e.target.value)})}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-4 mb-10">
-            <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm"><DollarSign size={24}/></div>
-            <h4 className="text-2xl font-black text-slate-800">預計收入 (學費)</h4>
-          </div>
-          <div className="space-y-10">
-            <div>
-              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">預計總人數</label>
-              <input 
-                type="number" 
-                className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
-                value={financeConfig.totalStudents}
-                onChange={e => setFinanceConfig({...financeConfig, totalStudents: Number(e.target.value)})}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">每位學員學費 ($)</label>
-              <input 
-                type="number" 
-                className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
-                value={financeConfig.feePerStudent}
-                onChange={e => setFinanceConfig({...financeConfig, feePerStudent: Number(e.target.value)})}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
+  // --- 積分調整 ---
   const adjustPoints = async (id, amount, reason = "教練調整") => {
     if (role !== 'admin' || !user) return;
     setIsUpdating(true);
@@ -317,7 +263,6 @@ export default function App() {
     });
   };
 
-  // --- 核心功能：訓練班日程匯入 ---
   const handleCSVImportSchedules = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -343,12 +288,11 @@ export default function App() {
       });
       await batch.commit();
       alert('訓練班日程匯入成功！');
-    } catch (err) { alert('匯入失敗，請確認 CSV 格式 (班別,日期,地點,教練,備註)'); }
+    } catch (err) { alert('匯入失敗，請確認 CSV 格式'); }
     setIsUpdating(false);
     e.target.value = null;
   };
 
-  // --- 核心功能：學員匯入 ---
   const handleCSVImportStudents = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -369,7 +313,7 @@ export default function App() {
             classNo: no || '0', 
             badge: badge || '無', 
             points: Number(initPoints) || 100, 
-            squashClass: squashClass || '', // 壁球班別
+            squashClass: squashClass || '', 
             createdAt: serverTimestamp() 
           });
         }
@@ -381,53 +325,6 @@ export default function App() {
     e.target.value = null;
   };
 
-// --- [v2.9 新增] 真正的點名存檔功能 ---
-  const saveAttendance = async () => {
-    // 1. 檢查是否有點選學生
-    const selectedIds = Object.keys(tempAttendance).filter(id => tempAttendance[id]);
-    if (selectedIds.length === 0) {
-      alert("⚠️ 請至少勾選一位出席的學員！");
-      return;
-    }
-
-    // 2. 決定班別名稱 (優先使用日程表，否則使用篩選器，若為 ALL 則設為自由訓練)
-    let targetClass = attendanceClassFilter;
-    if (todaySchedule && todaySchedule.trainingClass) {
-      targetClass = todaySchedule.trainingClass;
-    } else if (targetClass === 'ALL') {
-      targetClass = '自由訓練 (Mixed)';
-    }
-
-    // 3. 建立紀錄物件
-    const newRecord = {
-      id: "ATT_" + Date.now(),
-      date: todaySchedule?.date || new Date().toISOString().split('T')[0],
-      className: targetClass,
-      location: todaySchedule?.location || "體育館",
-      coach: todaySchedule?.coach || "教練",
-      records: tempAttendance, // 儲存 { studentId: true/false }
-      timestamp: new Date()
-    };
-
-    try {
-      // 4. 更新狀態 (修復：使用 setDoc 寫入正確的資料庫路徑)
-      // 這裡的路徑必須與您 useEffect 中讀取的一致：artifacts -> appId -> public -> data -> attendance
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', newRecord.id), newRecord);
-      
-      // 注意：由於您的 useEffect 已經有監聽 onSnapshot，
-      // 資料庫寫入成功後，onSnapshot 會自動更新 attendance 狀態，
-      // 因此不需要手動 setAttendance (這樣可以確保畫面顯示的是資料庫真正存入的資料)
-      
-      // 5. 重置與通知
-      setTempAttendance({});
-      alert(`✅ 已成功儲存 ${targetClass} 的出席紀錄 (${selectedIds.length} 人)！`);
-      setAttendanceTab('history'); // 自動跳轉到紀錄頁查看
-    } catch (error) {
-      console.error("存檔失敗:", error);
-      alert("存檔失敗，請稍後再試");
-    }
-  };
-
   const deleteItem = async (col, id) => {
     if (role !== 'admin') return;
     if (confirm('⚠️ 確定要永久刪除此項紀錄嗎？此動作無法復原。')) {
@@ -435,7 +332,6 @@ export default function App() {
     }
   };
 
-  // --- 日程連動點名邏輯 ---
   const todaySchedule = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return schedules.find(s => s.date === today);
@@ -460,78 +356,15 @@ export default function App() {
     );
   }, [rankedStudents, searchTerm]);
 
-  // 點名專用過濾學員 (防止重複顯示)
   const studentsInSelectedAttendanceClass = useMemo(() => {
     const sorted = [...students].sort((a,b) => a.class.localeCompare(b.class));
     if (attendanceClassFilter === 'ALL') return sorted;
-    
-    // 如果學生報名多於一班，squashClass 欄位內容可能包含多個班名
-    // 這裡我們檢查學生的 squashClass 字串是否包含目前選定的班別名稱
     return sorted.filter(s => {
       if (!s.squashClass) return false;
       return s.squashClass.includes(attendanceClassFilter);
     });
   }, [students, attendanceClassFilter]);
 
-// --- [v2.6 新增] 匯出出席紀錄功能 ---
-  const exportAttendanceCSV = (targetClass) => {
-    if (!targetClass || targetClass === 'ALL') {
-      alert('請先選擇一個班別以匯出紀錄');
-      return;
-    }
-
-    // 1. 整理該班級所有學生
-    const classStudents = students.filter(s => 
-      s.class === targetClass || (s.squashClass && s.squashClass.includes(targetClass))
-    ).sort((a, b) => a.classNo - b.classNo);
-
-    // 2. 整理該班級所有相關的點名紀錄 (依日期排序)
-    const classAttendanceRecords = attendance.filter(r => 
-      r.className === targetClass || r.trainingClass === targetClass
-    ).sort((a, b) => a.date.localeCompare(b.date));
-
-    if (classAttendanceRecords.length === 0) {
-      alert('該班別尚無點名紀錄');
-      return;
-    }
-
-    // 3. 構建 CSV 內容
-    let csvContent = "\ufeff姓名,班別,班號,總出席次數,出席率";
-    classAttendanceRecords.forEach(r => {
-      csvContent += `,${r.date}`;
-    });
-    csvContent += "\n";
-
-    classStudents.forEach(s => {
-      let presentCount = 0;
-      let row = `${s.name},${s.class},${s.classNo}`;
-      
-      let dateStatuses = "";
-      classAttendanceRecords.forEach(r => {
-        const status = r.records?.[s.id] || r.studentStatuses?.[s.id];
-        const isPresent = status === 'Present' || status === '出席' || status === true;
-        
-        if (isPresent) presentCount++;
-        dateStatuses += `,${isPresent ? '✅' : '⬜'}`;
-      });
-
-      const rate = classAttendanceRecords.length > 0 
-        ? Math.round((presentCount / classAttendanceRecords.length) * 100) + '%' 
-        : '0%';
-        
-      row += `,${presentCount},${rate}${dateStatuses}`;
-      csvContent += row + "\n";
-    });
-
-    // 4. 下載檔案
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `出席紀錄_${targetClass}_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  };
-
-  // --- 下載範本 ---
   const downloadTemplate = (type) => {
     let csv = "";
     let filename = "";
@@ -542,16 +375,38 @@ export default function App() {
       csv = "姓名,班別,班號,章別(無/銅章/銀章/金章/白金章),初始積分,壁球班別\n陳小明,6A,01,銅章,120,校隊訓練班\n張小華,5C,12,無,100,壁球中級訓練班";
       filename = "學員匯入範本.csv";
     }
-
     const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   };
 
+  // --- [Fix 1.0] 校徽 Logo 組件 (新增) ---
+  // 使用修正後的 GitHub Raw Link
+  const SchoolLogo = ({ size = 48, className = "" }) => {
+    const [error, setError] = useState(false);
+    // [Fix 1.0] 已將 blob 改為 raw 連結
+    const logoUrl = "https://github.com/ckysams-lab/Squash_reactweb/raw/56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+
+    if (error) {
+      return <ShieldCheck className={`${className}`} size={size} />;
+    }
+
+    return (
+      <img 
+        src={logoUrl} 
+        alt="BCKLAS Logo" 
+        className={`object-contain ${className}`}
+        style={{ width: size * 2, height: size * 2 }} 
+        onError={() => setError(true)}
+      />
+    );
+  };
+
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
       <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
-      <p className="text-slate-400 font-bold animate-pulse">正在連接正覺壁球資料庫...</p>
+      <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
+      <p className="text-xs text-slate-300 mt-2 font-mono">v{CURRENT_VERSION}</p>
     </div>
   );
 
@@ -560,15 +415,16 @@ export default function App() {
       
       {/* 登入視窗 */}
       {showLoginModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/20 transform transition-all duration-700">
+        <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
+          <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
             <div className="flex justify-center mb-10">
-              <div className="w-24 h-24 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-blue-200">
-                <ShieldCheck className="text-white" size={48} />
+              <div className="w-24 h-24 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-blue-500/30 overflow-hidden p-2">
+                {/* [Fix 1.0] 使用校徽圖片 */}
+                <SchoolLogo className="text-white" size={48} />
               </div>
             </div>
             <h2 className="text-4xl font-black text-center text-slate-800 mb-2">正覺壁球</h2>
-            <p className="text-center text-slate-400 font-bold mb-10">學員管理及積分系統</p>
+            <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
             
             <div className="space-y-6">
               <div className="bg-slate-50 p-1 rounded-[2rem] flex mb-4">
@@ -598,7 +454,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <p className="text-center text-[10px] text-slate-300 mt-10 font-bold uppercase tracking-widest">正覺壁球管理系統 v2.5</p>
+            <p className="text-center text-[10px] text-slate-300 mt-10 font-bold uppercase tracking-widest">BCKLAS Management v{CURRENT_VERSION}</p>
           </div>
         </div>
       )}
@@ -607,12 +463,13 @@ export default function App() {
       <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-white border-r transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
-            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-100">
-              <ShieldCheck className="text-white" size={24} />
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-100 overflow-hidden p-1">
+              {/* [Fix 1.0] 側邊欄也使用校徽 */}
+              <SchoolLogo className="text-white" size={24} />
             </div>
             <div>
               <h2 className="text-2xl font-black tracking-tighter">正覺壁球</h2>
-              <p className="text-[10px] text-slate-300 uppercase tracking-[0.2em] -mt-1">智能系統</p>
+              <p className="text-[10px] text-slate-300 uppercase tracking-[0.2em] -mt-1">BCKLAS SYSTEM v{CURRENT_VERSION}</p>
             </div>
           </div>
           
@@ -691,9 +548,11 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
-                {activeTab === 'financial' && <FinancialView />}
+                {/* [Fix 1.0] 修正：移除這裡的 <FinancialView /> 避免標題崩壞，改為純文字 */}
+                {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
+              {/* [Fix 1.1] 系統名修正 */}
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
@@ -928,180 +787,93 @@ export default function App() {
                )}
             </div>
           )}
-{/* 4. [v2.9 穩定版] 點名系統 (含存檔與防崩潰) */}
-          {activeTab === 'attendance' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-              
-              {/* 頂部功能區 */}
-              <div className="bg-white p-6 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="bg-slate-50 p-1.5 rounded-[2rem] flex items-center">
-                  <button 
-                    onClick={() => setAttendanceTab('take')}
-                    className={`px-6 py-3 rounded-[1.8rem] text-sm font-black transition-all flex items-center gap-2 ${attendanceTab === 'take' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                  >
-                    <ClipboardCheck size={18}/> 點名模式
-                  </button>
-                  <button 
-                    onClick={() => setAttendanceTab('history')}
-                    className={`px-6 py-3 rounded-[1.8rem] text-sm font-black transition-all flex items-center gap-2 ${attendanceTab === 'history' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                  >
-                    <History size={18}/> 歷史紀錄
-                  </button>
-                </div>
 
-                <div className="flex items-center gap-4 w-full md:w-auto">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden md:block">選擇班別:</span>
-                  <select 
-                    value={attendanceClassFilter} 
-                    onChange={(e) => setAttendanceClassFilter(e.target.value)}
-                    className="flex-1 md:w-64 bg-slate-50 border-r-[16px] border-transparent px-6 py-3 rounded-2xl font-black text-slate-700 outline-none focus:bg-white focus:ring-2 ring-blue-100 transition-all cursor-pointer"
-                  >
-                    <option value="ALL">📋 顯示所有紀錄</option>
-                    {uniqueTrainingClasses.filter(c => c !== 'ALL').map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* A. 進行點名介面 */}
-              {attendanceTab === 'take' && (
-                <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
-                  <div className="p-8 border-b bg-slate-50/50 flex justify-between items-center">
-                    <div>
-                      <h3 className="text-xl font-black text-slate-800">
-                        {todaySchedule ? `📅 ${todaySchedule.date} - ${todaySchedule.trainingClass}` : '👋 自由點名模式'}
-                      </h3>
-                      <p className="text-xs text-slate-400 font-bold mt-1">
-                        已選取: <span className="text-blue-600 text-lg">{Object.values(tempAttendance || {}).filter(Boolean).length}</span> 人
-                      </p>
-                    </div>
-                    {/* 👇 這裡綁定了真正的存檔函數 */}
-                    <button 
-                      onClick={saveAttendance} 
-                      className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-lg shadow-blue-200 hover:scale-105 transition-all flex items-center gap-2 active:scale-95"
-                    >
-                      <Save size={18}/> 確認提交
-                    </button>
-                  </div>
-                  
-                  <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* 這裡加入檢查，防止 studentsInSelectedAttendanceClass 未定義導致崩潰 */}
-                    {(studentsInSelectedAttendanceClass || students || [])
-                      .filter(s => attendanceClassFilter === 'ALL' || s.class === attendanceClassFilter || (s.squashClass && s.squashClass.includes(attendanceClassFilter)))
-                      .map(s => {
-                      const isSelected = tempAttendance?.[s.id] || false;
-                      return (
-                        <div 
-                          key={s.id} 
-                          onClick={() => {
-                             setTempAttendance(prev => ({
-                               ...prev,
-                               [s.id]: !prev[s.id]
-                             }));
-                          }}
-                          className={`group p-4 rounded-3xl border transition-all flex items-center justify-between cursor-pointer select-none
-                            ${isSelected 
-                              ? 'bg-blue-600 border-blue-600 shadow-lg shadow-blue-200 scale-[1.02]' 
-                              : 'bg-white border-slate-100 hover:border-blue-200 hover:bg-blue-50/30'
-                            }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm transition-colors
-                              ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                              {s.classNo}
-                            </div>
-                            <div>
-                              <div className={`font-black ${isSelected ? 'text-white' : 'text-slate-800'}`}>{s.name}</div>
-                              <div className={`text-[10px] font-bold ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>{s.class}</div>
-                            </div>
+          {/* 3. 快速點名 (過濾多班別學員不重複) */}
+          {activeTab === 'attendance' && role === 'admin' && (
+            <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
+               <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}>
+                  <div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div>
+                  <div className="relative z-10">
+                    <h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3>
+                    <div className="flex flex-wrap gap-4">
+                      {todaySchedule ? (
+                        <>
+                          <div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2">
+                            <Star size={14} className="text-yellow-300 fill-yellow-300"/>
+                            <span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span>
                           </div>
-                          
-                          <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all
-                            ${isSelected ? 'border-white bg-white' : 'border-slate-200 group-hover:border-blue-400'}`}>
-                            {isSelected && <div className="w-4 h-4 rounded-full bg-blue-600"></div>}
+                          <div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2">
+                            <MapPin size={14}/>
+                            <span className="text-sm font-black">{todaySchedule.location}</span>
                           </div>
+                        </>
+                      ) : (
+                        <div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2">
+                          <Info size={14}/>
+                          <span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* B. 出席紀錄列表 (v2.9 防崩潰版) */}
-              {attendanceTab === 'history' && (
-                <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-right-4 duration-500">
-                  <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div>
-                      <h3 className="text-xl font-black text-slate-800">
-                        {attendanceClassFilter === 'ALL' ? '全校出席概況' : `${attendanceClassFilter} - 出席紀錄`}
-                      </h3>
-                      <p className="text-xs text-slate-400 font-bold mt-1">
-                         顯示歷史出席率與詳細紀錄
-                      </p>
+                      )}
                     </div>
-                    <button 
-                      onClick={() => exportAttendanceCSV(attendanceClassFilter)}
-                      className="bg-emerald-500 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-lg shadow-emerald-200 hover:scale-105 transition-all flex items-center gap-2"
-                    >
-                      <FileSpreadsheet size={18}/> 匯出 CSV 報表
-                    </button>
                   </div>
+                  <div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p>
+                    <p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p>
+                  </div>
+               </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                      <thead className="text-[10px] text-slate-400 uppercase tracking-widest bg-slate-50/50 border-b font-black">
-                        <tr>
-                          <th className="px-6 py-4 rounded-tl-3xl">日期</th>
-                          <th className="px-6 py-4">班別</th>
-                          <th className="px-6 py-4">出席人數</th>
-                          <th className="px-6 py-4 text-right rounded-tr-3xl">狀態</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {(attendance || [])
-                          .filter(r => {
-                            if (!r) return false;
-                            // 如果篩選器是 ALL，顯示所有；否則比對班別
-                            if (attendanceClassFilter === 'ALL') return true;
-                            // 寬鬆比對：支援舊資料欄位
-                            const rClass = r.className || r.trainingClass || '';
-                            return rClass === attendanceClassFilter;
-                          })
-                          .sort((a,b) => {
-                             // 安全排序：防止日期為 null
-                             return (b?.date || '').localeCompare(a?.date || '');
-                          })
-                          .map((record, index) => {
-                            // 安全計算人數：防止 records 為 null
-                            const records = record.records || record.studentStatuses || {};
-                            const count = Object.values(records).filter(v => v === true || v === 'Present' || v === '出席').length;
-                            
-                            return (
-                              <tr key={record.id || index} className="hover:bg-slate-50/80 transition-all">
-                                <td className="px-6 py-4 font-black text-slate-700 font-mono">{record.date || '無日期'}</td>
-                                <td className="px-6 py-4 text-sm font-bold text-slate-500">{record.className || record.trainingClass || '未知班別'}</td>
-                                <td className="px-6 py-4">
-                                  <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-black">
-                                    {count} 人
-                                  </span>
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                  <button className="text-xs font-bold text-blue-500 hover:text-blue-700">查看詳情</button>
-                                </td>
-                              </tr>
-                            );
-                        })}
-                        {(attendance || []).length === 0 && (
-                          <tr>
-                            <td colSpan="4" className="text-center py-10 text-slate-300 font-bold">目前尚無紀錄，請先進行點名。</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+               {/* 壁球班別篩選選單 */}
+               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6">
+                 <div className="flex items-center gap-3 text-slate-400 min-w-max">
+                   <Filter size={20} />
+                   <span>選擇壁球班別：</span>
+                 </div>
+                 <div className="flex flex-wrap gap-2">
+                   {uniqueTrainingClasses.map(cls => (
+                     <button
+                       key={cls}
+                       onClick={() => setAttendanceClassFilter(cls)}
+                       className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${
+                         attendanceClassFilter === cls 
+                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' 
+                         : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'
+                       }`}
+                     >
+                       {cls === 'ALL' ? '🌍 全部學員' : cls}
+                     </button>
+                   ))}
+                 </div>
+               </div>
+
+               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                  {studentsInSelectedAttendanceClass.length > 0 ? (
+                    studentsInSelectedAttendanceClass.map(s => (
+                      <button 
+                        key={s.id} 
+                        onClick={()=>{
+                          alert(`已為 ${s.name} 完成「${todaySchedule ? todaySchedule.trainingClass : '一般點名'}」點名！\n地點：${todaySchedule ? todaySchedule.location : '體育館'}`);
+                        }} 
+                        className="group p-8 bg-white rounded-[3rem] border border-slate-100 shadow-sm hover:border-blue-500 hover:shadow-xl hover:shadow-blue-50 transition-all flex flex-col items-center text-center relative overflow-hidden"
+                      >
+                         <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:rotate-6 transition-all font-black uppercase">
+                            {s.name[0]}
+                         </div>
+                         <p className="font-black text-xl text-slate-800 group-hover:text-blue-600 transition-all">{s.name}</p>
+                         <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
+                         {/* 顯示學生報名的所有班別縮略資訊 */}
+                         <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>
+                           {s.squashClass}
+                         </div>
+                         <div className="absolute top-4 right-4 text-slate-100 group-hover:text-blue-100 transition-all">
+                            <CheckCircle2 size={24}/>
+                         </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">
+                      此班別暫無學員資料
+                    </div>
+                  )}
+               </div>
             </div>
           )}
 
@@ -1194,142 +966,100 @@ export default function App() {
              </div>
           )}
 
-          {/* 5. 隊員管理 (教練專用) */}
-          {activeTab === 'students' && role === 'admin' && (
-             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
-                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
-                   <div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div>
-                   <div className="relative z-10">
-                     <h3 className="text-3xl font-black">隊員檔案管理</h3>
-                     <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
-                   </div>
-                   <div className="flex gap-4 relative z-10">
-                     <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
-                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
-                        <Upload size={20}/> 批量匯入 CSV 名單
-                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
-                     </label>
-                   </div>
+          {/* [Fix 1.0] 修正：正確的財務組件渲染位置 */}
+          {activeTab === 'financial' && role === 'admin' && (
+             <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
+                <div className="flex justify-end">
+                  <button 
+                      onClick={saveFinanceConfig}
+                      className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-lg hover:bg-blue-700 transition-all active:scale-95"
+                  >
+                      <Save size={20} />
+                      儲存財務設定
+                  </button>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                   {students.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
-                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
-                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
-                          {s.badge}
-                        </div>
-                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
-                          {s.name[0]}
-                        </div>
-                        <p className="text-xl font-black text-slate-800">{s.name}</p>
-                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
-                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
-                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
-                           <button className="text-slate-200 hover:text-blue-600 p-2 transition-all"><Settings2 size={18}/></button>
-                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-200 hover:text-red-500 p-2 transition-all"><Trash2 size={18}/></button>
-                        </div>
-                     </div>
-                   ))}
-                   <button onClick={()=>{
-                     const name = prompt('隊員姓名');
-                     const cls = prompt('班別 (如: 6A)');
-                     if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });
-                   }} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
-                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
-                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
-                   </button>
-                </div>
-             </div>
-          )}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
+                    <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6">
+                      <TrendingUp size={32}/>
+                    </div>
+                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總收入</p>
+                    <h3 className="text-4xl font-black text-emerald-500">${financialSummary.revenue.toLocaleString()}</h3>
+                  </div>
 
-          {/* 6. 管理概況 (Dashboard) */}
-          {activeTab === 'dashboard' && role === 'admin' && (
-             <div className="space-y-10 animate-in fade-in duration-700 font-bold">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
-                      <div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div>
-                      <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">隊員總數</p>
-                      <p className="text-6xl font-black mt-2 font-mono">{students.length}</p>
-                      <div className="mt-6 flex items-center gap-2 text-xs text-blue-200 font-bold">
-                        <TrendingUp size={14}/> 活躍率 100%
-                      </div>
-                   </div>
-                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm">
-                      <p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">總訓練節數</p>
-                      <p className="text-6xl font-black mt-2 text-slate-800 font-mono">{schedules.length}</p>
-                      <p className="mt-6 text-xs text-slate-400 font-bold">已安排至 2026</p>
-                   </div>
-                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl">
-                      <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">平均積分</p>
-                      <p className="text-6xl font-black mt-2 font-mono">
-                        {students.length ? Math.round(rankedStudents.reduce((acc,s)=>acc+s.totalPoints,0)/students.length) : 0}
-                      </p>
-                      <p className="mt-6 text-xs text-emerald-400 font-bold">較上月 +12.5%</p>
-                   </div>
-                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-                      <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-4">
-                        <ShieldCheck size={32}/>
-                      </div>
-                      <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">系統狀態</p>
-                      <p className="text-xl font-black mt-1 text-slate-800">運作正常</p>
-                   </div>
+                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
+                    <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6">
+                      <Trash2 size={32}/>
+                    </div>
+                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總支出</p>
+                    <h3 className="text-4xl font-black text-rose-500">${financialSummary.expense.toLocaleString()}</h3>
+                  </div>
+
+                  <div className={`p-10 rounded-[3.5rem] border shadow-sm flex flex-col justify-center items-center text-center ${financialSummary.profit >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${financialSummary.profit >= 0 ? 'bg-white text-blue-600 shadow-sm' : 'bg-white text-rose-600 shadow-sm'}`}>
+                      <DollarSign size={32}/>
+                    </div>
+                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計資助盈餘</p>
+                    <h3 className={`text-4xl font-black ${financialSummary.profit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
+                      ${financialSummary.profit.toLocaleString()}
+                    </h3>
+                  </div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                      <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
-                        <Target className="text-blue-600"/> 章別分佈概況
-                      </h3>
-                      <div className="space-y-6">
-                        {Object.keys(BADGE_DATA).filter(k => k !== '無').map(badge => {
-                          const count = students.filter(s => s.badge === badge).length;
-                          const percent = students.length ? Math.round((count/students.length)*100) : 0;
-                          return (
-                            <div key={badge} className="space-y-2">
-                              <div className="flex justify-between items-center px-2">
-                                <span className={`text-xs font-black ${BADGE_DATA[badge].color}`}>{badge}</span>
-                                <span className="text-xs text-slate-400 font-mono">{count} 人 ({percent}%)</span>
-                              </div>
-                              <div className="h-4 w-full bg-slate-50 rounded-full overflow-hidden border">
-                                <div className={`h-full transition-all duration-1000 ${BADGE_DATA[badge].bg.replace('bg-', 'bg-')}`} style={{width: `${percent}%`, backgroundColor: 'currentColor'}}></div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-4 mb-10">
+                      <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center shadow-sm"><Trash2 size={24}/></div>
+                      <h4 className="text-2xl font-black text-slate-800">支出設定 (教練費)</h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {[
+                        { label: '校隊教練次數', key: 'nTeam' }, { label: '單次校隊成本', key: 'costTeam' },
+                        { label: '進階班次數', key: 'nTrain' }, { label: '單次進階成本', key: 'costTrain' },
+                        { label: '趣味班次數', key: 'nHobby' }, { label: '單次趣味成本', key: 'costHobby' },
+                      ].map(item => (
+                        <div key={item.key}>
+                          <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">{item.label}</label>
+                          <input 
+                            type="number" 
+                            className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-rose-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
+                            value={financeConfig[item.key]}
+                            onChange={e => setFinanceConfig({...financeConfig, [item.key]: Number(e.target.value)})}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-4 mb-10">
+                      <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm"><DollarSign size={24}/></div>
+                      <h4 className="text-2xl font-black text-slate-800">預計收入 (學費)</h4>
+                    </div>
+                    <div className="space-y-10">
+                      <div>
+                        <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">預計總人數</label>
+                        <input 
+                          type="number" 
+                          className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
+                          value={financeConfig.totalStudents}
+                          onChange={e => setFinanceConfig({...financeConfig, totalStudents: Number(e.target.value)})}
+                        />
                       </div>
-                   </div>
-                   
-                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                      <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
-                        <History className="text-blue-600"/> 最近更新活動
-                      </h3>
-                      <div className="space-y-6">
-                         {competitions.slice(0, 4).map(c => (
-                           <div key={c.id} className="flex gap-6 items-start">
-                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div>
-                              <div>
-                                <p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p>
-                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p>
-                              </div>
-                           </div>
-                         ))}
-                         {schedules.slice(0, 2).map(s => (
-                           <div key={s.id} className="flex gap-6 items-start">
-                              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div>
-                              <div>
-                                <p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p>
-                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p>
-                              </div>
-                           </div>
-                         ))}
+                      <div>
+                        <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">每位學員學費 ($)</label>
+                        <input 
+                          type="number" 
+                          className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
+                          value={financeConfig.feePerStudent}
+                          onChange={e => setFinanceConfig({...financeConfig, feePerStudent: Number(e.target.value)})}
+                        />
                       </div>
-                   </div>
+                    </div>
+                  </div>
                 </div>
              </div>
           )}
-
-          {/* --- 請插入在約 1011 行 --- */}
-          {activeTab === 'financial' && role === 'admin' && <FinancialView />}
 
           {/* 7. 系統設定 (教練專用) */}
           {activeTab === 'settings' && role === 'admin' && (
