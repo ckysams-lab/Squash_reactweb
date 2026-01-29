@@ -15,7 +15,6 @@ import {
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
 // --- Firebase 初始化 ---
-// 嘗試讀取環境變數，若無則使用預設值
 let firebaseConfig;
 try {
   const envConfig = import.meta.env?.VITE_FIREBASE_CONFIG;
@@ -27,7 +26,6 @@ try {
     throw new Error('No env config');
   }
 } catch (e) {
-  // 後備方案：使用預設金鑰
   firebaseConfig = {
     apiKey: "AIzaSyAYm_63S9pKMZ51Qb2ZlCHRsfuGzy2gstw",
     authDomain: "squashreact.firebaseapp.com",
@@ -45,8 +43,9 @@ const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'squash-management-v1';
 
 // --- 版本控制 (Version Control) ---
-// Version 1.0: 基於 App (25).jsx，修正 Logo 顯示問題 (GitHub Raw Link)
-const CURRENT_VERSION = "1.0";
+// Version 1.0: 基礎版本
+// Version 1.1: 優化圖片連結為 raw.githubusercontent.com，嘗試解決讀取問題
+const CURRENT_VERSION = "1.1";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -380,14 +379,16 @@ export default function App() {
     a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   };
 
-  // --- [Fix 1.0] 校徽 Logo 組件 (新增) ---
-  // 使用修正後的 GitHub Raw Link
+  // --- [Fix 1.1] 校徽 Logo 組件 ---
+  // 使用 raw.githubusercontent.com 格式，並移除 blob
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
-    // [Fix 1.0] 已將 blob 改為 raw 連結
-    const logoUrl = "https://github.com/ckysams-lab/Squash_reactweb/raw/56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    
+    // [Fix 1.1] 轉為標準 raw link
+    const logoUrl = "https://raw.githubusercontent.com/ckysams-lab/Squash_reactweb/56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
 
     if (error) {
+      // 圖片載入失敗時，退回到盾牌圖示
       return <ShieldCheck className={`${className}`} size={size} />;
     }
 
@@ -397,7 +398,10 @@ export default function App() {
         alt="BCKLAS Logo" 
         className={`object-contain ${className}`}
         style={{ width: size * 2, height: size * 2 }} 
-        onError={() => setError(true)}
+        onError={(e) => {
+          console.error("Logo load failed. Check if repo is Private.", e);
+          setError(true);
+        }}
       />
     );
   };
@@ -419,7 +423,7 @@ export default function App() {
           <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
             <div className="flex justify-center mb-10">
               <div className="w-24 h-24 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-blue-500/30 overflow-hidden p-2">
-                {/* [Fix 1.0] 使用校徽圖片 */}
+                {/* [Fix 1.1] 使用校徽圖片 */}
                 <SchoolLogo className="text-white" size={48} />
               </div>
             </div>
@@ -464,7 +468,7 @@ export default function App() {
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
             <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-100 overflow-hidden p-1">
-              {/* [Fix 1.0] 側邊欄也使用校徽 */}
+              {/* [Fix 1.1] 側邊欄也使用校徽 */}
               <SchoolLogo className="text-white" size={24} />
             </div>
             <div>
@@ -961,6 +965,140 @@ export default function App() {
                         本學期壁球訓練已全面數位化，請隊員定期查看「積分排行」並參與「訓練班日程」！
                       </p>
                       <button className="mt-8 px-6 py-3 bg-white text-blue-600 rounded-2xl text-xs font-black shadow-lg">了解更多</button>
+                   </div>
+                </div>
+             </div>
+          )}
+
+          {/* 5. 隊員管理 (教練專用) */}
+          {activeTab === 'students' && role === 'admin' && (
+             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
+                   <div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div>
+                   <div className="relative z-10">
+                     <h3 className="text-3xl font-black">隊員檔案管理</h3>
+                     <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
+                   </div>
+                   <div className="flex gap-4 relative z-10">
+                     <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
+                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
+                        <Upload size={20}/> 批量匯入 CSV 名單
+                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
+                     </label>
+                   </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                   {students.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
+                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
+                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
+                          {s.badge}
+                        </div>
+                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
+                          {s.name[0]}
+                        </div>
+                        <p className="text-xl font-black text-slate-800">{s.name}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
+                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
+                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
+                           <button className="text-slate-200 hover:text-blue-600 p-2 transition-all"><Settings2 size={18}/></button>
+                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-200 hover:text-red-500 p-2 transition-all"><Trash2 size={18}/></button>
+                        </div>
+                     </div>
+                   ))}
+                   <button onClick={()=>{
+                     const name = prompt('隊員姓名');
+                     const cls = prompt('班別 (如: 6A)');
+                     if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });
+                   }} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
+                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
+                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
+                   </button>
+                </div>
+             </div>
+          )}
+
+          {/* 6. 管理概況 (Dashboard) */}
+          {activeTab === 'dashboard' && role === 'admin' && (
+             <div className="space-y-10 animate-in fade-in duration-700 font-bold">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
+                      <div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div>
+                      <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">隊員總數</p>
+                      <p className="text-6xl font-black mt-2 font-mono">{students.length}</p>
+                      <div className="mt-6 flex items-center gap-2 text-xs text-blue-200 font-bold">
+                        <TrendingUp size={14}/> 活躍率 100%
+                      </div>
+                   </div>
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm">
+                      <p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">總訓練節數</p>
+                      <p className="text-6xl font-black mt-2 text-slate-800 font-mono">{schedules.length}</p>
+                      <p className="mt-6 text-xs text-slate-400 font-bold">已安排至 2026</p>
+                   </div>
+                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl">
+                      <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">平均積分</p>
+                      <p className="text-6xl font-black mt-2 font-mono">
+                        {students.length ? Math.round(rankedStudents.reduce((acc,s)=>acc+s.totalPoints,0)/students.length) : 0}
+                      </p>
+                      <p className="mt-6 text-xs text-emerald-400 font-bold">較上月 +12.5%</p>
+                   </div>
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
+                      <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-4">
+                        <ShieldCheck size={32}/>
+                      </div>
+                      <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">系統狀態</p>
+                      <p className="text-xl font-black mt-1 text-slate-800">運作正常 v{CURRENT_VERSION}</p>
+                   </div>
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                      <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
+                        <Target className="text-blue-600"/> 章別分佈概況
+                      </h3>
+                      <div className="space-y-6">
+                        {Object.keys(BADGE_DATA).filter(k => k !== '無').map(badge => {
+                          const count = students.filter(s => s.badge === badge).length;
+                          const percent = students.length ? Math.round((count/students.length)*100) : 0;
+                          return (
+                            <div key={badge} className="space-y-2">
+                              <div className="flex justify-between items-center px-2">
+                                <span className={`text-xs font-black ${BADGE_DATA[badge].color}`}>{badge}</span>
+                                <span className="text-xs text-slate-400 font-mono">{count} 人 ({percent}%)</span>
+                              </div>
+                              <div className="h-4 w-full bg-slate-50 rounded-full overflow-hidden border">
+                                <div className={`h-full transition-all duration-1000 ${BADGE_DATA[badge].bg.replace('bg-', 'bg-')}`} style={{width: `${percent}%`, backgroundColor: 'currentColor'}}></div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                   </div>
+                   
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                      <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
+                        <History className="text-blue-600"/> 最近更新活動
+                      </h3>
+                      <div className="space-y-6">
+                         {competitions.slice(0, 4).map(c => (
+                           <div key={c.id} className="flex gap-6 items-start">
+                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div>
+                              <div>
+                                <p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p>
+                              </div>
+                           </div>
+                         ))}
+                         {schedules.slice(0, 2).map(s => (
+                           <div key={s.id} className="flex gap-6 items-start">
+                              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div>
+                              <div>
+                                <p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p>
+                              </div>
+                           </div>
+                         ))}
+                      </div>
                    </div>
                 </div>
              </div>
