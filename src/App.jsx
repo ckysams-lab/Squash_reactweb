@@ -44,8 +44,9 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'squash-management-v1
 
 // --- 版本控制 (Version Control) ---
 // Version 1.0: 基礎版本
-// Version 1.1: 優化圖片連結為 raw.githubusercontent.com，嘗試解決讀取問題
-const CURRENT_VERSION = "1.1";
+// Version 1.1: 優化圖片連結
+// Version 1.2: [Current] 將校徽加入至開機 Loading 畫面
+const CURRENT_VERSION = "1.2";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -379,16 +380,14 @@ export default function App() {
     a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   };
 
-  // --- [Fix 1.1] 校徽 Logo 組件 ---
-  // 使用 raw.githubusercontent.com 格式，並移除 blob
+  // --- 校徽 Logo 組件 ---
+  // 使用 raw.githubusercontent.com 格式
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
     
-    // [Fix 1.1] 轉為標準 raw link
     const logoUrl = "https://raw.githubusercontent.com/ckysams-lab/Squash_reactweb/56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
 
     if (error) {
-      // 圖片載入失敗時，退回到盾牌圖示
       return <ShieldCheck className={`${className}`} size={size} />;
     }
 
@@ -399,15 +398,19 @@ export default function App() {
         className={`object-contain ${className}`}
         style={{ width: size * 2, height: size * 2 }} 
         onError={(e) => {
-          console.error("Logo load failed. Check if repo is Private.", e);
+          console.error("Logo load failed", e);
           setError(true);
         }}
       />
     );
   };
 
+  // [Fix 1.2] Loading 畫面 (開機畫面) 也加上校徽
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+      <div className="mb-8 animate-pulse">
+        <SchoolLogo size={96} />
+      </div>
       <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
       <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
       <p className="text-xs text-slate-300 mt-2 font-mono">v{CURRENT_VERSION}</p>
@@ -423,7 +426,6 @@ export default function App() {
           <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
             <div className="flex justify-center mb-10">
               <div className="w-24 h-24 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-blue-500/30 overflow-hidden p-2">
-                {/* [Fix 1.1] 使用校徽圖片 */}
                 <SchoolLogo className="text-white" size={48} />
               </div>
             </div>
@@ -468,7 +470,6 @@ export default function App() {
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
             <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-100 overflow-hidden p-1">
-              {/* [Fix 1.1] 側邊欄也使用校徽 */}
               <SchoolLogo className="text-white" size={24} />
             </div>
             <div>
