@@ -40,12 +40,14 @@ try {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'squash-management-v1';
+
+// [Fix 2.0] 強制鎖定 App ID，避免環境變數中的斜線導致 Firebase 路徑錯誤 (6 segments error)
+const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 1.8: 修正排名頁重複顯示及刪除鍵邏輯
-// Version 1.9: [Current] 緊急修復「管理概況 (Dashboard)」頁面空白問題，還原顯示內容
-const CURRENT_VERSION = "1.9";
+// Version 1.9: 修復 Dashboard
+// Version 2.0: [Current] 完整還原「隊員管理」頁面，並修復 Firebase 路徑錯誤 (AppID Issue)
+const CURRENT_VERSION = "2.0";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -145,19 +147,14 @@ export default function App() {
     if (!user) return;
     
     try {
+      // [Fix 2.0] 確保 appId 變數已正確宣告，這裡的路徑是奇數段 (Collection)
+      // artifacts (col) / appId (doc) / public (col) / data (doc) / students (col) -> 5 segments -> OK
       const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
       const attendanceRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance');
       const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
       const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
       const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'); 
       
-      // [Fix] 修正路徑錯誤：config 應該是集合 (Collection)，而非文件 (Doc) 的父層
-      // 原本錯誤：doc(db, ..., 'config', 'system') -> 這需要 config 是 collection
-      // 但在 Firebase 結構中，若 artifacts/{appId}/public/data 是一個文檔，它下面不能直接掛 doc
-      // 正確結構應為： collection(db, 'artifacts', appId, 'public', 'data', 'config') -> 取得集合
-      // 或者將 config 視為 data 下的一個 map 欄位 (但這裡我們用子集合)
-      // 根據您的結構，我們將路徑修正為指向具體的文件
-      // artifacts (col) -> appId (doc) -> public (col) -> data (doc) -> config (col) -> system (doc)
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
       const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
 
@@ -230,26 +227,21 @@ export default function App() {
 
   // --- 積分計算與排行邏輯 ---
   const rankedStudents = useMemo(() => {
-    // [Fix 1.8] 過濾重複學生 (以 班別+班號 為唯一鍵值)
+    // [Fix 1.8] 過濾重複學生
     const uniqueMap = new Map();
     students.forEach(s => {
       const key = `${s.class}-${s.classNo}`;
       const currentPoints = Number(s.points) || 0;
-      
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, s);
       } else {
         const existing = uniqueMap.get(key);
         const existingPoints = Number(existing.points) || 0;
-        if (currentPoints > existingPoints) {
-          uniqueMap.set(key, s);
-        }
+        if (currentPoints > existingPoints) uniqueMap.set(key, s);
       }
     });
 
-    const uniqueStudents = Array.from(uniqueMap.values());
-
-    return uniqueStudents.map(s => ({ 
+    return Array.from(uniqueMap.values()).map(s => ({ 
       ...s, 
       totalPoints: (Number(s.points) || 0) + (BADGE_DATA[s.badge]?.bonus || 0) 
     })).sort((a, b) => {
@@ -363,7 +355,6 @@ export default function App() {
 
   const deleteItem = async (col, id) => {
     if (role !== 'admin') return;
-    // [Fix 1.8] 確保這是真正的刪除功能，不是扣分
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
   };
 
@@ -416,11 +407,8 @@ export default function App() {
   };
 
   // --- [Fix 1.6] 校徽 Logo 組件 ---
-  // 使用 jsDelivr CDN 加速連結，並處理潛在的載入錯誤
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
-    
-    // [Fix 1.6] jsDelivr CDN 格式：
     const logoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
 
     if (error) {
@@ -433,7 +421,7 @@ export default function App() {
         alt="BCKLAS Logo" 
         className={`object-contain ${className}`}
         style={{ width: size * 2, height: size * 2 }}
-        loading="eager" // 強制優先載入
+        loading="eager"
         crossOrigin="anonymous" 
         onError={(e) => {
           console.error("Logo load failed (jsDelivr CDN)", e);
@@ -443,7 +431,7 @@ export default function App() {
     );
   };
 
-  // [Fix 1.2] Loading 畫面 (開機畫面)
+  // [Fix 1.2] Loading 畫面
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
       <div className="mb-8 animate-pulse">
@@ -462,7 +450,6 @@ export default function App() {
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
-            {/* [Fix 1.7] 移除了外圍藍色背景和陰影，並放大 Logo */}
             <div className="flex justify-center mb-10">
               <SchoolLogo className="text-white" size={80} />
             </div>
@@ -590,11 +577,9 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
-                {/* [Fix 1.0] 修正：移除這裡的 <FinancialView /> 避免標題崩壞，改為純文字 */}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
-              {/* [Fix 1.1] 系統名修正 */}
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
@@ -711,9 +696,7 @@ export default function App() {
                             <td className="px-8 py-8">
                               <div className="flex justify-center gap-2">
                                 <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button>
-                                {/* [Fix 1.8] 新增獨立減分鍵 */}
                                 <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button>
-                                {/* [Fix 1.8] 修正刪除鍵功能 */}
                                 <button 
                                   onClick={() => {
                                     if(confirm(`確定要永久刪除 ${s.name} (${s.class} ${s.classNo}) 嗎？`)) {
@@ -1021,7 +1004,55 @@ export default function App() {
              </div>
           )}
 
-          {/* [Fix 1.9] 6. 管理概況 (Dashboard) - 完整還原 */}
+          {/* [Fix 2.0] 5. 隊員管理 (教練專用) - 完整還原 */}
+          {activeTab === 'students' && role === 'admin' && (
+             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
+                   <div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div>
+                   <div className="relative z-10">
+                     <h3 className="text-3xl font-black">隊員檔案管理</h3>
+                     <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
+                   </div>
+                   <div className="flex gap-4 relative z-10">
+                     <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
+                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
+                        <Upload size={20}/> 批量匯入 CSV 名單
+                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
+                     </label>
+                   </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                   {students.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
+                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
+                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
+                          {s.badge}
+                        </div>
+                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
+                          {s.name[0]}
+                        </div>
+                        <p className="text-xl font-black text-slate-800">{s.name}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
+                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
+                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
+                           <button className="text-slate-200 hover:text-blue-600 p-2 transition-all"><Settings2 size={18}/></button>
+                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-200 hover:text-red-500 p-2 transition-all"><Trash2 size={18}/></button>
+                        </div>
+                     </div>
+                   ))}
+                   <button onClick={()=>{
+                     const name = prompt('隊員姓名');
+                     const cls = prompt('班別 (如: 6A)');
+                     if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });
+                   }} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
+                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
+                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
+                   </button>
+                </div>
+             </div>
+          )}
+
+          {/* 6. 管理概況 (Dashboard) */}
           {activeTab === 'dashboard' && role === 'admin' && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
