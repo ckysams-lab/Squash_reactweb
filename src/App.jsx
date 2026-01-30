@@ -43,10 +43,9 @@ const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'squash-management-v1';
 
 // --- 版本控制 (Version Control) ---
-// Version 1.0: 基礎版本
-// Version 1.1: 優化圖片連結
-// Version 1.2: [Current] 將校徽加入至開機 Loading 畫面
-const CURRENT_VERSION = "1.2";
+// Version 1.4: 嘗試繞過學校防盜連
+// Version 1.5: [Current] 使用 GitHub Raw 連結作為圖片來源 (需 Repo 為 Public)
+const CURRENT_VERSION = "1.5";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -98,6 +97,19 @@ export default function App() {
     "銅章": { color: "text-orange-600", bg: "bg-orange-50", icon: "🥉", border: "border-orange-200", shadow: "shadow-orange-100", bonus: 50, desc: "初露鋒芒" },
     "無": { color: "text-slate-300", bg: "bg-slate-50", icon: "⚪", border: "border-slate-100", shadow: "shadow-transparent", bonus: 0, desc: "努力中" }
   };
+
+  // --- [Fix 1.5] 設定 Favicon 為 GitHub 圖片 ---
+  useEffect(() => {
+    // 使用 GitHub Raw 連結
+    const logoUrl = "https://raw.githubusercontent.com/ckysams-lab/Squash_reactweb/56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    
+    const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
+    link.type = 'image/png';
+    link.rel = 'icon';
+    link.href = logoUrl;
+    document.getElementsByTagName('head')[0].appendChild(link);
+    document.title = "BCKLAS 壁球校隊系統";
+  }, []);
 
   // --- Firebase Auth 監聽 ---
   useEffect(() => {
@@ -380,11 +392,12 @@ export default function App() {
     a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   };
 
-  // --- 校徽 Logo 組件 ---
-  // 使用 raw.githubusercontent.com 格式
+  // --- [Fix 1.5] 校徽 Logo 組件 ---
+  // 使用使用者指定的 GitHub Raw 連結
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
     
+    // 連結來自使用者指定
     const logoUrl = "https://raw.githubusercontent.com/ckysams-lab/Squash_reactweb/56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
 
     if (error) {
@@ -396,16 +409,18 @@ export default function App() {
         src={logoUrl} 
         alt="BCKLAS Logo" 
         className={`object-contain ${className}`}
-        style={{ width: size * 2, height: size * 2 }} 
+        style={{ width: size * 2, height: size * 2 }}
+        // 加入 crossOrigin 以嘗試允許跨域，但關鍵仍在 Repo 權限
+        crossOrigin="anonymous" 
         onError={(e) => {
-          console.error("Logo load failed", e);
+          console.error("Logo load failed (GitHub Link). Please check if repo is public.", e);
           setError(true);
         }}
       />
     );
   };
 
-  // [Fix 1.2] Loading 畫面 (開機畫面) 也加上校徽
+  // [Fix 1.2] Loading 畫面 (開機畫面)
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
       <div className="mb-8 animate-pulse">
