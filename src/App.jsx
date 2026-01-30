@@ -43,9 +43,9 @@ const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'squash-management-v1';
 
 // --- 版本控制 (Version Control) ---
-// Version 1.4: 嘗試繞過學校防盜連
-// Version 1.5: [Current] 使用 GitHub Raw 連結作為圖片來源 (需 Repo 為 Public)
-const CURRENT_VERSION = "1.5";
+// Version 1.5: 使用 GitHub Raw 連結
+// Version 1.6: [Current] 改用 jsDelivr CDN 加速連結，解決 GitHub Raw 圖片讀取不穩定的問題
+const CURRENT_VERSION = "1.6";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -98,10 +98,10 @@ export default function App() {
     "無": { color: "text-slate-300", bg: "bg-slate-50", icon: "⚪", border: "border-slate-100", shadow: "shadow-transparent", bonus: 0, desc: "努力中" }
   };
 
-  // --- [Fix 1.5] 設定 Favicon 為 GitHub 圖片 ---
+  // --- [Fix 1.6] 設定 Favicon 為 jsDelivr CDN 圖片 ---
   useEffect(() => {
-    // 使用 GitHub Raw 連結
-    const logoUrl = "https://raw.githubusercontent.com/ckysams-lab/Squash_reactweb/56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    // 使用 jsDelivr CDN 連結，更穩定且支援跨域
+    const logoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
     
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.type = 'image/png';
@@ -392,13 +392,14 @@ export default function App() {
     a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   };
 
-  // --- [Fix 1.5] 校徽 Logo 組件 ---
-  // 使用使用者指定的 GitHub Raw 連結
+  // --- [Fix 1.6] 校徽 Logo 組件 ---
+  // 使用 jsDelivr CDN 加速連結，並處理潛在的載入錯誤
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
     
-    // 連結來自使用者指定
-    const logoUrl = "https://raw.githubusercontent.com/ckysams-lab/Squash_reactweb/56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    // [Fix 1.6] jsDelivr CDN 格式：
+    // https://cdn.jsdelivr.net/gh/user/repo@version/file
+    const logoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
 
     if (error) {
       return <ShieldCheck className={`${className}`} size={size} />;
@@ -410,10 +411,10 @@ export default function App() {
         alt="BCKLAS Logo" 
         className={`object-contain ${className}`}
         style={{ width: size * 2, height: size * 2 }}
-        // 加入 crossOrigin 以嘗試允許跨域，但關鍵仍在 Repo 權限
+        loading="eager" // 強制優先載入
         crossOrigin="anonymous" 
         onError={(e) => {
-          console.error("Logo load failed (GitHub Link). Please check if repo is public.", e);
+          console.error("Logo load failed (jsDelivr CDN)", e);
           setError(true);
         }}
       />
