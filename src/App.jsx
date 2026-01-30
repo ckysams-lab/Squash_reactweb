@@ -6,7 +6,7 @@ import {
   Save, FileSpreadsheet, Download, FileText, Info, Link as LinkIcon, Settings2,
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
-  FileBarChart
+  FileBarChart, Crown // [Fix 2.3] 新增皇冠圖示
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -46,9 +46,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 2.1: 移除側邊欄校徽藍色背景
-// Version 2.2: [Current] 新增點名寫入資料庫功能 & 訓練班 CSV 報表匯出功能
-const CURRENT_VERSION = "2.2";
+// Version 2.2: 點名系統與報表
+// Version 2.3: [Current] 積分排名頁 Top 3 介面美化 (頒獎台佈局)
+const CURRENT_VERSION = "2.3";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -676,39 +676,86 @@ export default function App() {
           {/* 1. 積分排行 */}
           {activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {rankedStudents.slice(0, 3).map((s, i) => (
-                  <div key={s.id} className={`p-8 rounded-[3rem] border-2 relative overflow-hidden transition-all hover:scale-[1.02] ${
-                    i === 0 ? 'bg-gradient-to-br from-yellow-50 to-white border-yellow-200 shadow-xl shadow-yellow-100/50' : 
-                    i === 1 ? 'bg-gradient-to-br from-slate-50 to-white border-slate-200 shadow-xl shadow-slate-100/50' : 
-                    'bg-gradient-to-br from-orange-50 to-white border-orange-200 shadow-xl shadow-orange-100/50'
-                  }`}>
-                    <div className="absolute -right-4 -top-4 opacity-10 rotate-12">
-                      <TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/>
-                    </div>
-                    <div className="flex justify-between items-start mb-6">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-black shadow-lg ${
-                        i === 0 ? 'bg-yellow-500 text-white' : i === 1 ? 'bg-slate-400 text-white' : 'bg-orange-500 text-white'
-                      }`}>
-                        #{i+1}
+              {/* [Fix 2.3] 頒獎台設計 (Podium Layout) */}
+              <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12">
+                {rankedStudents.slice(0, 3).map((s, i) => {
+                   let orderClass = "";
+                   let sizeClass = "";
+                   let gradientClass = "";
+                   let iconColor = "";
+                   let shadowClass = "";
+                   let label = "";
+                   let labelBg = "";
+
+                   if (i === 0) { // 1st Place
+                      orderClass = "order-1 md:order-2";
+                      sizeClass = "w-full md:w-1/3 md:-mt-12 scale-105 md:scale-110 z-20"; 
+                      gradientClass = "bg-gradient-to-b from-yellow-100 via-yellow-50 to-white border-yellow-300";
+                      iconColor = "text-yellow-500";
+                      shadowClass = "shadow-2xl shadow-yellow-200/50";
+                      label = "CHAMPION";
+                      labelBg = "bg-yellow-500";
+                   } else if (i === 1) { // 2nd Place
+                      orderClass = "order-2 md:order-1";
+                      sizeClass = "w-full md:w-1/4 z-10"; 
+                      gradientClass = "bg-gradient-to-b from-slate-200 via-slate-50 to-white border-slate-300";
+                      iconColor = "text-slate-500";
+                      shadowClass = "shadow-xl shadow-slate-300/50";
+                      label = "RUNNER-UP";
+                      labelBg = "bg-slate-500";
+                   } else { // 3rd Place
+                      orderClass = "order-3 md:order-3";
+                      sizeClass = "w-full md:w-1/4 z-10"; 
+                      gradientClass = "bg-gradient-to-b from-orange-100 via-orange-50 to-white border-orange-300";
+                      iconColor = "text-orange-500";
+                      shadowClass = "shadow-xl shadow-orange-200/50";
+                      label = "3RD PLACE";
+                      labelBg = "bg-orange-500";
+                   }
+
+                   return (
+                      <div key={s.id} className={`relative p-8 rounded-[3rem] border-4 flex-shrink-0 flex flex-col items-center text-center ${orderClass} ${sizeClass} ${gradientClass} ${shadowClass} transition-all duration-500 hover:-translate-y-2`}>
+                          {/* Crown for 1st */}
+                          {i === 0 && (
+                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg">
+                              <Crown size={64} fill="currentColor" strokeWidth={1.5} />
+                            </div>
+                          )}
+                          
+                          {/* Rank Watermark */}
+                          <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none">
+                              <span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span>
+                          </div>
+
+                          {/* Avatar */}
+                           <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 relative z-10 ${iconColor}`}>
+                              {s.name[0]}
+                              <div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>
+                                 {label}
+                              </div>
+                           </div>
+                           
+                           {/* Info */}
+                           <div className="mt-4 relative z-10 w-full">
+                               <h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3>
+                               <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p>
+                               <div className="my-6">
+                                 <div className={`text-5xl font-black font-mono tracking-tight ${iconColor}`}>
+                                    {s.totalPoints}
+                                 </div>
+                                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Points</p>
+                               </div>
+                               <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 border border-white/50 backdrop-blur-sm`}>
+                                 <span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span>
+                                 <span className="text-xs font-black text-slate-500">{s.badge}</span>
+                               </div>
+                           </div>
                       </div>
-                      <span className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} border`}>
-                        {s.badge}
-                      </span>
-                    </div>
-                    <h3 className="text-3xl font-black text-slate-800">{s.name}</h3>
-                    <p className="text-slate-400 font-bold mt-1">{s.class} ({s.classNo})</p>
-                    <div className="mt-8 flex items-end justify-between">
-                      <div>
-                        <p className="text-[10px] text-slate-300 font-black uppercase tracking-widest">目前總分</p>
-                        <p className="text-5xl font-black font-mono text-slate-800">{s.totalPoints}</p>
-                      </div>
-                      <TrendingUp size={32} className={i === 0 ? 'text-yellow-500/30' : i === 1 ? 'text-slate-300' : 'text-orange-300'}/>
-                    </div>
-                  </div>
-                ))}
+                   )
+                })}
               </div>
 
+              {/* 排名列表 (Rest of the list) */}
               <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden font-bold">
                 <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
@@ -1193,6 +1240,7 @@ export default function App() {
                    <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl">
                       <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">平均積分</p>
                       <p className="text-6xl font-black mt-2 font-mono">
+                        {/* [Fix 1.9] 使用 rankedStudents.length (去重後人數) 計算平均分，避免數據偏差 */}
                         {rankedStudents.length ? Math.round(rankedStudents.reduce((acc,s)=>acc+s.totalPoints,0)/rankedStudents.length) : 0}
                       </p>
                       <p className="mt-6 text-xs text-emerald-400 font-bold">較上月 +12.5%</p>
