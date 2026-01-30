@@ -6,7 +6,7 @@ import {
   Save, FileSpreadsheet, Download, FileText, Info, Link as LinkIcon, Settings2,
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
-  FileBarChart, Crown // [Fix 2.3] 新增皇冠圖示
+  FileBarChart, Crown, ListChecks
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -46,9 +46,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 2.2: 點名系統與報表
-// Version 2.3: [Current] 積分排名頁 Top 3 介面美化 (頒獎台佈局)
-const CURRENT_VERSION = "2.3";
+// Version 2.4: 自動化功能 (點名加分、生成名單)
+// Version 2.5: [Current] 修復排名頁冠軍皇冠被切斷的問題 (調整頂部間距與層級)
+const CURRENT_VERSION = "2.5";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -57,8 +57,8 @@ export default function App() {
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('rankings');
   const [students, setStudents] = useState([]);
-  const [attendance, setAttendance] = useState([]); // 舊的 attendance state (如果沒用到可考慮移除，但為相容先保留)
-  const [attendanceLogs, setAttendanceLogs] = useState([]); // [Fix 2.2] 新增：即時監聽點名紀錄
+  const [attendance, setAttendance] = useState([]); 
+  const [attendanceLogs, setAttendanceLogs] = useState([]); 
   const [competitions, setCompetitions] = useState([]);
   const [schedules, setSchedules] = useState([]); 
   const [downloadFiles, setDownloadFiles] = useState([]); 
@@ -150,7 +150,6 @@ export default function App() {
     
     try {
       const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
-      // [Fix 2.2] 監聽點名日誌
       const attendanceLogsRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs');
       const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
       const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
@@ -176,7 +175,6 @@ export default function App() {
         setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
-      // [Fix 2.2] 讀取點名紀錄
       const unsubAttendanceLogs = onSnapshot(attendanceLogsRef, (snap) => {
         setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
@@ -277,14 +275,13 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  // [Fix 2.2] 點名功能：寫入資料庫
+  // [Fix 2.4] 自動化點名
   const markAttendance = async (student) => {
     if (!todaySchedule) { 
       alert('⚠️ 今日沒有設定訓練日程，請先到「訓練日程」新增今天的課堂。'); 
       return; 
     }
     
-    // 檢查是否今日已點名
     const todayStr = todaySchedule.date;
     const isAttended = attendanceLogs.some(log => 
       log.studentId === student.id && 
@@ -297,7 +294,7 @@ export default function App() {
       return;
     }
 
-    if (confirm(`確認為 ${student.name} 進行「${todaySchedule.trainingClass}」點名？`)) {
+    if (confirm(`確認為 ${student.name} 進行「${todaySchedule.trainingClass}」點名？\n\n🎁 系統將自動為該學員增加 10 積分！`)) {
       try {
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'), {
           studentId: student.id,
@@ -309,7 +306,11 @@ export default function App() {
           location: todaySchedule.location,
           timestamp: serverTimestamp()
         });
-        // 成功不需 alert，UI 會自動變成綠色
+
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), { 
+          points: increment(10),
+          lastUpdated: serverTimestamp()
+        });
       } catch (e) {
         console.error(e);
         alert('點名失敗，請檢查網絡');
@@ -317,9 +318,30 @@ export default function App() {
     }
   };
 
-  // [Fix 2.2] 匯出 CSV 報表功能
+  // [Fix 2.4] 自動生成比賽名單
+  const generateCompetitionRoster = () => {
+    const topStudents = rankedStudents.slice(0, 5);
+    if (topStudents.length === 0) {
+      alert('目前沒有學員資料可生成名單。');
+      return;
+    }
+
+    let rosterText = "🏆 BCKLAS 壁球校隊 - 推薦出賽名單 🏆\n\n";
+    topStudents.forEach((s, i) => {
+      rosterText += `${i+1}. ${s.name} (${s.class} ${s.classNo}) - 積分: ${s.totalPoints}\n`;
+    });
+    rosterText += "\n(由系統自動依據積分生成)";
+
+    navigator.clipboard.writeText(rosterText).then(() => {
+      alert('✅ 推薦名單已生成並複製到剪貼簿！\n\n你可以直接貼上到 Word 或 WhatsApp。');
+    }).catch(err => {
+      console.error('複製失敗', err);
+      alert('複製失敗，請手動選取：\n\n' + rosterText);
+    });
+  };
+
+  // 匯出 CSV 報表功能
   const exportAttendanceCSV = (targetClass) => {
-    // 篩選數據
     const logs = attendanceLogs.filter(l => targetClass === 'ALL' || l.trainingClass === targetClass);
     
     if (logs.length === 0) {
@@ -327,10 +349,8 @@ export default function App() {
       return;
     }
 
-    // 排序：日期 -> 班別 -> 姓名
     logs.sort((a,b) => a.date.localeCompare(b.date) || a.class.localeCompare(b.class) || a.name.localeCompare(b.name));
     
-    // 產生 CSV 內容 (加入 BOM \uFEFF 以支援 Excel 中文顯示)
     let csvContent = "\uFEFF"; 
     csvContent += "日期,訓練班別,地點,學生姓名,班級,班號,記錄時間\n";
     
@@ -339,7 +359,6 @@ export default function App() {
       csvContent += `${l.date},${l.trainingClass},${l.location},${l.name},${l.class},${l.classNo},${time}\n`;
     });
     
-    // 下載檔案
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -521,6 +540,7 @@ export default function App() {
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
+            {/* [Fix 1.7] 移除了外圍藍色背景和陰影，並放大 Logo */}
             <div className="flex justify-center mb-10">
               <SchoolLogo className="text-white" size={80} />
             </div>
@@ -648,9 +668,11 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
+                {/* [Fix 1.0] 修正：移除這裡的 <FinancialView /> 避免標題崩壞，改為純文字 */}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
+              {/* [Fix 1.1] 系統名修正 */}
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
@@ -676,8 +698,8 @@ export default function App() {
           {/* 1. 積分排行 */}
           {activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-              {/* [Fix 2.3] 頒獎台設計 (Podium Layout) */}
-              <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12">
+              {/* [Fix 2.5] 頒獎台設計 (增加 mt-10 md:mt-24) */}
+              <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "";
                    let sizeClass = "";
@@ -713,43 +735,54 @@ export default function App() {
                       labelBg = "bg-orange-500";
                    }
 
+                   // [Fix 2.5] 重構卡片結構：背景框(clipped) + 內容(unclipped)
                    return (
-                      <div key={s.id} className={`relative p-8 rounded-[3rem] border-4 flex-shrink-0 flex flex-col items-center text-center ${orderClass} ${sizeClass} ${gradientClass} ${shadowClass} transition-all duration-500 hover:-translate-y-2`}>
-                          {/* Crown for 1st */}
-                          {i === 0 && (
-                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg">
-                              <Crown size={64} fill="currentColor" strokeWidth={1.5} />
-                            </div>
-                          )}
-                          
-                          {/* Rank Watermark */}
-                          <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none">
-                              <span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span>
+                      <div key={s.id} className={`relative flex-shrink-0 flex flex-col items-center text-center ${orderClass} ${sizeClass} transition-all duration-500 hover:-translate-y-2`}>
+                          {/* 背景層：負責圓角、邊框、陰影、背景圖，並執行 overflow-hidden */}
+                          <div className={`absolute inset-0 rounded-[3rem] border-4 ${gradientClass} ${shadowClass} overflow-hidden`}>
+                               {/* Watermark inside clipped area */}
+                               <div className="absolute -right-4 -top-4 opacity-10 rotate-12">
+                                  <TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/>
+                               </div>
+                               {/* Rank Watermark */}
+                               <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none">
+                                  <span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span>
+                               </div>
                           </div>
 
-                          {/* Avatar */}
-                           <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 relative z-10 ${iconColor}`}>
-                              {s.name[0]}
-                              <div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>
-                                 {label}
+                          {/* 內容層：負責顯示皇冠、頭像、文字，不被裁切 (relative z-10) */}
+                          <div className="relative z-10 p-8 w-full h-full flex flex-col items-center">
+                              {/* Crown for 1st - 浮出框外 */}
+                              {i === 0 && (
+                                <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg">
+                                  <Crown size={64} fill="currentColor" strokeWidth={1.5} />
+                                </div>
+                              )}
+
+                              {/* Avatar */}
+                              <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>
+                                  {s.name[0]}
+                                  <div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>
+                                     {label}
+                                  </div>
                               </div>
-                           </div>
-                           
-                           {/* Info */}
-                           <div className="mt-4 relative z-10 w-full">
-                               <h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3>
-                               <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p>
-                               <div className="my-6">
-                                 <div className={`text-5xl font-black font-mono tracking-tight ${iconColor}`}>
-                                    {s.totalPoints}
-                                 </div>
-                                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Points</p>
-                               </div>
-                               <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 border border-white/50 backdrop-blur-sm`}>
-                                 <span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span>
-                                 <span className="text-xs font-black text-slate-500">{s.badge}</span>
-                               </div>
-                           </div>
+                               
+                              {/* Info */}
+                              <div className="mt-4 w-full">
+                                   <h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3>
+                                   <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p>
+                                   <div className="my-6">
+                                     <div className={`text-5xl font-black font-mono tracking-tight ${iconColor}`}>
+                                        {s.totalPoints}
+                                     </div>
+                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Points</p>
+                                   </div>
+                                   <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 border border-white/50 backdrop-blur-sm`}>
+                                     <span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span>
+                                     <span className="text-xs font-black text-slate-500">{s.badge}</span>
+                                   </div>
+                              </div>
+                          </div>
                       </div>
                    )
                 })}
@@ -1095,13 +1128,19 @@ export default function App() {
                            <p className="text-slate-400 text-xs mt-1">追蹤校隊最新動態與賽程詳情</p>
                          </div>
                          {role === 'admin' && (
-                           <button onClick={()=>{
-                             const title = prompt('公告標題');
-                             const date = prompt('比賽日期 (YYYY-MM-DD)');
-                             if(title && date) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'competitions'), { title, date, createdAt: serverTimestamp() });
-                           }} className="p-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
-                             <Plus size={24}/>
-                           </button>
+                           <div className="flex gap-2">
+                             <button onClick={generateCompetitionRoster} className="p-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center gap-2" title="生成推薦名單">
+                               <ListChecks size={24}/>
+                               <span className="text-xs font-black">推薦名單</span>
+                             </button>
+                             <button onClick={()=>{
+                               const title = prompt('公告標題');
+                               const date = prompt('比賽日期 (YYYY-MM-DD)');
+                               if(title && date) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'competitions'), { title, date, createdAt: serverTimestamp() });
+                             }} className="p-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
+                               <Plus size={24}/>
+                             </button>
+                           </div>
                          )}
                       </div>
                       <div className="space-y-4 relative z-10">
