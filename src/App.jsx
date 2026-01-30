@@ -43,9 +43,9 @@ const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'squash-management-v1';
 
 // --- 版本控制 (Version Control) ---
-// Version 1.5: 使用 GitHub Raw 連結
-// Version 1.6: [Current] 改用 jsDelivr CDN 加速連結，解決 GitHub Raw 圖片讀取不穩定的問題
-const CURRENT_VERSION = "1.6";
+// Version 1.6: 改用 jsDelivr CDN 加速連結
+// Version 1.7: [Current] 移除登入畫面校徽背景藍色方塊，並放大校徽
+const CURRENT_VERSION = "1.7";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -100,9 +100,7 @@ export default function App() {
 
   // --- [Fix 1.6] 設定 Favicon 為 jsDelivr CDN 圖片 ---
   useEffect(() => {
-    // 使用 jsDelivr CDN 連結，更穩定且支援跨域
     const logoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.type = 'image/png';
     link.rel = 'icon';
@@ -398,7 +396,6 @@ export default function App() {
     const [error, setError] = useState(false);
     
     // [Fix 1.6] jsDelivr CDN 格式：
-    // https://cdn.jsdelivr.net/gh/user/repo@version/file
     const logoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
 
     if (error) {
@@ -440,10 +437,9 @@ export default function App() {
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
+            {/* [Fix 1.7] 移除了外圍藍色背景和陰影，並放大 Logo */}
             <div className="flex justify-center mb-10">
-              <div className="w-24 h-24 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-blue-500/30 overflow-hidden p-2">
-                <SchoolLogo className="text-white" size={48} />
-              </div>
+              <SchoolLogo className="text-white" size={80} />
             </div>
             <h2 className="text-4xl font-black text-center text-slate-800 mb-2">正覺壁球</h2>
             <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
