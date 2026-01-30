@@ -6,7 +6,7 @@ import {
   Save, FileSpreadsheet, Download, FileText, Info, Link as LinkIcon, Settings2,
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
-  FileBarChart, Crown, ListChecks
+  FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle // [Fix 2.6] 新增媒體相關圖示
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -47,8 +47,9 @@ const appId = 'bcklas-squash-core-v1';
 
 // --- 版本控制 (Version Control) ---
 // Version 2.4: 自動化功能 (點名加分、生成名單)
-// Version 2.5: [Current] 修復排名頁冠軍皇冠被切斷的問題 (調整頂部間距與層級)
-const CURRENT_VERSION = "2.5";
+// Version 2.5: 修復排名頁冠軍皇冠被切斷的問題
+// Version 2.6: [Current] 新增「精彩花絮 (Gallery)」頁面，支援圖片及 YouTube 影片展示
+const CURRENT_VERSION = "2.6";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -61,6 +62,7 @@ export default function App() {
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
   const [competitions, setCompetitions] = useState([]);
   const [schedules, setSchedules] = useState([]); 
+  const [galleryItems, setGalleryItems] = useState([]); // [Fix 2.6] 新增花絮狀態
   const [downloadFiles, setDownloadFiles] = useState([]); 
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
@@ -153,7 +155,9 @@ export default function App() {
       const attendanceLogsRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs');
       const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
       const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
-      const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'); 
+      const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles');
+      // [Fix 2.6] 監聽 Gallery
+      const galleryRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery'); 
       
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
       const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
@@ -191,8 +195,13 @@ export default function App() {
         setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
+      // [Fix 2.6] 監聽 Gallery
+      const unsubGallery = onSnapshot(galleryRef, (snap) => {
+        setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+
       return () => { 
-        unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); 
+        unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); unsubGallery();
       };
     } catch (e) {
       console.error("Firestore Init Error:", e);
@@ -365,6 +374,39 @@ export default function App() {
     link.href = url;
     link.download = `${targetClass === 'ALL' ? '全部班級' : targetClass}_出席紀錄_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
+  };
+
+  // --- [Fix 2.6] 新增花絮功能 ---
+  const handleAddMedia = async () => {
+      const type = prompt("請選擇類型 (輸入 1 或 2):\n1. 圖片 (Image)\n2. 影片 (YouTube)");
+      if (type !== '1' && type !== '2') return;
+
+      const mediaType = type === '1' ? 'image' : 'video';
+      const url = prompt(`請輸入${mediaType === 'image' ? '圖片網址 (Image URL)' : 'YouTube 影片網址'}:`);
+      if (!url) return;
+
+      const title = prompt("請輸入標題 (例如：校際比賽花絮):");
+      const desc = prompt("請輸入描述 (可選):") || "";
+
+      try {
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
+              type: mediaType,
+              url,
+              title: title || '未命名',
+              description: desc,
+              timestamp: serverTimestamp()
+          });
+          alert('新增成功！');
+      } catch (e) {
+          console.error(e);
+          alert('新增失敗');
+      }
+  };
+
+  const getYouTubeEmbedUrl = (url) => {
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+      const match = url.match(regExp);
+      return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
   };
 
   // --- CSV 工具 ---
@@ -606,6 +648,11 @@ export default function App() {
               <Trophy size={20}/> 積分排行
             </button>
             
+            {/* [Fix 2.6] 新增精彩花絮按鈕 */}
+            <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+              <ImageIcon size={20}/> 精彩花絮
+            </button>
+
             <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <CalendarIcon size={20}/> 訓練日程
             </button>
@@ -668,6 +715,8 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
+                {/* [Fix 2.6] 花絮標題 */}
+                {activeTab === 'gallery' && "📸 精彩花絮"}
                 {/* [Fix 1.0] 修正：移除這裡的 <FinancialView /> 避免標題崩壞，改為純文字 */}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
@@ -735,31 +784,27 @@ export default function App() {
                       labelBg = "bg-orange-500";
                    }
 
-                   // [Fix 2.5] 重構卡片結構：背景框(clipped) + 內容(unclipped)
+                   // [Fix 2.5] 重構卡片結構
                    return (
                       <div key={s.id} className={`relative flex-shrink-0 flex flex-col items-center text-center ${orderClass} ${sizeClass} transition-all duration-500 hover:-translate-y-2`}>
-                          {/* 背景層：負責圓角、邊框、陰影、背景圖，並執行 overflow-hidden */}
+                          {/* 背景層 */}
                           <div className={`absolute inset-0 rounded-[3rem] border-4 ${gradientClass} ${shadowClass} overflow-hidden`}>
-                               {/* Watermark inside clipped area */}
                                <div className="absolute -right-4 -top-4 opacity-10 rotate-12">
                                   <TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/>
                                </div>
-                               {/* Rank Watermark */}
                                <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none">
                                   <span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span>
                                </div>
                           </div>
 
-                          {/* 內容層：負責顯示皇冠、頭像、文字，不被裁切 (relative z-10) */}
+                          {/* 內容層 */}
                           <div className="relative z-10 p-8 w-full h-full flex flex-col items-center">
-                              {/* Crown for 1st - 浮出框外 */}
                               {i === 0 && (
                                 <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg">
                                   <Crown size={64} fill="currentColor" strokeWidth={1.5} />
                                 </div>
                               )}
 
-                              {/* Avatar */}
                               <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>
                                   {s.name[0]}
                                   <div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>
@@ -767,7 +812,6 @@ export default function App() {
                                   </div>
                               </div>
                                
-                              {/* Info */}
                               <div className="mt-4 w-full">
                                    <h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3>
                                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p>
@@ -788,7 +832,7 @@ export default function App() {
                 })}
               </div>
 
-              {/* 排名列表 (Rest of the list) */}
+              {/* 排名列表 */}
               <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden font-bold">
                 <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
@@ -1210,6 +1254,85 @@ export default function App() {
                 </div>
              </div>
           )}
+
+           {/* [Fix 2.6] 精彩花絮頁面 */}
+           {activeTab === 'gallery' && (
+            <div className="space-y-10 animate-in fade-in duration-500 font-bold">
+               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                  <div className="flex items-center gap-6">
+                    <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>
+                    <div>
+                      <h3 className="text-xl font-black">精彩花絮 (Gallery)</h3>
+                      <p className="text-xs text-slate-400 mt-1">回顧訓練與比賽的珍貴時刻</p>
+                    </div>
+                  </div>
+                  
+                  {role === 'admin' && (
+                     <button onClick={handleAddMedia} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm">
+                       <PlusCircle size={18}/> 新增相片/影片
+                     </button>
+                  )}
+               </div>
+
+               {galleryItems.length === 0 ? (
+                 <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div>
+                    <p className="text-xl font-black text-slate-400">目前暫無花絮內容</p>
+                    <p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p>
+                 </div>
+               ) : (
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {galleryItems.sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (
+                       <div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
+                          <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">
+                             {item.type === 'video' ? (
+                               getYouTubeEmbedUrl(item.url) ? (
+                                  <iframe 
+                                    src={getYouTubeEmbedUrl(item.url)} 
+                                    className="w-full h-full" 
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                    allowFullScreen
+                                    title={item.title}
+                                  />
+                               ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                    <Video size={48}/>
+                                    <span className="ml-2 text-xs">影片連結無效</span>
+                                  </div>
+                               )
+                             ) : (
+                               <img src={item.url} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700"/>
+                             )}
+                             
+                             <div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                               {item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}
+                               {item.type === 'video' ? 'Video' : 'Photo'}
+                             </div>
+                          </div>
+                          
+                          <div className="px-2">
+                             <h4 className="font-black text-lg text-slate-800 line-clamp-1">{item.title}</h4>
+                             <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.description}</p>
+                          </div>
+
+                          {role === 'admin' && (
+                             <div className="mt-6 pt-4 border-t border-slate-50 flex justify-end">
+                                <button 
+                                  onClick={() => {
+                                     if(confirm('確定要刪除此項目嗎？')) deleteItem('gallery', item.id);
+                                  }}
+                                  className="text-slate-300 hover:text-red-500 p-2"
+                                >
+                                  <Trash2 size={18}/>
+                                </button>
+                             </div>
+                          )}
+                       </div>
+                    ))}
+                 </div>
+               )}
+            </div>
+           )}
 
           {/* 5. 隊員管理 (教練專用) */}
           {activeTab === 'students' && role === 'admin' && (
