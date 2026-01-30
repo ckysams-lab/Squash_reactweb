@@ -43,9 +43,9 @@ const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'squash-management-v1';
 
 // --- 版本控制 (Version Control) ---
-// Version 1.7: 登入畫面校徽優化
-// Version 1.8: [Current] 修正排名頁重複學生顯示問題(自動過濾)，並修復刪除按鈕功能(與扣分分開)
-const CURRENT_VERSION = "1.8";
+// Version 1.8: 修正排名頁重複顯示及刪除鍵邏輯
+// Version 1.9: [Current] 緊急修復「管理概況 (Dashboard)」頁面空白問題，還原顯示內容
+const CURRENT_VERSION = "1.9";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -227,17 +227,13 @@ export default function App() {
     const uniqueMap = new Map();
     students.forEach(s => {
       const key = `${s.class}-${s.classNo}`;
-      // 如果 map 中已經有這個人，比較分數，保留分數高的
-      // 或者如果沒有，直接加入
       const currentPoints = Number(s.points) || 0;
       
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, s);
       } else {
-        // 發現重複：檢查現有的分數
         const existing = uniqueMap.get(key);
         const existingPoints = Number(existing.points) || 0;
-        // 如果目前這個分數比較高，就替換掉舊的 (這樣可以只保留一個最新/最高分的記錄)
         if (currentPoints > existingPoints) {
           uniqueMap.set(key, s);
         }
@@ -1013,6 +1009,93 @@ export default function App() {
                         本學期壁球訓練已全面數位化，請隊員定期查看「積分排行」並參與「訓練班日程」！
                       </p>
                       <button className="mt-8 px-6 py-3 bg-white text-blue-600 rounded-2xl text-xs font-black shadow-lg">了解更多</button>
+                   </div>
+                </div>
+             </div>
+          )}
+
+          {/* [Fix 1.9] 6. 管理概況 (Dashboard) - 完整還原 */}
+          {activeTab === 'dashboard' && role === 'admin' && (
+             <div className="space-y-10 animate-in fade-in duration-700 font-bold">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
+                      <div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div>
+                      <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">隊員總數</p>
+                      <p className="text-6xl font-black mt-2 font-mono">{students.length}</p>
+                      <div className="mt-6 flex items-center gap-2 text-xs text-blue-200 font-bold">
+                        <TrendingUp size={14}/> 活躍率 100%
+                      </div>
+                   </div>
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm">
+                      <p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">總訓練節數</p>
+                      <p className="text-6xl font-black mt-2 text-slate-800 font-mono">{schedules.length}</p>
+                      <p className="mt-6 text-xs text-slate-400 font-bold">已安排至 2026</p>
+                   </div>
+                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl">
+                      <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">平均積分</p>
+                      <p className="text-6xl font-black mt-2 font-mono">
+                        {/* [Fix 1.9] 使用 rankedStudents.length (去重後人數) 計算平均分，避免數據偏差 */}
+                        {rankedStudents.length ? Math.round(rankedStudents.reduce((acc,s)=>acc+s.totalPoints,0)/rankedStudents.length) : 0}
+                      </p>
+                      <p className="mt-6 text-xs text-emerald-400 font-bold">較上月 +12.5%</p>
+                   </div>
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
+                      <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-4">
+                        <ShieldCheck size={32}/>
+                      </div>
+                      <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">系統狀態</p>
+                      <p className="text-xl font-black mt-1 text-slate-800">運作正常 v{CURRENT_VERSION}</p>
+                   </div>
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                      <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
+                        <Target className="text-blue-600"/> 章別分佈概況
+                      </h3>
+                      <div className="space-y-6">
+                        {Object.keys(BADGE_DATA).filter(k => k !== '無').map(badge => {
+                          const count = students.filter(s => s.badge === badge).length;
+                          const percent = students.length ? Math.round((count/students.length)*100) : 0;
+                          return (
+                            <div key={badge} className="space-y-2">
+                              <div className="flex justify-between items-center px-2">
+                                <span className={`text-xs font-black ${BADGE_DATA[badge].color}`}>{badge}</span>
+                                <span className="text-xs text-slate-400 font-mono">{count} 人 ({percent}%)</span>
+                              </div>
+                              <div className="h-4 w-full bg-slate-50 rounded-full overflow-hidden border">
+                                <div className={`h-full transition-all duration-1000 ${BADGE_DATA[badge].bg.replace('bg-', 'bg-')}`} style={{width: `${percent}%`, backgroundColor: 'currentColor'}}></div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                   </div>
+                   
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                      <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
+                        <History className="text-blue-600"/> 最近更新活動
+                      </h3>
+                      <div className="space-y-6">
+                         {competitions.slice(0, 4).map(c => (
+                           <div key={c.id} className="flex gap-6 items-start">
+                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div>
+                              <div>
+                                <p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p>
+                              </div>
+                           </div>
+                         ))}
+                         {schedules.slice(0, 2).map(s => (
+                           <div key={s.id} className="flex gap-6 items-start">
+                              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div>
+                              <div>
+                                <p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p>
+                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p>
+                              </div>
+                           </div>
+                         ))}
+                      </div>
                    </div>
                 </div>
              </div>
