@@ -5,12 +5,13 @@ import {
   Trophy, Megaphone, Upload, LogIn, LogOut, Lock, User, MinusCircle, PlusCircle, 
   Save, FileSpreadsheet, Download, FileText, Info, Link as LinkIcon, Settings2,
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
-  Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2
+  Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
+  FileBarChart
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
-  addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment
+  addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where
 } from 'firebase/firestore';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
@@ -45,9 +46,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 2.0: 完整還原功能並修復路徑
-// Version 2.1: [Current] 移除側邊欄校徽的藍色背景
-const CURRENT_VERSION = "2.1";
+// Version 2.1: 移除側邊欄校徽藍色背景
+// Version 2.2: [Current] 新增點名寫入資料庫功能 & 訓練班 CSV 報表匯出功能
+const CURRENT_VERSION = "2.2";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -56,7 +57,8 @@ export default function App() {
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('rankings');
   const [students, setStudents] = useState([]);
-  const [attendance, setAttendance] = useState([]);
+  const [attendance, setAttendance] = useState([]); // 舊的 attendance state (如果沒用到可考慮移除，但為相容先保留)
+  const [attendanceLogs, setAttendanceLogs] = useState([]); // [Fix 2.2] 新增：即時監聽點名紀錄
   const [competitions, setCompetitions] = useState([]);
   const [schedules, setSchedules] = useState([]); 
   const [downloadFiles, setDownloadFiles] = useState([]); 
@@ -148,7 +150,8 @@ export default function App() {
     
     try {
       const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
-      const attendanceRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance');
+      // [Fix 2.2] 監聽點名日誌
+      const attendanceLogsRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs');
       const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
       const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
       const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'); 
@@ -173,8 +176,9 @@ export default function App() {
         setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
-      const unsubAttendance = onSnapshot(attendanceRef, (snap) => {
-        setAttendance(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // [Fix 2.2] 讀取點名紀錄
+      const unsubAttendanceLogs = onSnapshot(attendanceLogsRef, (snap) => {
+        setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
       const unsubCompetitions = onSnapshot(competitionsRef, (snap) => {
@@ -190,7 +194,7 @@ export default function App() {
       });
 
       return () => { 
-        unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendance(); unsubCompetitions(); unsubSchedules(); unsubFiles(); 
+        unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); 
       };
     } catch (e) {
       console.error("Firestore Init Error:", e);
@@ -225,7 +229,6 @@ export default function App() {
 
   // --- 積分計算與排行邏輯 ---
   const rankedStudents = useMemo(() => {
-    // [Fix 1.8] 過濾重複學生
     const uniqueMap = new Map();
     students.forEach(s => {
       const key = `${s.class}-${s.classNo}`;
@@ -272,6 +275,77 @@ export default function App() {
       });
     } catch (e) { console.error(e); }
     setIsUpdating(false);
+  };
+
+  // [Fix 2.2] 點名功能：寫入資料庫
+  const markAttendance = async (student) => {
+    if (!todaySchedule) { 
+      alert('⚠️ 今日沒有設定訓練日程，請先到「訓練日程」新增今天的課堂。'); 
+      return; 
+    }
+    
+    // 檢查是否今日已點名
+    const todayStr = todaySchedule.date;
+    const isAttended = attendanceLogs.some(log => 
+      log.studentId === student.id && 
+      log.date === todayStr && 
+      log.trainingClass === todaySchedule.trainingClass
+    );
+
+    if (isAttended) {
+      alert(`⚠️ ${student.name} 已經點過名了！`);
+      return;
+    }
+
+    if (confirm(`確認為 ${student.name} 進行「${todaySchedule.trainingClass}」點名？`)) {
+      try {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'), {
+          studentId: student.id,
+          name: student.name,
+          class: student.class,
+          classNo: student.classNo,
+          trainingClass: todaySchedule.trainingClass,
+          date: todaySchedule.date,
+          location: todaySchedule.location,
+          timestamp: serverTimestamp()
+        });
+        // 成功不需 alert，UI 會自動變成綠色
+      } catch (e) {
+        console.error(e);
+        alert('點名失敗，請檢查網絡');
+      }
+    }
+  };
+
+  // [Fix 2.2] 匯出 CSV 報表功能
+  const exportAttendanceCSV = (targetClass) => {
+    // 篩選數據
+    const logs = attendanceLogs.filter(l => targetClass === 'ALL' || l.trainingClass === targetClass);
+    
+    if (logs.length === 0) {
+      alert('⚠️ 沒有找到相關的點名紀錄');
+      return;
+    }
+
+    // 排序：日期 -> 班別 -> 姓名
+    logs.sort((a,b) => a.date.localeCompare(b.date) || a.class.localeCompare(b.class) || a.name.localeCompare(b.name));
+    
+    // 產生 CSV 內容 (加入 BOM \uFEFF 以支援 Excel 中文顯示)
+    let csvContent = "\uFEFF"; 
+    csvContent += "日期,訓練班別,地點,學生姓名,班級,班號,記錄時間\n";
+    
+    logs.forEach(l => {
+      const time = l.timestamp ? new Date(l.timestamp.seconds * 1000).toLocaleTimeString() : 'N/A';
+      csvContent += `${l.date},${l.trainingClass},${l.location},${l.name},${l.class},${l.classNo},${time}\n`;
+    });
+    
+    // 下載檔案
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${targetClass === 'ALL' ? '全部班級' : targetClass}_出席紀錄_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
   };
 
   // --- CSV 工具 ---
@@ -429,7 +503,6 @@ export default function App() {
     );
   };
 
-  // [Fix 1.2] Loading 畫面
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
       <div className="mb-8 animate-pulse">
@@ -448,7 +521,6 @@ export default function App() {
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
-            {/* [Fix 1.7] 移除了外圍藍色背景和陰影，並放大 Logo */}
             <div className="flex justify-center mb-10">
               <SchoolLogo className="text-white" size={80} />
             </div>
@@ -492,7 +564,6 @@ export default function App() {
       <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-white border-r transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
-            {/* [Fix 2.1] 移除側邊欄校徽的藍色背景，改為透明並放大顯示 */}
             <div className="flex items-center justify-center">
                <SchoolLogo size={32} />
             </div>
@@ -577,7 +648,6 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
-                {/* [Fix 1.0] 修正：移除這裡的 <FinancialView /> 避免標題崩壞，改為純文字 */}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
@@ -697,7 +767,6 @@ export default function App() {
                             <td className="px-8 py-8">
                               <div className="flex justify-center gap-2">
                                 <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button>
-                                {/* [Fix 1.8] 新增獨立減分鍵 */}
                                 <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button>
                                 <button 
                                   onClick={() => {
@@ -861,11 +930,39 @@ export default function App() {
                   </div>
                </div>
 
+               {/* [Fix 2.2] 新增：報表匯出中心 */}
+               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8">
+                 <div className="flex items-center gap-4">
+                   <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div>
+                   <div>
+                     <h4 className="font-black text-slate-800">出席率報表中心</h4>
+                     <p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p>
+                   </div>
+                 </div>
+                 <div className="flex gap-2">
+                   <button 
+                     onClick={() => exportAttendanceCSV('ALL')}
+                     className="px-6 py-3 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded-2xl text-xs font-black transition-all"
+                   >
+                     匯出全部紀錄
+                   </button>
+                   {/* 這裡可以根據 selectedClassFilter 匯出特定班別 */}
+                   {attendanceClassFilter !== 'ALL' && (
+                     <button 
+                       onClick={() => exportAttendanceCSV(attendanceClassFilter)}
+                       className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"
+                     >
+                       <Download size={16}/> 匯出 {attendanceClassFilter} 報表
+                     </button>
+                   )}
+                 </div>
+               </div>
+
                {/* 壁球班別篩選選單 */}
                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6">
                  <div className="flex items-center gap-3 text-slate-400 min-w-max">
                    <Filter size={20} />
-                   <span>選擇壁球班別：</span>
+                   <span>選擇點名班別：</span>
                  </div>
                  <div className="flex flex-wrap gap-2">
                    {uniqueTrainingClasses.map(cls => (
@@ -886,28 +983,50 @@ export default function App() {
 
                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                   {studentsInSelectedAttendanceClass.length > 0 ? (
-                    studentsInSelectedAttendanceClass.map(s => (
-                      <button 
-                        key={s.id} 
-                        onClick={()=>{
-                          alert(`已為 ${s.name} 完成「${todaySchedule ? todaySchedule.trainingClass : '一般點名'}」點名！\n地點：${todaySchedule ? todaySchedule.location : '體育館'}`);
-                        }} 
-                        className="group p-8 bg-white rounded-[3rem] border border-slate-100 shadow-sm hover:border-blue-500 hover:shadow-xl hover:shadow-blue-50 transition-all flex flex-col items-center text-center relative overflow-hidden"
-                      >
-                         <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:rotate-6 transition-all font-black uppercase">
-                            {s.name[0]}
-                         </div>
-                         <p className="font-black text-xl text-slate-800 group-hover:text-blue-600 transition-all">{s.name}</p>
-                         <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
-                         {/* 顯示學生報名的所有班別縮略資訊 */}
-                         <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>
-                           {s.squashClass}
-                         </div>
-                         <div className="absolute top-4 right-4 text-slate-100 group-hover:text-blue-100 transition-all">
-                            <CheckCircle2 size={24}/>
-                         </div>
-                      </button>
-                    ))
+                    studentsInSelectedAttendanceClass.map(s => {
+                      // [Fix 2.2] 檢查是否已出席 (比對 DB 紀錄)
+                      const isAttended = todaySchedule && attendanceLogs.some(log => 
+                        log.studentId === s.id && 
+                        log.date === todaySchedule.date && 
+                        log.trainingClass === todaySchedule.trainingClass
+                      );
+
+                      return (
+                        <button 
+                          key={s.id} 
+                          onClick={() => markAttendance(s)} // [Fix 2.2] 改為呼叫寫入資料庫的函數
+                          className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden ${
+                            isAttended 
+                            ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-default' 
+                            : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-xl hover:shadow-blue-50'
+                          }`}
+                        >
+                           <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase ${
+                             isAttended
+                             ? 'bg-emerald-200 text-white rotate-12'
+                             : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:rotate-6'
+                           }`}>
+                              {s.name[0]}
+                           </div>
+                           <p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : 'text-slate-800 group-hover:text-blue-600'}`}>{s.name}</p>
+                           <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
+                           <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>
+                             {s.squashClass}
+                           </div>
+                           
+                           {/* [Fix 2.2] 狀態圖示 */}
+                           <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
+                              <CheckCircle2 size={24}/>
+                           </div>
+                           
+                           {isAttended && (
+                             <div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">
+                               已出席
+                             </div>
+                           )}
+                        </button>
+                      );
+                    })
                   ) : (
                     <div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">
                       此班別暫無學員資料
@@ -1074,7 +1193,6 @@ export default function App() {
                    <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl">
                       <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">平均積分</p>
                       <p className="text-6xl font-black mt-2 font-mono">
-                        {/* [Fix 1.9] 使用 rankedStudents.length (去重後人數) 計算平均分，避免數據偏差 */}
                         {rankedStudents.length ? Math.round(rankedStudents.reduce((acc,s)=>acc+s.totalPoints,0)/rankedStudents.length) : 0}
                       </p>
                       <p className="mt-6 text-xs text-emerald-400 font-bold">較上月 +12.5%</p>
