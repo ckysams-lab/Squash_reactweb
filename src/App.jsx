@@ -41,13 +41,13 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// [Fix 2.0] 強制鎖定 App ID，避免環境變數中的斜線導致 Firebase 路徑錯誤 (6 segments error)
+// [Fix 2.0] 強制鎖定 App ID
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 1.9: 修復 Dashboard
-// Version 2.0: [Current] 完整還原「隊員管理」頁面，並修復 Firebase 路徑錯誤 (AppID Issue)
-const CURRENT_VERSION = "2.0";
+// Version 2.0: 完整還原功能並修復路徑
+// Version 2.1: [Current] 移除側邊欄校徽的藍色背景
+const CURRENT_VERSION = "2.1";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -147,8 +147,6 @@ export default function App() {
     if (!user) return;
     
     try {
-      // [Fix 2.0] 確保 appId 變數已正確宣告，這裡的路徑是奇數段 (Collection)
-      // artifacts (col) / appId (doc) / public (col) / data (doc) / students (col) -> 5 segments -> OK
       const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
       const attendanceRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance');
       const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
@@ -206,7 +204,7 @@ export default function App() {
         setRole('admin'); 
         setShowLoginModal(false); 
         setActiveTab('dashboard');
-      } else { alert('管理員密碼錯誤'); }
+      } else { alert('管理員密碼錯誤 (預設: admin)'); }
     } else {
       const student = students.find(s => s.class === data.className.toUpperCase() && s.classNo === data.classNo);
       if (student) {
@@ -450,6 +448,7 @@ export default function App() {
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
+            {/* [Fix 1.7] 移除了外圍藍色背景和陰影，並放大 Logo */}
             <div className="flex justify-center mb-10">
               <SchoolLogo className="text-white" size={80} />
             </div>
@@ -462,7 +461,7 @@ export default function App() {
                 <button onClick={() => {
                   const p = prompt('請輸入教練管理密碼'); 
                   if(p === systemConfig.adminPassword) { setRole('admin'); setShowLoginModal(false); setActiveTab('dashboard'); }
-                  else if(p) alert('密碼錯誤');
+                  else if(p) alert('密碼錯誤 (預設: admin)');
                 }} className="flex-1 py-3 text-sm font-black text-slate-400 hover:text-slate-600">教練登入</button>
               </div>
 
@@ -493,8 +492,9 @@ export default function App() {
       <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-white border-r transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
-            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-100 overflow-hidden p-1">
-              <SchoolLogo className="text-white" size={24} />
+            {/* [Fix 2.1] 移除側邊欄校徽的藍色背景，改為透明並放大顯示 */}
+            <div className="flex items-center justify-center">
+               <SchoolLogo size={32} />
             </div>
             <div>
               <h2 className="text-2xl font-black tracking-tighter">正覺壁球</h2>
@@ -577,6 +577,7 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
+                {/* [Fix 1.0] 修正：移除這裡的 <FinancialView /> 避免標題崩壞，改為純文字 */}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
@@ -696,6 +697,7 @@ export default function App() {
                             <td className="px-8 py-8">
                               <div className="flex justify-center gap-2">
                                 <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button>
+                                {/* [Fix 1.8] 新增獨立減分鍵 */}
                                 <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button>
                                 <button 
                                   onClick={() => {
@@ -1004,7 +1006,7 @@ export default function App() {
              </div>
           )}
 
-          {/* [Fix 2.0] 5. 隊員管理 (教練專用) - 完整還原 */}
+          {/* 5. 隊員管理 (教練專用) */}
           {activeTab === 'students' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
