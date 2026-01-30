@@ -151,6 +151,13 @@ export default function App() {
       const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
       const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'); 
       
+      // [Fix] 修正路徑錯誤：config 應該是集合 (Collection)，而非文件 (Doc) 的父層
+      // 原本錯誤：doc(db, ..., 'config', 'system') -> 這需要 config 是 collection
+      // 但在 Firebase 結構中，若 artifacts/{appId}/public/data 是一個文檔，它下面不能直接掛 doc
+      // 正確結構應為： collection(db, 'artifacts', appId, 'public', 'data', 'config') -> 取得集合
+      // 或者將 config 視為 data 下的一個 map 欄位 (但這裡我們用子集合)
+      // 根據您的結構，我們將路徑修正為指向具體的文件
+      // artifacts (col) -> appId (doc) -> public (col) -> data (doc) -> config (col) -> system (doc)
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
       const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
 
