@@ -919,7 +919,7 @@ export default function App() {
                 {activeTab === 'dashboard' && "📊 管理總結"}
                 {activeTab === 'students' && "👥 隊員檔案庫"}
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
-                {activeTab === 'competitions' && "🏸 比賽資訊公告"}
+                {activeTab === 'competitions' && "🎾 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
                 {activeTab === 'gallery' && "📸 精彩花絮"}
                 {activeTab === 'awards' && "🏆 獎項成就"}
