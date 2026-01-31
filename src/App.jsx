@@ -7,7 +7,7 @@ import {
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
-  Hourglass, Medal
+  Hourglass, Medal, Folder, ArrowLeft // [Fix 3.3] 新增 Folder, ArrowLeft 圖示
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 3.1: Dashboard 邏輯升級
-// Version 3.2: [Current] 緊急修復「隊員檔案庫」頁面空白問題 (還原顯示代碼)
-const CURRENT_VERSION = "3.2";
+// Version 3.2: 修復頁面顯示
+// Version 3.3: [Current] 新增「相簿模式」與「圖片自動壓縮」功能，大幅降低儲存負擔
+const CURRENT_VERSION = "3.3";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -76,6 +76,12 @@ export default function App() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(true);
   const [viewingImage, setViewingImage] = useState(null);
+  
+  // [Fix 3.3] 相簿檢視狀態：null = 列表模式, string = 正在檢視的相簿標題
+  const [currentAlbum, setCurrentAlbum] = useState(null);
+  // [Fix 3.3] 上傳狀態
+  const [isUploading, setIsUploading] = useState(false);
+
   const [importEncoding, setImportEncoding] = useState('AUTO');
   const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
   const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL');
@@ -139,6 +145,33 @@ export default function App() {
       awardsThisYear
     };
   }, [schedules, competitions]);
+
+  // [Fix 3.3] 相簿分組邏輯
+  const galleryAlbums = useMemo(() => {
+    const albums = {};
+    galleryItems.forEach(item => {
+      const title = item.title || "未分類";
+      if (!albums[title]) {
+        albums[title] = {
+          title,
+          cover: item.url, // 使用第一張圖作為封面
+          count: 0,
+          items: [],
+          type: item.type, // 記錄這本相簿主要的類型（雖然可能混合）
+          lastUpdated: item.timestamp
+        };
+      }
+      albums[title].count += 1;
+      albums[title].items.push(item);
+      // 更新封面為最新的照片（如果有 timestamp）
+      if (item.timestamp && albums[title].lastUpdated && item.timestamp > albums[title].lastUpdated) {
+         albums[title].cover = item.url;
+         albums[title].lastUpdated = item.timestamp;
+      }
+    });
+    // 轉為陣列並排序
+    return Object.values(albums).sort((a,b) => (b.lastUpdated?.seconds || 0) - (a.lastUpdated?.seconds || 0));
+  }, [galleryItems]);
 
   // 章別數據
   const BADGE_DATA = {
@@ -421,18 +454,60 @@ export default function App() {
     link.click();
   };
 
+  // --- [Fix 3.3] 智能壓縮圖片 Helper Function ---
+  const compressImage = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1024; // 限制最大寬度
+          const MAX_HEIGHT = 1024;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // 輸出壓縮後的 Base64，品質 0.7
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(dataUrl);
+        };
+      };
+    });
+  };
+
   // --- 新增花絮功能 ---
   const handleAddMedia = async () => {
-      const type = prompt("請選擇類型 (輸入 1 或 2):\n1. 上傳照片 (Upload Photo)\n2. YouTube 影片連結");
+      const type = prompt("請選擇類型 (輸入 1 或 2):\n1. 上傳照片 (自動建立相簿)\n2. YouTube 影片連結");
       
       if (type === '1') {
         if (galleryInputRef.current) {
+          // [Fix 3.3] 清空 value 以便重複上傳
+          galleryInputRef.current.value = "";
           galleryInputRef.current.click();
         }
       } else if (type === '2') {
         const url = prompt("請輸入 YouTube 影片網址:");
         if (!url) return;
-        const title = prompt("請輸入影片標題:");
+        const title = prompt("請輸入影片標題 (這將作為相簿名稱):");
         const desc = prompt("輸入描述 (可選):") || "";
         
         try {
@@ -451,42 +526,44 @@ export default function App() {
       }
   };
 
+  // [Fix 3.3] 處理多張圖片上傳 & 壓縮
   const handleGalleryImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    if (file.size > 800 * 1024) {
-      alert("圖片太大！請確保圖片小於 800KB 以免資料庫塞爆。建議先壓縮圖片。");
-      e.target.value = null; // 重置 input
-      return;
+    // 詢問一次相簿名稱
+    const title = prompt(`您選擇了 ${files.length} 張照片。\n請輸入這些照片的「相簿名稱」(例如：校際比賽花絮):`);
+    if (!title) return;
+
+    const desc = prompt("輸入統一描述 (可選):") || "";
+    
+    setIsUploading(true);
+    let successCount = 0;
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+            // 自動壓縮
+            const compressedBase64 = await compressImage(file);
+            
+            // 寫入資料庫
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
+                type: 'image',
+                url: compressedBase64,
+                title: title, // 用相同的 Title 歸類為同一本相簿
+                description: desc,
+                timestamp: serverTimestamp()
+            });
+            successCount++;
+        } catch (err) {
+            console.error("Upload failed for one image", err);
+        }
     }
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64String = event.target.result;
-      const title = prompt("請為這張照片輸入標題:");
-      if (!title) {
-        e.target.value = null;
-        return;
-      }
-      const desc = prompt("輸入描述 (可選):") || "";
-
-      try {
-         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
-            type: 'image',
-            url: base64String, // 直接存 Base64
-            title,
-            description: desc,
-            timestamp: serverTimestamp()
-         });
-         alert("照片上傳成功！");
-      } catch (err) {
-         console.error(err);
-         alert("上傳失敗");
-      }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = null; // 重置 input
+    
+    setIsUploading(false);
+    alert(`成功上傳 ${successCount} 張照片至「${title}」相簿！`);
+    // 完成後切回列表模式
+    setCurrentAlbum(null);
   };
 
   const getYouTubeEmbedUrl = (url) => {
@@ -551,7 +628,7 @@ export default function App() {
       const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
       
       rows.forEach(row => {
-        const cols = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
+        const [className, date, location, coach, notes] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
         const [name, cls, no, badge, initPoints, squashClass] = cols;
         if (name && name !== "姓名") {
           batch.set(doc(colRef), { 
@@ -665,12 +742,13 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
       
-      {/* 隱藏的 Input 供花絮上傳使用 */}
+      {/* [Fix 3.3] 支援多檔案上傳 */}
       <input 
         type="file" 
         ref={galleryInputRef} 
         className="hidden" 
         accept="image/*"
+        multiple // 允許選多張
         onChange={handleGalleryImageUpload}
       />
 
@@ -1384,25 +1462,41 @@ export default function App() {
              </div>
           )}
 
-           {/* [Fix 2.6] 精彩花絮頁面 */}
+           {/* [Fix 2.6] 精彩花絮頁面 & [Fix 3.3] 相簿模式 */}
            {activeTab === 'gallery' && (
             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
+               {/* 頂部工具列 */}
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-6">
-                    <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>
+                    {/* [Fix 3.3] 如果正在檢視特定相簿，顯示返回按鈕 */}
+                    {currentAlbum ? (
+                        <button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all">
+                            <ArrowLeft size={24}/>
+                        </button>
+                    ) : (
+                        <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>
+                    )}
+                    
                     <div>
-                      <h3 className="text-xl font-black">精彩花絮 (Gallery)</h3>
-                      <p className="text-xs text-slate-400 mt-1">回顧訓練與比賽的珍貴時刻</p>
+                      {/* [Fix 3.3] 動態標題 */}
+                      <h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                          {currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}
+                      </p>
                     </div>
                   </div>
                   
                   {role === 'admin' && (
-                     <button onClick={handleAddMedia} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm">
-                       <PlusCircle size={18}/> 新增相片/影片
-                     </button>
+                     <div className="flex items-center gap-3">
+                         {isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}
+                         <button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50">
+                           <PlusCircle size={18}/> 新增相片/影片
+                         </button>
+                     </div>
                   )}
                </div>
 
+               {/* [Fix 3.3] 內容顯示區：相簿列表 vs 照片列表 */}
                {galleryItems.length === 0 ? (
                  <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div>
@@ -1410,60 +1504,110 @@ export default function App() {
                     <p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p>
                  </div>
                ) : (
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {galleryItems.sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (
-                       <div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
-                          <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">
-                             {item.type === 'video' ? (
-                               getYouTubeEmbedUrl(item.url) ? (
-                                  <iframe 
-                                    src={getYouTubeEmbedUrl(item.url)} 
-                                    className="w-full h-full" 
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                    allowFullScreen
-                                    title={item.title}
-                                  />
-                               ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-slate-400">
-                                    <Video size={48}/>
-                                    <span className="ml-2 text-xs">影片連結無效</span>
-                                  </div>
-                               )
-                             ) : (
-                               <img 
-                                 src={item.url} 
-                                 alt={item.title} 
-                                 onClick={() => setViewingImage(item)} // [Fix 2.9] 點擊打開燈箱
-                                 className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"
-                               />
-                             )}
-                             
-                             <div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">
-                               {item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}
-                               {item.type === 'video' ? 'Video' : 'Photo'}
-                             </div>
-                          </div>
-                          
-                          <div className="px-2">
-                             <h4 className="font-black text-lg text-slate-800 line-clamp-1">{item.title}</h4>
-                             <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.description}</p>
-                          </div>
+                 <>
+                    {/* 模式 A: 相簿列表 (當 currentAlbum 為 null 時) */}
+                    {!currentAlbum && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                             {galleryAlbums.map((album) => (
+                                 <div 
+                                    key={album.title} 
+                                    onClick={() => setCurrentAlbum(album.title)}
+                                    className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"
+                                 >
+                                     <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">
+                                         {/* 封面圖 */}
+                                         {album.cover ? (
+                                             album.type === 'video' ? (
+                                                <div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300">
+                                                    <Video size={48}/>
+                                                </div>
+                                             ) : (
+                                                <img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>
+                                             )
+                                         ) : (
+                                             <div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300">
+                                                 <Folder size={48}/>
+                                             </div>
+                                         )}
+                                         
+                                         {/* 數量標籤 */}
+                                         <div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">
+                                             {album.count} 項目
+                                         </div>
+                                     </div>
+                                     
+                                     <div className="px-2 pb-2">
+                                         <h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4>
+                                         <p className="text-xs text-slate-400 mt-1">
+                                             點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/>
+                                         </p>
+                                     </div>
+                                 </div>
+                             ))}
+                        </div>
+                    )}
 
-                          {role === 'admin' && (
-                             <div className="mt-6 pt-4 border-t border-slate-50 flex justify-end">
-                                <button 
-                                  onClick={() => {
-                                     if(confirm('確定要刪除此項目嗎？')) deleteItem('gallery', item.id);
-                                  }}
-                                  className="text-slate-300 hover:text-red-500 p-2"
-                                >
-                                  <Trash2 size={18}/>
-                                </button>
-                             </div>
-                          )}
-                       </div>
-                    ))}
-                 </div>
+                    {/* 模式 B: 照片列表 (當 currentAlbum 有值時) */}
+                    {currentAlbum && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {galleryItems
+                                .filter(item => (item.title || "未分類") === currentAlbum)
+                                .sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0))
+                                .map(item => (
+                                <div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
+                                    <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">
+                                        {item.type === 'video' ? (
+                                        getYouTubeEmbedUrl(item.url) ? (
+                                            <iframe 
+                                                src={getYouTubeEmbedUrl(item.url)} 
+                                                className="w-full h-full" 
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                                allowFullScreen
+                                                title={item.title}
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                                <Video size={48}/>
+                                                <span className="ml-2 text-xs">影片連結無效</span>
+                                            </div>
+                                        )
+                                        ) : (
+                                        <img 
+                                            src={item.url} 
+                                            alt={item.title} 
+                                            onClick={() => setViewingImage(item)} // [Fix 2.9] 點擊打開燈箱
+                                            className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"
+                                        />
+                                        )}
+                                        
+                                        <div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">
+                                        {item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}
+                                        {item.type === 'video' ? 'Video' : 'Photo'}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="px-2">
+                                        {/* 在相簿內不需要重複顯示標題，顯示描述即可 */}
+                                        <p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p>
+                                    </div>
+
+                                    {role === 'admin' && (
+                                        <div className="mt-6 pt-4 border-t border-slate-50 flex justify-end">
+                                            <button 
+                                            onClick={() => {
+                                                if(confirm('確定要刪除此項目嗎？')) deleteItem('gallery', item.id);
+                                            }}
+                                            className="text-slate-300 hover:text-red-500 p-2"
+                                            >
+                                            <Trash2 size={18}/>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                 </>
                )}
             </div>
            )}
