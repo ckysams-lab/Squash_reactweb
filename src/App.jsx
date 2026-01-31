@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 3.3: 相簿模式與壓縮
-// Version 3.4: [Current] 新增「獎項成就 (Awards)」頁面，並將 Dashboard 數據來源改為讀取獎項資料庫
-const CURRENT_VERSION = "3.4";
+// Version 3.4: 新增「獎項成就」
+// Version 3.5: [Current] 修復「隊員檔案庫」頁面空白問題 (補回遺失的代碼)
+const CURRENT_VERSION = "3.5";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -63,7 +63,7 @@ export default function App() {
   const [competitions, setCompetitions] = useState([]);
   const [schedules, setSchedules] = useState([]); 
   const [galleryItems, setGalleryItems] = useState([]); 
-  const [awards, setAwards] = useState([]); // [Fix 3.4] 新增獎項狀態
+  const [awards, setAwards] = useState([]); 
   const [downloadFiles, setDownloadFiles] = useState([]); 
   
   const [systemConfig, setSystemConfig] = useState({ 
@@ -129,12 +129,12 @@ export default function App() {
       daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
     }
 
-    // [Fix 3.4] 改為統計 awards 集合中的數據
-    // 定義學年：如果現在是 9月後，學年是 今年-明年；否則 去年-今年
-    // 這裡簡單起見，統計「本年度 (Calendar Year)」或「最近 12 個月」，這裡先用本年度
+    const awardKeywords = ["冠軍", "亞軍", "季軍", "殿軍", "金牌", "銀牌", "銅牌", "優勝", "Award", "Winner", "Champion", "1st", "2nd", "3rd"];
     const awardsThisYear = awards.filter(a => {
       const d = new Date(a.date);
-      return d.getFullYear() === currentYear;
+      const isThisYear = d.getFullYear() === currentYear;
+      //const hasKeyword = awardKeywords.some(keyword => a.title.includes(keyword));
+      return isThisYear; // 直接統計所有獎項
     }).length;
 
     return {
@@ -142,7 +142,7 @@ export default function App() {
       daysToNextMatch,
       awardsThisYear
     };
-  }, [schedules, competitions, awards]); // [Fix 3.4] 加入 awards 依賴
+  }, [schedules, competitions, awards]);
 
   // [Fix 3.3] 相簿分組邏輯
   const galleryAlbums = useMemo(() => {
@@ -233,7 +233,6 @@ export default function App() {
       const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
       const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles');
       const galleryRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery'); 
-      // [Fix 3.4] 監聽 awards
       const awardsRef = collection(db, 'artifacts', appId, 'public', 'data', 'awards');
       
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
@@ -456,7 +455,7 @@ export default function App() {
     link.click();
   };
 
-  // --- [Fix 3.3] 智能壓縮圖片 Helper Function ---
+  // --- 智能壓縮圖片 Helper Function ---
   const compressImage = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -488,7 +487,6 @@ export default function App() {
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
           
-          // 輸出壓縮後的 Base64，品質 0.7
           const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
           resolve(dataUrl);
         };
@@ -697,7 +695,7 @@ export default function App() {
     a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   };
 
-  // --- [Fix 1.6] 校徽 Logo 組件 ---
+  // --- 校徽 Logo 組件 ---
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
@@ -723,7 +721,7 @@ export default function App() {
     );
   };
 
-  // [Fix 3.4] 新增獎項功能
+  // 新增獎項功能
   const handleAddAward = async () => {
     const title = prompt("獎項名稱 (例如：全港學界壁球賽 冠軍):");
     if (!title) return;
@@ -859,7 +857,6 @@ export default function App() {
             <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <ImageIcon size={20}/> 精彩花絮
             </button>
-            {/* [Fix 3.4] 新增「獎項成就」按鈕 */}
             <button onClick={() => {setActiveTab('awards'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'awards' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Award size={20}/> 獎項成就
             </button>
@@ -925,7 +922,6 @@ export default function App() {
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
                 {activeTab === 'gallery' && "📸 精彩花絮"}
-                {/* [Fix 3.4] 新增標題 */}
                 {activeTab === 'awards' && "🏆 獎項成就"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
@@ -952,7 +948,7 @@ export default function App() {
 
         <div className="p-10 max-w-7xl mx-auto pb-40">
           
-          {/* 1. 積分排行 (Rankings) */}
+          {/* 1. 積分排行 */}
           {activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
@@ -1188,6 +1184,7 @@ export default function App() {
                                 <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div>
                                 <span className="font-bold">{sc.coach} 教練</span>
                               </div>
+                              {/* 新增：手動刪除按鈕 */}
                               {role === 'admin' && (
                                 <button 
                                   onClick={() => {
@@ -1254,6 +1251,7 @@ export default function App() {
                   </div>
                </div>
 
+               {/* 報表匯出中心 */}
                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8">
                  <div className="flex items-center gap-4">
                    <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div>
@@ -1280,6 +1278,7 @@ export default function App() {
                  </div>
                </div>
 
+               {/* 壁球班別篩選選單 */}
                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6">
                  <div className="flex items-center gap-3 text-slate-400 min-w-max">
                    <Filter size={20} />
@@ -1334,6 +1333,7 @@ export default function App() {
                              {s.squashClass}
                            </div>
                            
+                           {/* 狀態圖示 */}
                            <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
                               <CheckCircle2 size={24}/>
                            </div>
@@ -1590,7 +1590,7 @@ export default function App() {
             </div>
            )}
 
-           {/* [Fix 3.4] 新增「獎項成就 (Awards)」頁面 */}
+           {/* 獎項成就 (Awards) */}
            {activeTab === 'awards' && (
              <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1653,6 +1653,54 @@ export default function App() {
              </div>
             )}
 
+          {/* [Fix 3.5] 5. 隊員管理 (教練專用) - 完整還原 */}
+          {activeTab === 'students' && role === 'admin' && (
+             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
+                   <div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div>
+                   <div className="relative z-10">
+                     <h3 className="text-3xl font-black">隊員檔案管理</h3>
+                     <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
+                   </div>
+                   <div className="flex gap-4 relative z-10">
+                     <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
+                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
+                        <Upload size={20}/> 批量匯入 CSV 名單
+                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
+                     </label>
+                   </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                   {students.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
+                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
+                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
+                          {s.badge}
+                        </div>
+                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
+                          {s.name[0]}
+                        </div>
+                        <p className="text-xl font-black text-slate-800">{s.name}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
+                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
+                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
+                           <button className="text-slate-200 hover:text-blue-600 p-2 transition-all"><Settings2 size={18}/></button>
+                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-200 hover:text-red-500 p-2 transition-all"><Trash2 size={18}/></button>
+                        </div>
+                     </div>
+                   ))}
+                   <button onClick={()=>{
+                     const name = prompt('隊員姓名');
+                     const cls = prompt('班別 (如: 6A)');
+                     if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });
+                   }} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
+                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
+                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
+                   </button>
+                </div>
+             </div>
+          )}
+
           {/* 6. 管理概況 (Dashboard) */}
           {activeTab === 'dashboard' && role === 'admin' && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
@@ -1694,7 +1742,7 @@ export default function App() {
                       </div>
                    </div>
 
-                   {/* [Fix 3.4] 方格 4: 年度獎項 (改為讀取 awards 數據庫) */}
+                   {/* 方格 4: 年度獎項 */}
                    <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden">
                        <div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div>
                       <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200">
