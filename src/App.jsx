@@ -46,9 +46,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 2.7: 系統設定 -> 校徽直接上傳
-// Version 2.8: [Current] 精彩花絮 -> 支援直接上傳照片 (Base64)
-const CURRENT_VERSION = "2.8";
+// Version 2.8: 精彩花絮支援直接上傳照片
+// Version 2.9: [Current] 新增花絮照片「燈箱 (Lightbox)」放大預覽功能
+const CURRENT_VERSION = "2.9";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -74,6 +74,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(true);
+  
+  // [Fix 2.9] 新增：用於控制燈箱顯示的狀態
+  const [viewingImage, setViewingImage] = useState(null);
+
   const [importEncoding, setImportEncoding] = useState('AUTO');
   const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
   const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL');
@@ -417,7 +421,6 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
 
-    // 檢查檔案大小 (限制 800KB)
     if (file.size > 800 * 1024) {
       alert("圖片太大！請確保圖片小於 800KB 以免資料庫塞爆。建議先壓縮圖片。");
       e.target.value = null; // 重置 input
@@ -592,7 +595,6 @@ export default function App() {
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    // 優先使用上傳的校徽，否則使用預設
     const logoUrl = systemConfig.schoolLogo || defaultLogoUrl;
 
     if (error) {
@@ -637,6 +639,39 @@ export default function App() {
         accept="image/*"
         onChange={handleGalleryImageUpload}
       />
+
+      {/* [Fix 2.9] 燈箱 Modal (Lightbox) */}
+      {viewingImage && (
+        <div 
+          className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300" 
+          onClick={() => setViewingImage(null)}
+        >
+          {/* 關閉按鈕 */}
+          <button 
+            onClick={() => setViewingImage(null)} 
+            className="absolute top-6 right-6 p-2 bg-white/10 rounded-full text-white/70 hover:bg-white/20 hover:text-white transition-all z-50"
+          >
+            <X size={32} />
+          </button>
+          
+          {/* 圖片容器 */}
+          <div className="relative max-w-full max-h-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+             <img 
+               src={viewingImage.url} 
+               alt={viewingImage.title} 
+               className="max-w-[90vw] max-h-[80vh] object-contain rounded-lg shadow-2xl"
+             />
+             
+             {/* 底部資訊欄 */}
+             <div className="mt-6 text-center text-white">
+                 <h3 className="text-2xl font-bold">{viewingImage.title}</h3>
+                 {viewingImage.description && (
+                   <p className="text-sm text-white/70 mt-2 max-w-2xl mx-auto">{viewingImage.description}</p>
+                 )}
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* 登入視窗 */}
       {showLoginModal && (
@@ -1361,10 +1396,15 @@ export default function App() {
                                   </div>
                                )
                              ) : (
-                               <img src={item.url} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700"/>
+                               <img 
+                                 src={item.url} 
+                                 alt={item.title} 
+                                 onClick={() => setViewingImage(item)} // [Fix 2.9] 點擊打開燈箱
+                                 className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"
+                               />
                              )}
                              
-                             <div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                             <div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">
                                {item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}
                                {item.type === 'video' ? 'Video' : 'Photo'}
                              </div>
@@ -1654,6 +1694,51 @@ export default function App() {
                           <option value="UTF8">萬用編碼 (UTF-8)</option>
                           <option value="BIG5">繁體中文 (BIG5 - Excel 常用)</option>
                         </select>
+                      </div>
+
+                      {/* [Fix 2.7] 新增：校徽圖片上傳區域 */}
+                      <div className="space-y-3">
+                        <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">學校校徽 (School Logo)</label>
+                        <div className="flex flex-col items-center gap-4 p-8 border-2 border-dashed border-slate-200 rounded-[2rem] bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer relative" onClick={() => document.getElementById('logoInput').click()}>
+                           {systemConfig.schoolLogo ? (
+                             <img src={systemConfig.schoolLogo} className="h-32 object-contain" alt="Current Logo"/>
+                           ) : (
+                             <div className="text-slate-300 flex flex-col items-center">
+                               <ImageIcon size={48} className="mb-2"/>
+                               <span className="text-xs font-bold">點擊上傳校徽圖片</span>
+                             </div>
+                           )}
+                           <input 
+                             id="logoInput"
+                             type="file" 
+                             className="hidden" 
+                             accept="image/png, image/jpeg"
+                             onChange={(e) => {
+                               const file = e.target.files[0];
+                               if(file) {
+                                 if(file.size > 1024 * 1024) { // 1MB limit
+                                   alert('圖片太大，請使用小於 1MB 的圖片');
+                                   return;
+                                 }
+                                 const reader = new FileReader();
+                                 reader.onload = (ev) => setSystemConfig({...systemConfig, schoolLogo: ev.target.result});
+                                 reader.readAsDataURL(file);
+                               }
+                             }}
+                           />
+                           {systemConfig.schoolLogo && (
+                             <button 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 setSystemConfig({...systemConfig, schoolLogo: null});
+                               }}
+                               className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-sm text-red-500 hover:bg-red-50"
+                             >
+                               <Trash2 size={16}/>
+                             </button>
+                           )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-bold px-2">建議使用背景透明的 PNG 圖片，檔案大小請小於 1MB 以確保讀取速度。</p>
                       </div>
 
                       <div className="pt-8 border-t border-slate-100 space-y-4">
