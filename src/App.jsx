@@ -7,7 +7,7 @@ import {
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
-  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen // [Fix 3.7] 新增 BookOpen 圖示
+  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 3.6: 修復隊員檔案庫
-// Version 3.7: [Current] 調整 Dashboard 佈局：最近活動置頂 + 新增 PDF 考核手冊預覽
-const CURRENT_VERSION = "3.7";
+// Version 3.7: 調整 Dashboard 佈局
+// Version 3.8: [Current] 修正 PDF 考核手冊來源，改用 GitHub CDN 連結以確保預覽正常
+const CURRENT_VERSION = "3.8";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -1653,7 +1653,7 @@ export default function App() {
              </div>
             )}
 
-          {/* [Fix 3.5] 5. 隊員管理 (教練專用) - 完整還原 */}
+          {/* [Fix 3.6] 5. 隊員管理 (教練專用) - 完整還原 */}
           {activeTab === 'students' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
@@ -1810,16 +1810,16 @@ export default function App() {
                         <BookOpen className="text-blue-600"/> 章別獎勵計劃
                       </h3>
                       <div className="flex-1 w-full bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 relative group">
+                          {/* [Fix 3.8] 使用 jsDelivr CDN 連結確保 PDF 預覽正常 */}
                           <iframe 
-                            src="https://docs.google.com/gview?embedded=true&url=https://www.hksquash.org.hk/public/squashUploads/files/Booklet.pdf" 
+                            src="https://docs.google.com/gview?embedded=true&url=https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" 
                             className="w-full h-full min-h-[300px]" 
                             frameBorder="0"
                             title="Award Scheme Booklet"
                           ></iframe>
-                          {/* 備用連結按鈕，以防 iframe 讀取失敗 */}
                           <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
                              <a 
-                                href="https://www.hksquash.org.hk/public/squashUploads/files/Booklet.pdf" 
+                                href="https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" 
                                 target="_blank" 
                                 rel="noopener noreferrer"
                                 className="bg-blue-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"
