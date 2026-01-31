@@ -7,7 +7,7 @@ import {
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
-  Hourglass, Medal, Folder, ArrowLeft, Bookmark
+  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen // [Fix 3.7] 新增 BookOpen 圖示
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 3.4: 新增「獎項成就」
-// Version 3.5: [Current] 修復「隊員檔案庫」頁面空白問題 (補回遺失的代碼)
-const CURRENT_VERSION = "3.5";
+// Version 3.6: 修復隊員檔案庫
+// Version 3.7: [Current] 調整 Dashboard 佈局：最近活動置頂 + 新增 PDF 考核手冊預覽
+const CURRENT_VERSION = "3.7";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -129,12 +129,9 @@ export default function App() {
       daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
     }
 
-    const awardKeywords = ["冠軍", "亞軍", "季軍", "殿軍", "金牌", "銀牌", "銅牌", "優勝", "Award", "Winner", "Champion", "1st", "2nd", "3rd"];
     const awardsThisYear = awards.filter(a => {
       const d = new Date(a.date);
-      const isThisYear = d.getFullYear() === currentYear;
-      //const hasKeyword = awardKeywords.some(keyword => a.title.includes(keyword));
-      return isThisYear; // 直接統計所有獎項
+      return d.getFullYear() === currentYear;
     }).length;
 
     return {
@@ -144,7 +141,7 @@ export default function App() {
     };
   }, [schedules, competitions, awards]);
 
-  // [Fix 3.3] 相簿分組邏輯
+  // 相簿分組邏輯
   const galleryAlbums = useMemo(() => {
     const albums = {};
     galleryItems.forEach(item => {
@@ -919,13 +916,16 @@ export default function App() {
                 {activeTab === 'dashboard' && "📊 管理總結"}
                 {activeTab === 'students' && "👥 隊員檔案庫"}
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
-                {activeTab === 'competitions' && "🎾 比賽資訊公告"}
+                {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
+                {/* [Fix 2.6] 花絮標題 */}
                 {activeTab === 'gallery' && "📸 精彩花絮"}
+                {/* [Fix 3.4] 新增標題 */}
                 {activeTab === 'awards' && "🏆 獎項成就"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
+              {/* [Fix 1.1] 系統名修正 */}
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
@@ -1704,6 +1704,33 @@ export default function App() {
           {/* 6. 管理概況 (Dashboard) */}
           {activeTab === 'dashboard' && role === 'admin' && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
+                {/* [Fix 3.7] 將「最近活動」置頂 */}
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10">
+                   <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
+                     <History className="text-blue-600"/> 最近更新活動
+                   </h3>
+                   <div className="space-y-6">
+                      {competitions.slice(0, 4).map(c => (
+                        <div key={c.id} className="flex gap-6 items-start">
+                           <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div>
+                           <div>
+                             <p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p>
+                             <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p>
+                           </div>
+                        </div>
+                      ))}
+                      {schedules.slice(0, 2).map(s => (
+                        <div key={s.id} className="flex gap-6 items-start">
+                           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div>
+                           <div>
+                             <p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p>
+                             <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p>
+                           </div>
+                        </div>
+                      ))}
+                   </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                    {/* 方格 1: 活躍隊員 */}
                    <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
@@ -1777,29 +1804,29 @@ export default function App() {
                       </div>
                    </div>
                    
-                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                      <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
-                        <History className="text-blue-600"/> 最近更新活動
+                   {/* [Fix 3.7] 新增「章別獎勵計劃考核內容」PDF 預覽 (Google Docs Viewer) */}
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col h-full">
+                      <h3 className="text-2xl font-black mb-6 flex items-center gap-4">
+                        <BookOpen className="text-blue-600"/> 章別獎勵計劃
                       </h3>
-                      <div className="space-y-6">
-                         {competitions.slice(0, 4).map(c => (
-                           <div key={c.id} className="flex gap-6 items-start">
-                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div>
-                              <div>
-                                <p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p>
-                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p>
-                              </div>
-                           </div>
-                         ))}
-                         {schedules.slice(0, 2).map(s => (
-                           <div key={s.id} className="flex gap-6 items-start">
-                              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div>
-                              <div>
-                                <p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p>
-                                <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p>
-                              </div>
-                           </div>
-                         ))}
+                      <div className="flex-1 w-full bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 relative group">
+                          <iframe 
+                            src="https://docs.google.com/gview?embedded=true&url=https://www.hksquash.org.hk/public/squashUploads/files/Booklet.pdf" 
+                            className="w-full h-full min-h-[300px]" 
+                            frameBorder="0"
+                            title="Award Scheme Booklet"
+                          ></iframe>
+                          {/* 備用連結按鈕，以防 iframe 讀取失敗 */}
+                          <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                             <a 
+                                href="https://www.hksquash.org.hk/public/squashUploads/files/Booklet.pdf" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="bg-blue-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"
+                             >
+                                <Download size={14}/> 下載 PDF
+                             </a>
+                          </div>
                       </div>
                    </div>
                 </div>
