@@ -7,7 +7,7 @@ import {
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
-  Hourglass, Medal, Folder, ArrowLeft // [Fix 3.3] 新增 Folder, ArrowLeft 圖示
+  Hourglass, Medal, Folder, ArrowLeft, Bookmark
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 3.2: 修復頁面顯示
-// Version 3.3: [Current] 新增「相簿模式」與「圖片自動壓縮」功能，大幅降低儲存負擔
-const CURRENT_VERSION = "3.3";
+// Version 3.3: 相簿模式與壓縮
+// Version 3.4: [Current] 新增「獎項成就 (Awards)」頁面，並將 Dashboard 數據來源改為讀取獎項資料庫
+const CURRENT_VERSION = "3.4";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -63,6 +63,7 @@ export default function App() {
   const [competitions, setCompetitions] = useState([]);
   const [schedules, setSchedules] = useState([]); 
   const [galleryItems, setGalleryItems] = useState([]); 
+  const [awards, setAwards] = useState([]); // [Fix 3.4] 新增獎項狀態
   const [downloadFiles, setDownloadFiles] = useState([]); 
   
   const [systemConfig, setSystemConfig] = useState({ 
@@ -76,10 +77,7 @@ export default function App() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(true);
   const [viewingImage, setViewingImage] = useState(null);
-  
-  // [Fix 3.3] 相簿檢視狀態：null = 列表模式, string = 正在檢視的相簿標題
   const [currentAlbum, setCurrentAlbum] = useState(null);
-  // [Fix 3.3] 上傳狀態
   const [isUploading, setIsUploading] = useState(false);
 
   const [importEncoding, setImportEncoding] = useState('AUTO');
@@ -131,12 +129,12 @@ export default function App() {
       daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
     }
 
-    const awardKeywords = ["冠軍", "亞軍", "季軍", "殿軍", "金牌", "銀牌", "銅牌", "優勝", "Award", "Winner", "Champion", "1st", "2nd", "3rd"];
-    const awardsThisYear = competitions.filter(c => {
-      const d = new Date(c.date);
-      const isThisYear = d.getFullYear() === currentYear;
-      const hasKeyword = awardKeywords.some(keyword => c.title.includes(keyword));
-      return isThisYear && hasKeyword;
+    // [Fix 3.4] 改為統計 awards 集合中的數據
+    // 定義學年：如果現在是 9月後，學年是 今年-明年；否則 去年-今年
+    // 這裡簡單起見，統計「本年度 (Calendar Year)」或「最近 12 個月」，這裡先用本年度
+    const awardsThisYear = awards.filter(a => {
+      const d = new Date(a.date);
+      return d.getFullYear() === currentYear;
     }).length;
 
     return {
@@ -144,7 +142,7 @@ export default function App() {
       daysToNextMatch,
       awardsThisYear
     };
-  }, [schedules, competitions]);
+  }, [schedules, competitions, awards]); // [Fix 3.4] 加入 awards 依賴
 
   // [Fix 3.3] 相簿分組邏輯
   const galleryAlbums = useMemo(() => {
@@ -154,22 +152,20 @@ export default function App() {
       if (!albums[title]) {
         albums[title] = {
           title,
-          cover: item.url, // 使用第一張圖作為封面
+          cover: item.url, 
           count: 0,
           items: [],
-          type: item.type, // 記錄這本相簿主要的類型（雖然可能混合）
+          type: item.type,
           lastUpdated: item.timestamp
         };
       }
       albums[title].count += 1;
       albums[title].items.push(item);
-      // 更新封面為最新的照片（如果有 timestamp）
       if (item.timestamp && albums[title].lastUpdated && item.timestamp > albums[title].lastUpdated) {
          albums[title].cover = item.url;
          albums[title].lastUpdated = item.timestamp;
       }
     });
-    // 轉為陣列並排序
     return Object.values(albums).sort((a,b) => (b.lastUpdated?.seconds || 0) - (a.lastUpdated?.seconds || 0));
   }, [galleryItems]);
 
@@ -237,6 +233,8 @@ export default function App() {
       const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
       const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles');
       const galleryRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery'); 
+      // [Fix 3.4] 監聽 awards
+      const awardsRef = collection(db, 'artifacts', appId, 'public', 'data', 'awards');
       
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
       const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
@@ -278,8 +276,12 @@ export default function App() {
         setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
+      const unsubAwards = onSnapshot(awardsRef, (snap) => {
+        setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+
       return () => { 
-        unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); unsubGallery();
+        unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); unsubGallery(); unsubAwards();
       };
     } catch (e) {
       console.error("Firestore Init Error:", e);
@@ -500,7 +502,6 @@ export default function App() {
       
       if (type === '1') {
         if (galleryInputRef.current) {
-          // [Fix 3.3] 清空 value 以便重複上傳
           galleryInputRef.current.value = "";
           galleryInputRef.current.click();
         }
@@ -526,12 +527,10 @@ export default function App() {
       }
   };
 
-  // [Fix 3.3] 處理多張圖片上傳 & 壓縮
   const handleGalleryImageUpload = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // 詢問一次相簿名稱
     const title = prompt(`您選擇了 ${files.length} 張照片。\n請輸入這些照片的「相簿名稱」(例如：校際比賽花絮):`);
     if (!title) return;
 
@@ -543,14 +542,11 @@ export default function App() {
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         try {
-            // 自動壓縮
             const compressedBase64 = await compressImage(file);
-            
-            // 寫入資料庫
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
                 type: 'image',
                 url: compressedBase64,
-                title: title, // 用相同的 Title 歸類為同一本相簿
+                title: title,
                 description: desc,
                 timestamp: serverTimestamp()
             });
@@ -562,7 +558,6 @@ export default function App() {
     
     setIsUploading(false);
     alert(`成功上傳 ${successCount} 張照片至「${title}」相簿！`);
-    // 完成後切回列表模式
     setCurrentAlbum(null);
   };
 
@@ -628,7 +623,7 @@ export default function App() {
       const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
       
       rows.forEach(row => {
-        const [className, date, location, coach, notes] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
+        const cols = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
         const [name, cls, no, badge, initPoints, squashClass] = cols;
         if (name && name !== "姓名") {
           batch.set(doc(colRef), { 
@@ -728,6 +723,32 @@ export default function App() {
     );
   };
 
+  // [Fix 3.4] 新增獎項功能
+  const handleAddAward = async () => {
+    const title = prompt("獎項名稱 (例如：全港學界壁球賽 冠軍):");
+    if (!title) return;
+    const studentName = prompt("獲獎學生姓名:");
+    if (!studentName) return;
+    const date = prompt("獲獎日期 (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+    const rank = prompt("名次 (例如：冠軍, 亞軍, 季軍, 優異):");
+    const desc = prompt("備註 (可選):") || "";
+
+    try {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'awards'), {
+            title,
+            studentName,
+            date,
+            rank,
+            description: desc,
+            timestamp: serverTimestamp()
+        });
+        alert('🏆 獎項新增成功！');
+    } catch (e) {
+        console.error(e);
+        alert('新增失敗');
+    }
+  };
+
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
       <div className="mb-8 animate-pulse">
@@ -742,44 +763,30 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
       
-      {/* [Fix 3.3] 支援多檔案上傳 */}
+      {/* 隱藏的 Input 供花絮上傳使用 */}
       <input 
         type="file" 
         ref={galleryInputRef} 
         className="hidden" 
         accept="image/*"
-        multiple // 允許選多張
+        multiple 
         onChange={handleGalleryImageUpload}
       />
 
-      {/* [Fix 2.9] 燈箱 Modal (Lightbox) */}
+      {/* 燈箱 Modal */}
       {viewingImage && (
         <div 
           className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300" 
           onClick={() => setViewingImage(null)}
         >
-          {/* 關閉按鈕 */}
-          <button 
-            onClick={() => setViewingImage(null)} 
-            className="absolute top-6 right-6 p-2 bg-white/10 rounded-full text-white/70 hover:bg-white/20 hover:text-white transition-all z-50"
-          >
+          <button onClick={() => setViewingImage(null)} className="absolute top-6 right-6 p-2 bg-white/10 rounded-full text-white/70 hover:bg-white/20 hover:text-white transition-all z-50">
             <X size={32} />
           </button>
-          
-          {/* 圖片容器 */}
           <div className="relative max-w-full max-h-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-             <img 
-               src={viewingImage.url} 
-               alt={viewingImage.title} 
-               className="max-w-[90vw] max-h-[80vh] object-contain rounded-lg shadow-2xl"
-             />
-             
-             {/* 底部資訊欄 */}
+             <img src={viewingImage.url} alt={viewingImage.title} className="max-w-[90vw] max-h-[80vh] object-contain rounded-lg shadow-2xl"/>
              <div className="mt-6 text-center text-white">
                  <h3 className="text-2xl font-bold">{viewingImage.title}</h3>
-                 {viewingImage.description && (
-                   <p className="text-sm text-white/70 mt-2 max-w-2xl mx-auto">{viewingImage.description}</p>
-                 )}
+                 {viewingImage.description && <p className="text-sm text-white/70 mt-2 max-w-2xl mx-auto">{viewingImage.description}</p>}
              </div>
           </div>
         </div>
@@ -789,13 +796,11 @@ export default function App() {
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
-            {/* [Fix 1.7] 移除了外圍藍色背景和陰影，並放大 Logo */}
             <div className="flex justify-center mb-10">
               <SchoolLogo className="text-white" size={80} />
             </div>
             <h2 className="text-4xl font-black text-center text-slate-800 mb-2">正覺壁球</h2>
             <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
-            
             <div className="space-y-6">
               <div className="bg-slate-50 p-1 rounded-[2rem] flex mb-4">
                 <button className="flex-1 py-3 text-sm font-black text-blue-600 bg-white rounded-[1.8rem] shadow-sm">學員入口</button>
@@ -805,7 +810,6 @@ export default function App() {
                   else if(p) alert('密碼錯誤 (預設: admin)');
                 }} className="flex-1 py-3 text-sm font-black text-slate-400 hover:text-slate-600">教練登入</button>
               </div>
-
               <div className="space-y-3 font-bold">
                 <div className="relative">
                   <span className="absolute left-5 top-5 text-slate-300"><Layers size={18}/></span>
@@ -844,26 +848,24 @@ export default function App() {
           
           <nav className="space-y-2 flex-1 overflow-y-auto">
             <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
-            
             {role === 'admin' && (
               <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                 <LayoutDashboard size={20}/> 管理概況
               </button>
             )}
-            
             <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Trophy size={20}/> 積分排行
             </button>
-            
-            {/* [Fix 2.6] 新增精彩花絮按鈕 */}
             <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <ImageIcon size={20}/> 精彩花絮
             </button>
-
+            {/* [Fix 3.4] 新增「獎項成就」按鈕 */}
+            <button onClick={() => {setActiveTab('awards'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'awards' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+              <Award size={20}/> 獎項成就
+            </button>
             <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <CalendarIcon size={20}/> 訓練日程
             </button>
-            
             <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Megaphone size={20}/> 比賽與公告
             </button>
@@ -922,13 +924,12 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
-                {/* [Fix 2.6] 花絮標題 */}
                 {activeTab === 'gallery' && "📸 精彩花絮"}
-                {/* [Fix 1.0] 修正：移除這裡的 <FinancialView /> 避免標題崩壞，改為純文字 */}
+                {/* [Fix 3.4] 新增標題 */}
+                {activeTab === 'awards' && "🏆 獎項成就"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
-              {/* [Fix 1.1] 系統名修正 */}
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
@@ -951,10 +952,9 @@ export default function App() {
 
         <div className="p-10 max-w-7xl mx-auto pb-40">
           
-          {/* 1. 積分排行 */}
+          {/* 1. 積分排行 (Rankings) */}
           {activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-              {/* [Fix 2.5] 頒獎台設計 (增加 mt-10 md:mt-24) */}
               <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "";
@@ -991,10 +991,8 @@ export default function App() {
                       labelBg = "bg-orange-500";
                    }
 
-                   // [Fix 2.5] 重構卡片結構
                    return (
                       <div key={s.id} className={`relative flex-shrink-0 flex flex-col items-center text-center ${orderClass} ${sizeClass} transition-all duration-500 hover:-translate-y-2`}>
-                          {/* 背景層 */}
                           <div className={`absolute inset-0 rounded-[3rem] border-4 ${gradientClass} ${shadowClass} overflow-hidden`}>
                                <div className="absolute -right-4 -top-4 opacity-10 rotate-12">
                                   <TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/>
@@ -1004,21 +1002,18 @@ export default function App() {
                                </div>
                           </div>
 
-                          {/* 內容層 */}
                           <div className="relative z-10 p-8 w-full h-full flex flex-col items-center">
                               {i === 0 && (
                                 <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg">
                                   <Crown size={64} fill="currentColor" strokeWidth={1.5} />
                                 </div>
                               )}
-
                               <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>
                                   {s.name[0]}
                                   <div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>
                                      {label}
                                   </div>
                               </div>
-                               
                               <div className="mt-4 w-full">
                                    <h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3>
                                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p>
@@ -1039,7 +1034,6 @@ export default function App() {
                 })}
               </div>
 
-              {/* 排名列表 */}
               <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden font-bold">
                 <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
@@ -1122,7 +1116,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 2. 訓練班日程 (含匯入與過濾) */}
+          {/* 2. 訓練班日程 */}
           {activeTab === 'schedules' && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1194,7 +1188,6 @@ export default function App() {
                                 <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div>
                                 <span className="font-bold">{sc.coach} 教練</span>
                               </div>
-                              {/* 新增：手動刪除按鈕 */}
                               {role === 'admin' && (
                                 <button 
                                   onClick={() => {
@@ -1228,7 +1221,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 3. 快速點名 (過濾多班別學員不重複) */}
+          {/* 3. 快速點名 */}
           {activeTab === 'attendance' && role === 'admin' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
                <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}>
@@ -1261,7 +1254,6 @@ export default function App() {
                   </div>
                </div>
 
-               {/* [Fix 2.2] 新增：報表匯出中心 */}
                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8">
                  <div className="flex items-center gap-4">
                    <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div>
@@ -1277,7 +1269,6 @@ export default function App() {
                    >
                      匯出全部紀錄
                    </button>
-                   {/* 這裡可以根據 selectedClassFilter 匯出特定班別 */}
                    {attendanceClassFilter !== 'ALL' && (
                      <button 
                        onClick={() => exportAttendanceCSV(attendanceClassFilter)}
@@ -1289,7 +1280,6 @@ export default function App() {
                  </div>
                </div>
 
-               {/* 壁球班別篩選選單 */}
                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6">
                  <div className="flex items-center gap-3 text-slate-400 min-w-max">
                    <Filter size={20} />
@@ -1315,7 +1305,6 @@ export default function App() {
                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                   {studentsInSelectedAttendanceClass.length > 0 ? (
                     studentsInSelectedAttendanceClass.map(s => {
-                      // [Fix 2.2] 檢查是否已出席 (比對 DB 紀錄)
                       const isAttended = todaySchedule && attendanceLogs.some(log => 
                         log.studentId === s.id && 
                         log.date === todaySchedule.date && 
@@ -1325,7 +1314,7 @@ export default function App() {
                       return (
                         <button 
                           key={s.id} 
-                          onClick={() => markAttendance(s)} // [Fix 2.2] 改為呼叫寫入資料庫的函數
+                          onClick={() => markAttendance(s)} 
                           className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden ${
                             isAttended 
                             ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-default' 
@@ -1345,7 +1334,6 @@ export default function App() {
                              {s.squashClass}
                            </div>
                            
-                           {/* [Fix 2.2] 狀態圖示 */}
                            <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
                               <CheckCircle2 size={24}/>
                            </div>
@@ -1462,13 +1450,11 @@ export default function App() {
              </div>
           )}
 
-           {/* [Fix 2.6] 精彩花絮頁面 & [Fix 3.3] 相簿模式 */}
+           {/* 精彩花絮頁面 */}
            {activeTab === 'gallery' && (
             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
-               {/* 頂部工具列 */}
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-6">
-                    {/* [Fix 3.3] 如果正在檢視特定相簿，顯示返回按鈕 */}
                     {currentAlbum ? (
                         <button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all">
                             <ArrowLeft size={24}/>
@@ -1478,7 +1464,6 @@ export default function App() {
                     )}
                     
                     <div>
-                      {/* [Fix 3.3] 動態標題 */}
                       <h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3>
                       <p className="text-xs text-slate-400 mt-1">
                           {currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}
@@ -1496,7 +1481,6 @@ export default function App() {
                   )}
                </div>
 
-               {/* [Fix 3.3] 內容顯示區：相簿列表 vs 照片列表 */}
                {galleryItems.length === 0 ? (
                  <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div>
@@ -1505,7 +1489,6 @@ export default function App() {
                  </div>
                ) : (
                  <>
-                    {/* 模式 A: 相簿列表 (當 currentAlbum 為 null 時) */}
                     {!currentAlbum && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                              {galleryAlbums.map((album) => (
@@ -1515,7 +1498,6 @@ export default function App() {
                                     className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"
                                  >
                                      <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">
-                                         {/* 封面圖 */}
                                          {album.cover ? (
                                              album.type === 'video' ? (
                                                 <div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300">
@@ -1529,8 +1511,6 @@ export default function App() {
                                                  <Folder size={48}/>
                                              </div>
                                          )}
-                                         
-                                         {/* 數量標籤 */}
                                          <div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">
                                              {album.count} 項目
                                          </div>
@@ -1547,7 +1527,6 @@ export default function App() {
                         </div>
                     )}
 
-                    {/* 模式 B: 照片列表 (當 currentAlbum 有值時) */}
                     {currentAlbum && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {galleryItems
@@ -1575,7 +1554,7 @@ export default function App() {
                                         <img 
                                             src={item.url} 
                                             alt={item.title} 
-                                            onClick={() => setViewingImage(item)} // [Fix 2.9] 點擊打開燈箱
+                                            onClick={() => setViewingImage(item)} 
                                             className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"
                                         />
                                         )}
@@ -1587,7 +1566,6 @@ export default function App() {
                                     </div>
                                     
                                     <div className="px-2">
-                                        {/* 在相簿內不需要重複顯示標題，顯示描述即可 */}
                                         <p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p>
                                     </div>
 
@@ -1612,55 +1590,70 @@ export default function App() {
             </div>
            )}
 
-          {/* [Fix 3.2] 5. 隊員管理 (教練專用) - 完整還原 */}
-          {activeTab === 'students' && role === 'admin' && (
-             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
-                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
-                   <div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div>
-                   <div className="relative z-10">
-                     <h3 className="text-3xl font-black">隊員檔案管理</h3>
-                     <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
-                   </div>
-                   <div className="flex gap-4 relative z-10">
-                     <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
-                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
-                        <Upload size={20}/> 批量匯入 CSV 名單
-                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
-                     </label>
-                   </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                   {students.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
-                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
-                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
-                          {s.badge}
-                        </div>
-                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
-                          {s.name[0]}
-                        </div>
-                        <p className="text-xl font-black text-slate-800">{s.name}</p>
-                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
-                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
-                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
-                           <button className="text-slate-200 hover:text-blue-600 p-2 transition-all"><Settings2 size={18}/></button>
-                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-200 hover:text-red-500 p-2 transition-all"><Trash2 size={18}/></button>
-                        </div>
+           {/* [Fix 3.4] 新增「獎項成就 (Awards)」頁面 */}
+           {activeTab === 'awards' && (
+             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
+                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                   <div className="flex items-center gap-6">
+                     <div className="p-4 bg-yellow-100 text-yellow-600 rounded-2xl"><Award/></div>
+                     <div>
+                       <h3 className="text-xl font-black">獎項成就 (Hall of Fame)</h3>
+                       <p className="text-xs text-slate-400 mt-1">紀錄校隊輝煌戰績</p>
                      </div>
-                   ))}
-                   <button onClick={()=>{
-                     const name = prompt('隊員姓名');
-                     const cls = prompt('班別 (如: 6A)');
-                     if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });
-                   }} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
-                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
-                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
-                   </button>
+                   </div>
+                   
+                   {role === 'admin' && (
+                      <button onClick={handleAddAward} className="bg-yellow-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black text-sm">
+                        <PlusCircle size={18}/> 新增獎項
+                      </button>
+                   )}
                 </div>
+ 
+                {awards.length === 0 ? (
+                  <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
+                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><Trophy size={40}/></div>
+                     <p className="text-xl font-black text-slate-400">目前暫無獎項紀錄</p>
+                     <p className="text-sm text-slate-300 mt-2">請教練新增比賽獲獎紀錄</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                     {awards.sort((a,b) => b.date.localeCompare(a.date)).map((award) => (
+                        <div key={award.id} className="relative group bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:border-yellow-200 transition-all flex flex-col md:flex-row items-center gap-6">
+                           <div className="w-16 h-16 bg-gradient-to-br from-yellow-100 to-orange-100 text-yellow-600 rounded-2xl flex items-center justify-center shadow-inner flex-shrink-0">
+                             <Medal size={32}/>
+                           </div>
+                           <div className="flex-1 text-center md:text-left">
+                              <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 mb-1">
+                                <h4 className="text-xl font-black text-slate-800">{award.title}</h4>
+                                <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[10px] font-black w-fit mx-auto md:mx-0">{award.rank}</span>
+                              </div>
+                              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-6 text-sm text-slate-500">
+                                 <span className="flex items-center justify-center gap-1"><User size={14}/> {award.studentName}</span>
+                                 <span className="flex items-center justify-center gap-1"><CalendarIcon size={14}/> {award.date}</span>
+                              </div>
+                              {award.description && (
+                                <p className="text-xs text-slate-400 mt-2 font-medium bg-slate-50 p-2 rounded-lg inline-block">“{award.description}”</p>
+                              )}
+                           </div>
+                           
+                           {role === 'admin' && (
+                              <button 
+                                onClick={() => {
+                                   if(confirm(`確定要刪除 "${award.title}" 嗎？`)) deleteItem('awards', award.id);
+                                }}
+                                className="absolute top-6 right-6 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+                              >
+                                <Trash2 size={18}/>
+                              </button>
+                           )}
+                        </div>
+                     ))}
+                  </div>
+                )}
              </div>
-          )}
+            )}
 
-          {/* [Fix 3.0] 6. 管理概況 (Dashboard) - 更新四個方格內容 */}
+          {/* 6. 管理概況 (Dashboard) */}
           {activeTab === 'dashboard' && role === 'admin' && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -1684,7 +1677,7 @@ export default function App() {
                       </div>
                    </div>
 
-                   {/* [Fix 3.1] 方格 3: 距離下一場比賽倒數 */}
+                   {/* 方格 3: 距離下一場比賽倒數 */}
                    <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
                        <div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div>
                       <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p>
@@ -1701,7 +1694,7 @@ export default function App() {
                       </div>
                    </div>
 
-                   {/* [Fix 3.1] 方格 4: 年度獎項 */}
+                   {/* [Fix 3.4] 方格 4: 年度獎項 (改為讀取 awards 數據庫) */}
                    <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden">
                        <div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div>
                       <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200">
