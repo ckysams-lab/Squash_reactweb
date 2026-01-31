@@ -6,7 +6,7 @@ import {
   Save, FileSpreadsheet, Download, FileText, Info, Link as LinkIcon, Settings2,
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
-  FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle // [Fix 2.6] 新增媒體相關圖示
+  FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -46,10 +46,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 2.4: 自動化功能 (點名加分、生成名單)
-// Version 2.5: 修復排名頁冠軍皇冠被切斷的問題
-// Version 2.6: [Current] 新增「精彩花絮 (Gallery)」頁面，支援圖片及 YouTube 影片展示
-const CURRENT_VERSION = "2.6";
+// Version 2.7: 系統設定 -> 校徽直接上傳
+// Version 2.8: [Current] 精彩花絮 -> 支援直接上傳照片 (Base64)
+const CURRENT_VERSION = "2.8";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -62,13 +61,16 @@ export default function App() {
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
   const [competitions, setCompetitions] = useState([]);
   const [schedules, setSchedules] = useState([]); 
-  const [galleryItems, setGalleryItems] = useState([]); // [Fix 2.6] 新增花絮狀態
+  const [galleryItems, setGalleryItems] = useState([]); 
   const [downloadFiles, setDownloadFiles] = useState([]); 
+  
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
     announcements: [],
-    seasonalTheme: 'default'
+    seasonalTheme: 'default',
+    schoolLogo: null 
   });
+  
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(true);
@@ -77,6 +79,9 @@ export default function App() {
   const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // [Fix 2.8] 隱藏的檔案上傳 Input (用於花絮)
+  const galleryInputRef = useRef(null);
 
   // [Fix 1.0] 財務參數
   const [financeConfig, setFinanceConfig] = useState({
@@ -104,16 +109,18 @@ export default function App() {
     "無": { color: "text-slate-300", bg: "bg-slate-50", icon: "⚪", border: "border-slate-100", shadow: "shadow-transparent", bonus: 0, desc: "努力中" }
   };
 
-  // --- [Fix 1.6] 設定 Favicon 為 jsDelivr CDN 圖片 ---
+  // --- 設定 Favicon ---
   useEffect(() => {
-    const logoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    const logoUrl = systemConfig.schoolLogo || defaultLogoUrl;
+
     const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
     link.type = 'image/png';
     link.rel = 'icon';
     link.href = logoUrl;
     document.getElementsByTagName('head')[0].appendChild(link);
     document.title = "BCKLAS 壁球校隊系統";
-  }, []);
+  }, [systemConfig.schoolLogo]);
 
   // --- Firebase Auth 監聽 ---
   useEffect(() => {
@@ -156,7 +163,6 @@ export default function App() {
       const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
       const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
       const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles');
-      // [Fix 2.6] 監聽 Gallery
       const galleryRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery'); 
       
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
@@ -164,7 +170,7 @@ export default function App() {
 
       const unsubSystemConfig = onSnapshot(systemConfigRef, (docSnap) => {
         if (docSnap.exists()) setSystemConfig(docSnap.data());
-        else setDoc(systemConfigRef, { adminPassword: 'admin', announcements: [], seasonalTheme: 'default' });
+        else setDoc(systemConfigRef, { adminPassword: 'admin', announcements: [], seasonalTheme: 'default', schoolLogo: null });
       }, (e) => console.error("Config err", e));
 
       const unsubFinanceConfig = onSnapshot(financeConfigRef, (docSnap) => {
@@ -195,7 +201,6 @@ export default function App() {
         setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
-      // [Fix 2.6] 監聽 Gallery
       const unsubGallery = onSnapshot(galleryRef, (snap) => {
         setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
@@ -284,7 +289,7 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  // [Fix 2.4] 自動化點名
+  // 自動化點名
   const markAttendance = async (student) => {
     if (!todaySchedule) { 
       alert('⚠️ 今日沒有設定訓練日程，請先到「訓練日程」新增今天的課堂。'); 
@@ -327,7 +332,7 @@ export default function App() {
     }
   };
 
-  // [Fix 2.4] 自動生成比賽名單
+  // 自動生成比賽名單
   const generateCompetitionRoster = () => {
     const topStudents = rankedStudents.slice(0, 5);
     if (topStudents.length === 0) {
@@ -376,31 +381,75 @@ export default function App() {
     link.click();
   };
 
-  // --- [Fix 2.6] 新增花絮功能 ---
+  // --- [Fix 2.8] 新增花絮功能：支援照片上傳 ---
   const handleAddMedia = async () => {
-      const type = prompt("請選擇類型 (輸入 1 或 2):\n1. 圖片 (Image)\n2. 影片 (YouTube)");
-      if (type !== '1' && type !== '2') return;
-
-      const mediaType = type === '1' ? 'image' : 'video';
-      const url = prompt(`請輸入${mediaType === 'image' ? '圖片網址 (Image URL)' : 'YouTube 影片網址'}:`);
-      if (!url) return;
-
-      const title = prompt("請輸入標題 (例如：校際比賽花絮):");
-      const desc = prompt("請輸入描述 (可選):") || "";
-
-      try {
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
-              type: mediaType,
+      const type = prompt("請選擇類型 (輸入 1 或 2):\n1. 上傳照片 (Upload Photo)\n2. YouTube 影片連結");
+      
+      if (type === '1') {
+        // 觸發隱藏的 file input 點擊
+        if (galleryInputRef.current) {
+          galleryInputRef.current.click();
+        }
+      } else if (type === '2') {
+        const url = prompt("請輸入 YouTube 影片網址:");
+        if (!url) return;
+        const title = prompt("請輸入影片標題:");
+        const desc = prompt("輸入描述 (可選):") || "";
+        
+        try {
+           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
+              type: 'video',
               url,
-              title: title || '未命名',
+              title: title || '未命名影片',
               description: desc,
               timestamp: serverTimestamp()
-          });
-          alert('新增成功！');
-      } catch (e) {
-          console.error(e);
-          alert('新增失敗');
+           });
+           alert('影片新增成功！');
+        } catch (e) {
+           console.error(e);
+           alert('新增失敗');
+        }
       }
+  };
+
+  // [Fix 2.8] 處理圖片上傳 (轉 Base64 存入 DB)
+  const handleGalleryImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // 檢查檔案大小 (限制 800KB)
+    if (file.size > 800 * 1024) {
+      alert("圖片太大！請確保圖片小於 800KB 以免資料庫塞爆。建議先壓縮圖片。");
+      e.target.value = null; // 重置 input
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64String = event.target.result;
+      const title = prompt("請為這張照片輸入標題:");
+      if (!title) {
+        e.target.value = null;
+        return;
+      }
+      const desc = prompt("輸入描述 (可選):") || "";
+
+      try {
+         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
+            type: 'image',
+            url: base64String, // 直接存 Base64
+            title,
+            description: desc,
+            timestamp: serverTimestamp()
+         });
+         alert("照片上傳成功！");
+      } catch (err) {
+         console.error(err);
+         alert("上傳失敗");
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = null; // 重置 input
   };
 
   const getYouTubeEmbedUrl = (url) => {
@@ -542,7 +591,9 @@ export default function App() {
   // --- [Fix 1.6] 校徽 Logo 組件 ---
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
-    const logoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    // 優先使用上傳的校徽，否則使用預設
+    const logoUrl = systemConfig.schoolLogo || defaultLogoUrl;
 
     if (error) {
       return <ShieldCheck className={`${className}`} size={size} />;
@@ -557,7 +608,7 @@ export default function App() {
         loading="eager"
         crossOrigin="anonymous" 
         onError={(e) => {
-          console.error("Logo load failed (jsDelivr CDN)", e);
+          console.error("Logo load failed", e);
           setError(true);
         }}
       />
@@ -578,6 +629,15 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
       
+      {/* 隱藏的 Input 供花絮上傳使用 */}
+      <input 
+        type="file" 
+        ref={galleryInputRef} 
+        className="hidden" 
+        accept="image/*"
+        onChange={handleGalleryImageUpload}
+      />
+
       {/* 登入視窗 */}
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
