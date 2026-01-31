@@ -7,7 +7,7 @@ import {
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
-  Hourglass, Medal // [Fix 3.1] 新增圖示
+  Hourglass, Medal
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 3.0: Dashboard 基礎改造
-// Version 3.1: [Current] Dashboard 邏輯升級：即將比賽改為倒數天數，精彩回憶改為年度獎項計數
-const CURRENT_VERSION = "3.1";
+// Version 3.1: Dashboard 邏輯升級
+// Version 3.2: [Current] 緊急修復「隊員檔案庫」頁面空白問題 (還原顯示代碼)
+const CURRENT_VERSION = "3.2";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -101,21 +101,18 @@ export default function App() {
     return { revenue, expense, profit: revenue - expense };
   }, [financeConfig]);
 
-  // [Fix 3.1] Dashboard 專用統計數據 (邏輯升級)
+  // Dashboard 統計數據
   const dashboardStats = useMemo(() => {
     const now = new Date();
     const todayZero = new Date(now.setHours(0,0,0,0));
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    // 1. 本月訓練數
     const thisMonthTrainings = schedules.filter(s => {
       const d = new Date(s.date);
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     }).length;
 
-    // 2. [Upgrade] 距離下一場比賽的天數
-    // 找出所有未來比賽，排序，取第一個
     const futureCompetitions = competitions
       .filter(c => new Date(c.date) >= todayZero)
       .sort((a,b) => new Date(a.date) - new Date(b.date));
@@ -128,8 +125,6 @@ export default function App() {
       daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
     }
 
-    // 3. [Upgrade] 本年度獲獎數
-    // 掃描比賽公告標題中的關鍵字
     const awardKeywords = ["冠軍", "亞軍", "季軍", "殿軍", "金牌", "銀牌", "銅牌", "優勝", "Award", "Winner", "Champion", "1st", "2nd", "3rd"];
     const awardsThisYear = competitions.filter(c => {
       const d = new Date(c.date);
@@ -556,7 +551,7 @@ export default function App() {
       const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
       
       rows.forEach(row => {
-        const [className, date, location, coach, notes] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
+        const cols = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
         const [name, cls, no, badge, initPoints, squashClass] = cols;
         if (name && name !== "姓名") {
           batch.set(doc(colRef), { 
@@ -1472,6 +1467,54 @@ export default function App() {
                )}
             </div>
            )}
+
+          {/* [Fix 3.2] 5. 隊員管理 (教練專用) - 完整還原 */}
+          {activeTab === 'students' && role === 'admin' && (
+             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
+                   <div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div>
+                   <div className="relative z-10">
+                     <h3 className="text-3xl font-black">隊員檔案管理</h3>
+                     <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
+                   </div>
+                   <div className="flex gap-4 relative z-10">
+                     <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
+                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
+                        <Upload size={20}/> 批量匯入 CSV 名單
+                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
+                     </label>
+                   </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                   {students.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
+                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
+                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
+                          {s.badge}
+                        </div>
+                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
+                          {s.name[0]}
+                        </div>
+                        <p className="text-xl font-black text-slate-800">{s.name}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
+                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
+                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
+                           <button className="text-slate-200 hover:text-blue-600 p-2 transition-all"><Settings2 size={18}/></button>
+                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-200 hover:text-red-500 p-2 transition-all"><Trash2 size={18}/></button>
+                        </div>
+                     </div>
+                   ))}
+                   <button onClick={()=>{
+                     const name = prompt('隊員姓名');
+                     const cls = prompt('班別 (如: 6A)');
+                     if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });
+                   }} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
+                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
+                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
+                   </button>
+                </div>
+             </div>
+          )}
 
           {/* [Fix 3.0] 6. 管理概況 (Dashboard) - 更新四個方格內容 */}
           {activeTab === 'dashboard' && role === 'admin' && (
