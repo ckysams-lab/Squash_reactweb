@@ -7,7 +7,7 @@ import {
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
-  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe // [Fix 4.5] 新增 Globe 圖示
+  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 4.4: 自動緩存清理
-// Version 4.5: [Current] 修改點名不加分邏輯，新增校外賽詳細計分功能，移除舊按鈕
-const CURRENT_VERSION = "4.5";
+// Version 4.5: 新增校外賽按鈕
+// Version 4.6: [Current] 更新計分規則（點名不加分、外賽詳細獎勵）、移除舊按鈕、更新說明文字
+const CURRENT_VERSION = "4.6";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -398,11 +398,11 @@ export default function App() {
   const handleExternalComp = (student) => {
     const option = prompt(
         `請為 ${student.name} 選擇校外賽成績 (輸入代號):\n\n` +
-        `1. 參與比賽 (+20)\n` +
-        `2. 單場勝出 (+20)\n` +
-        `3. 冠軍 (+100)\n` +
-        `4. 亞軍 (+50)\n` +
-        `5. 季軍/殿軍 (+30)`
+        `1. 🔵 代表學校參賽 (+20)\n` +
+        `2. ⚔️ 單場勝出 (+20)\n` +
+        `3. 🥇 冠軍 (+100)\n` +
+        `4. 🥈 亞軍 (+50)\n` +
+        `5. 🥉 季軍/殿軍 (+30)`
     );
 
     let points = 0;
@@ -414,7 +414,7 @@ export default function App() {
         case '3': points = 100; reason = "校外賽冠軍"; break;
         case '4': points = 50; reason = "校外賽亞軍"; break;
         case '5': points = 30; reason = "校外賽季殿軍"; break;
-        default: return; // 取消或無效輸入
+        default: return; 
     }
 
     if(confirm(`確認給予 ${student.name} 「${reason}」獎勵 (總分 +${points})?`)) {
@@ -500,7 +500,7 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  // 自動化點名 [Fix 4.5] 移除自動加分邏輯
+  // 自動化點名 [Fix 4.6] 移除自動加分邏輯，純紀錄
   const markAttendance = async (student) => {
     if (!todaySchedule) { 
       alert('⚠️ 今日沒有設定訓練日程，請先到「訓練日程」新增今天的課堂。'); 
@@ -531,8 +531,6 @@ export default function App() {
           location: todaySchedule.location,
           timestamp: serverTimestamp()
         });
-
-        // 移除自動 updateDoc 加分
       } catch (e) {
         console.error(e);
         alert('點名失敗，請檢查網絡');
@@ -779,6 +777,11 @@ export default function App() {
   const deleteItem = async (col, id) => {
     if (role !== 'admin') return;
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
+  };
+
+  const deleteItemFromCollection = async (collectionName, id) => {
+    if (role !== 'admin') return;
+    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
   };
 
   const todaySchedule = useMemo(() => {
@@ -1174,7 +1177,7 @@ export default function App() {
                 })}
               </div>
 
-              {/* [Fix 4.2.1] 新增「積分機制說明」卡片 */}
+              {/* [Fix 4.6] 更新「積分機制說明」卡片 */}
               <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 mb-8 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
                   <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
                       <Info size={24} />
@@ -1183,12 +1186,12 @@ export default function App() {
                       <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分機制說明</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
                           <ul className="list-disc pl-4 space-y-1">
-                              <li><span className="text-blue-600">出席訓練</span>：每次 +10 分</li>
-                              <li><span className="text-blue-600">內部賽勝出</span>：基礎 +10 分</li>
+                              <li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li>
+                              <li><span className="text-blue-600">內部聯賽</span>：勝方 +10 / 巨人殺手 +20</li>
                           </ul>
                           <ul className="list-disc pl-4 space-y-1">
-                              <li><span className="text-orange-500">巨人殺手 (下剋上)</span>：+20 分 (勝方排名低於對手5名或章別較低)</li>
-                              <li><span className="text-indigo-500">外賽獎勵</span>：+20 分 (代表學校參賽)</li>
+                              <li><span className="text-indigo-500">校外賽參與</span>：+20 / 勝場 +20</li>
+                              <li><span className="text-yellow-600">校外賽獎項</span>：冠軍+100 / 亞軍+50 / 季殿+30</li>
                           </ul>
                       </div>
                   </div>
@@ -1199,7 +1202,7 @@ export default function App() {
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
                   {role === 'admin' && (
                      <div className="flex gap-2">
-                        {/* [Fix 4.5] Remove old button */}
+                        {/* [Fix 4.6] Button removed */}
                         <span className="text-[10px] text-slate-400 self-center">*請在下方列表為個別學生加分</span>
                      </div>
                   )}
