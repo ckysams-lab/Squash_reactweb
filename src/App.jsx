@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 4.1: 嘗試還原
-// Version 4.2: [Current] 補回遺失的 Dashboard/Students 頁面代碼，並開放學生瀏覽 Dashboard
-const CURRENT_VERSION = "4.2";
+// Version 4.3: 加入數據防崩潰檢查
+// Version 4.4: [Current] 新增自動緩存清理機制 (Auto Cache Cleaner)，解決更新後白畫面問題
+const CURRENT_VERSION = "4.4";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -100,12 +100,35 @@ export default function App() {
     totalStudents: 50, feePerStudent: 250
   });
 
+  // [Fix 4.4] 自動緩存清理機制 (Auto Cache Cleaner)
+  useEffect(() => {
+    const storedVersion = localStorage.getItem('app_version');
+    
+    // 如果本地沒有版本號，或者版本號與當前代碼不符
+    if (storedVersion !== CURRENT_VERSION) {
+      console.log(`[System] Detected new version: ${CURRENT_VERSION} (Old: ${storedVersion}). Cleaning cache...`);
+      
+      // 1. 清除 LocalStorage (避免舊狀態殘留導致 React 崩潰)
+      localStorage.clear();
+      // 2. 清除 SessionStorage
+      sessionStorage.clear();
+      
+      // 3. 寫入新版本號
+      localStorage.setItem('app_version', CURRENT_VERSION);
+      
+      // 4. 強制重新載入頁面 (Hard Reload)
+      // 這會忽略瀏覽器快取，重新向伺服器請求最新檔案
+      window.location.reload();
+    }
+  }, []);
+
   // 自動計算總收支
   const financialSummary = useMemo(() => {
-    const revenue = financeConfig.totalStudents * financeConfig.feePerStudent;
-    const expense = (financeConfig.nTeam * financeConfig.costTeam) + 
-                    (financeConfig.nTrain * financeConfig.costTrain) + 
-                    (financeConfig.nHobby * financeConfig.costHobby);
+    if (!financeConfig) return { revenue: 0, expense: 0, profit: 0 };
+    const revenue = (Number(financeConfig.totalStudents) || 0) * (Number(financeConfig.feePerStudent) || 0);
+    const expense = ((Number(financeConfig.nTeam) || 0) * (Number(financeConfig.costTeam) || 0)) + 
+                    ((Number(financeConfig.nTrain) || 0) * (Number(financeConfig.costTrain) || 0)) + 
+                    ((Number(financeConfig.nHobby) || 0) * (Number(financeConfig.costHobby) || 0));
     return { revenue, expense, profit: revenue - expense };
   }, [financeConfig]);
 
@@ -116,26 +139,35 @@ export default function App() {
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    const thisMonthTrainings = schedules.filter(s => {
+    const safeSchedules = Array.isArray(schedules) ? schedules : [];
+    const safeCompetitions = Array.isArray(competitions) ? competitions : [];
+    const safeAwards = Array.isArray(awards) ? awards : [];
+
+    const thisMonthTrainings = safeSchedules.filter(s => {
+      if (!s.date) return false;
       const d = new Date(s.date);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      return !isNaN(d) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     }).length;
 
-    const futureCompetitions = competitions
-      .filter(c => new Date(c.date) >= todayZero)
+    const futureCompetitions = safeCompetitions
+      .filter(c => c.date && new Date(c.date) >= todayZero)
       .sort((a,b) => new Date(a.date) - new Date(b.date));
     
     let daysToNextMatch = "-";
     if (futureCompetitions.length > 0) {
       const nextMatchDate = new Date(futureCompetitions[0].date);
-      const diffTime = Math.abs(nextMatchDate - todayZero);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-      daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
+      if (!isNaN(nextMatchDate)) {
+        const diffTime = Math.abs(nextMatchDate - todayZero);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
+      }
     }
 
-    const awardsThisYear = awards.filter(a => {
+    const awardsThisYear = safeAwards.filter(a => {
+      if (!a.date) return false;
       const d = new Date(a.date);
-      return d.getFullYear() === currentYear;
+      const isThisYear = !isNaN(d) && d.getFullYear() === currentYear;
+      return isThisYear;
     }).length;
 
     return {
@@ -148,7 +180,9 @@ export default function App() {
   // 相簿分組邏輯
   const galleryAlbums = useMemo(() => {
     const albums = {};
-    galleryItems.forEach(item => {
+    const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
+
+    safeGallery.forEach(item => {
       const title = item.title || "未分類";
       if (!albums[title]) {
         albums[title] = {
@@ -182,15 +216,17 @@ export default function App() {
   // --- 設定 Favicon ---
   useEffect(() => {
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig.schoolLogo || defaultLogoUrl;
+    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
 
-    const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
-    link.type = 'image/png';
-    link.rel = 'icon';
-    link.href = logoUrl;
-    document.getElementsByTagName('head')[0].appendChild(link);
-    document.title = "BCKLAS 壁球校隊系統";
-  }, [systemConfig.schoolLogo]);
+    try {
+      const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
+      link.type = 'image/png';
+      link.rel = 'icon';
+      link.href = logoUrl;
+      document.getElementsByTagName('head')[0].appendChild(link);
+      document.title = "BCKLAS 壁球校隊系統";
+    } catch(e) { console.error("Favicon error", e); }
+  }, [systemConfig?.schoolLogo]);
 
   // --- Firebase Auth 監聽 ---
   useEffect(() => {
@@ -316,6 +352,8 @@ export default function App() {
 
   // --- 積分計算與排行邏輯 ---
   const rankedStudents = useMemo(() => {
+    if (!Array.isArray(students)) return [];
+
     const uniqueMap = new Map();
     students.forEach(s => {
       const key = `${s.class}-${s.classNo}`;
@@ -325,7 +363,6 @@ export default function App() {
       } else {
         const existing = uniqueMap.get(key);
         const existingPoints = Number(existing.points) || 0;
-        // 保留分數高的，若分數相同保留時間早的
         if (currentPoints > existingPoints) uniqueMap.set(key, s);
       }
     });
@@ -335,7 +372,6 @@ export default function App() {
       totalPoints: Number(s.points) || 0 
     })).sort((a, b) => {
       if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
-      // 同分決勝：先到先得
       const timeA = a.lastUpdated?.seconds || Infinity;
       const timeB = b.lastUpdated?.seconds || Infinity;
       return timeA - timeB;
@@ -730,6 +766,11 @@ export default function App() {
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
   };
 
+  const deleteItemFromCollection = async (collectionName, id) => {
+    if (role !== 'admin') return;
+    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
+  };
+
   const todaySchedule = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return schedules.find(s => s.date === today);
@@ -782,7 +823,7 @@ export default function App() {
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig.schoolLogo || defaultLogoUrl;
+    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
 
     if (error) {
       return <ShieldCheck className={`${className}`} size={size} />;
@@ -930,11 +971,12 @@ export default function App() {
           <nav className="space-y-2 flex-1 overflow-y-auto">
             <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
             
-            {/* [Fix 4.2] 開放學生查看 Dashboard */}
-            <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+            {(role === 'admin' || role === 'student') && (
+              <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                 <LayoutDashboard size={20}/> 管理概況
-            </button>
-
+              </button>
+            )}
+            
             <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Trophy size={20}/> 積分排行
             </button>
