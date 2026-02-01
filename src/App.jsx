@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 4.1: 嘗試還原
-// Version 4.2: [Current] 補回遺失的 Dashboard/Students 頁面代碼，並開放學生瀏覽 Dashboard
-const CURRENT_VERSION = "4.2";
+// Version 4.2: 補回遺失頁面
+// Version 4.2.1: [Current] 在排名頁新增「積分機制說明」區塊
+const CURRENT_VERSION = "4.2.1";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -325,7 +325,6 @@ export default function App() {
       } else {
         const existing = uniqueMap.get(key);
         const existingPoints = Number(existing.points) || 0;
-        // 保留分數高的，若分數相同保留時間早的
         if (currentPoints > existingPoints) uniqueMap.set(key, s);
       }
     });
@@ -335,7 +334,6 @@ export default function App() {
       totalPoints: Number(s.points) || 0 
     })).sort((a, b) => {
       if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
-      // 同分決勝：先到先得
       const timeA = a.lastUpdated?.seconds || Infinity;
       const timeB = b.lastUpdated?.seconds || Infinity;
       return timeA - timeB;
@@ -704,7 +702,7 @@ export default function App() {
       const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
       
       rows.forEach(row => {
-        const cols = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
+        const [className, date, location, coach, notes] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
         const [name, cls, no, badge, initPoints, squashClass] = cols;
         if (name && name !== "姓名") {
           batch.set(doc(colRef), { 
@@ -728,6 +726,11 @@ export default function App() {
   const deleteItem = async (col, id) => {
     if (role !== 'admin') return;
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
+  };
+
+  const deleteItemFromCollection = async (collectionName, id) => {
+    if (role !== 'admin') return;
+    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
   };
 
   const todaySchedule = useMemo(() => {
@@ -782,7 +785,7 @@ export default function App() {
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig.schoolLogo || defaultLogoUrl;
+    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
 
     if (error) {
       return <ShieldCheck className={`${className}`} size={size} />;
@@ -930,11 +933,12 @@ export default function App() {
           <nav className="space-y-2 flex-1 overflow-y-auto">
             <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
             
-            {/* [Fix 4.2] 開放學生查看 Dashboard */}
-            <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+            {(role === 'admin' || role === 'student') && (
+              <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                 <LayoutDashboard size={20}/> 管理概況
-            </button>
-
+              </button>
+            )}
+            
             <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Trophy size={20}/> 積分排行
             </button>
@@ -1008,16 +1012,12 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
-                {/* [Fix 2.6] 花絮標題 */}
                 {activeTab === 'gallery' && "📸 精彩花絮"}
-                {/* [Fix 3.4] 新增標題 */}
                 {activeTab === 'awards' && "🏆 獎項成就"}
-                {/* [Fix 3.9] 新增標題 */}
                 {activeTab === 'league' && "⚔️ 內部聯賽"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
-              {/* [Fix 1.1] 系統名修正 */}
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
@@ -1122,6 +1122,25 @@ export default function App() {
                 })}
               </div>
 
+              {/* [Fix 4.2.1] 新增「積分機制說明」卡片 */}
+              <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 mb-8 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
+                  <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
+                      <Info size={24} />
+                  </div>
+                  <div className="flex-1">
+                      <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分機制說明</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
+                          <ul className="list-disc pl-4 space-y-1">
+                              <li><span className="text-blue-600">內部賽勝出</span>：基礎 +10 分</li>
+                          </ul>
+                          <ul className="list-disc pl-4 space-y-1">
+                              <li><span className="text-orange-500">巨人殺手 (下剋上)</span>：+20 分 (勝方排名低於對手5名或章別較低)</li>
+                              <li><span className="text-indigo-500">外賽獎勵</span>：+20 分 (代表學校參賽)</li>
+                          </ul>
+                      </div>
+                  </div>
+              </div>
+
               <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden font-bold">
                 <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
@@ -1194,7 +1213,7 @@ export default function App() {
                               <div className="flex justify-center gap-2">
                                 <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button>
                                 <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button>
-                                {/* [Fix 3.9] 新增外賽獎勵按鈕 */}
+                                {/* 新增外賽獎勵按鈕 */}
                                 <button 
                                   onClick={()=> {
                                       if(confirm(`確認給予 ${s.name} 外賽獎勵 (+20分)?`)) adjustPoints(s.id, 20);
@@ -1227,7 +1246,7 @@ export default function App() {
             </div>
           )}
 
-           {/* [Fix 3.9] 內部聯賽 (League) */}
+           {/* 內部聯賽 (League) */}
            {activeTab === 'league' && role === 'admin' && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                  <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
@@ -1287,10 +1306,9 @@ export default function App() {
 
           {/* ... (其他 Tab 保持不變：schedules, competitions, gallery, awards, students, attendance, financial, settings) ... */}
           
-          {/* [Fix 4.1/4.2] 6. 管理概況 (Dashboard) - 完整還原 + 開放學生瀏覽 */}
+          {/* 6. 管理概況 (Dashboard) */}
           {activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
-                {/* [Fix 3.7] 將「最近活動」置頂 */}
                 <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10">
                    <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
                      <History className="text-blue-600"/> 最近更新活動
@@ -1318,7 +1336,6 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                   {/* 方格 1: 活躍隊員 */}
                    <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
                       <div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div>
                       <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">活躍隊員</p>
@@ -1328,7 +1345,6 @@ export default function App() {
                       </div>
                    </div>
 
-                   {/* 方格 2: 本月訓練 */}
                    <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
                       <div className="absolute -right-5 -bottom-5 opacity-5"><CalendarIcon size={120}/></div>
                       <p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">本月訓練</p>
@@ -1338,7 +1354,6 @@ export default function App() {
                       </div>
                    </div>
 
-                   {/* 方格 3: 距離下一場比賽倒數 */}
                    <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
                        <div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div>
                       <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p>
@@ -1355,7 +1370,6 @@ export default function App() {
                       </div>
                    </div>
 
-                   {/* 方格 4: 年度獎項 */}
                    <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden">
                        <div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div>
                       <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200">
@@ -1390,13 +1404,11 @@ export default function App() {
                       </div>
                    </div>
                    
-                   {/* [Fix 3.7] 新增「章別獎勵計劃考核內容」PDF 預覽 (Google Docs Viewer) */}
                    <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col h-full">
                       <h3 className="text-2xl font-black mb-6 flex items-center gap-4">
                         <BookOpen className="text-blue-600"/> 章別獎勵計劃
                       </h3>
                       <div className="flex-1 w-full bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 relative group">
-                          {/* [Fix 3.8] 使用 jsDelivr CDN 連結確保 PDF 預覽正常 */}
                           <iframe 
                             src="https://docs.google.com/gview?embedded=true&url=https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" 
                             className="w-full h-full min-h-[300px]" 
@@ -1419,7 +1431,7 @@ export default function App() {
              </div>
           )}
 
-           {/* [Fix 4.1] 5. 隊員管理 (教練專用) - 完整還原 */}
+           {/* 5. 隊員管理 (教練專用) - 完整還原 */}
            {activeTab === 'students' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
@@ -1469,7 +1481,7 @@ export default function App() {
 
           {/* ... (其他 Tab 保持不變：schedules, competitions, gallery, awards, attendance, financial, settings) ... */}
           
-          {/* 補回省略的 tabs 以確保完整性 (Version 4.2 Full Restore) */}
+          {/* 補回省略的 tabs 以確保完整性 (Version 4.2.1 Full Restore) */}
           {activeTab === 'schedules' && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
