@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 3.9.1: 修正 JSX 語法錯誤
-// Version 4.0: [Current] 調整學生登入後預設跳轉頁面為「比賽與公告」
-const CURRENT_VERSION = "4.0";
+// Version 4.0: 學生登入預設頁面調整
+// Version 4.1: [Current] 完整還原「管理概況」與「隊員檔案庫」頁面，修復空白問題
+const CURRENT_VERSION = "4.1";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -302,8 +302,7 @@ export default function App() {
         setRole('student'); 
         setCurrentUserInfo(student); 
         setShowLoginModal(false); 
-        // [Fix 4.0] 學生登入後，優先顯示「比賽與公告」，而非積分榜
-        setActiveTab('competitions'); 
+        setActiveTab('competitions'); // [Fix 4.0] 學生登入後跳轉公告
       } else { alert('找不到學員資料，請檢查班別及班號'); }
     }
   };
@@ -330,16 +329,11 @@ export default function App() {
       }
     });
 
-    const uniqueStudents = Array.from(uniqueMap.values());
-
-    return uniqueStudents.map(s => ({ 
+    return Array.from(uniqueMap.values()).map(s => ({ 
       ...s, 
-      totalPoints: Number(s.points) || 0 // 不再加章別底分，直接顯示 DB 積分
+      totalPoints: Number(s.points) || 0 
     })).sort((a, b) => {
-      // 1. 先比總分 (高分在前)
       if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
-      
-      // 2. 同分決勝：先到先得 (lastUpdated 時間較早的在前)
       const timeA = a.lastUpdated?.seconds || Infinity;
       const timeB = b.lastUpdated?.seconds || Infinity;
       return timeA - timeB;
@@ -394,7 +388,6 @@ export default function App() {
     const winnerBadgeLevel = BADGE_DATA[winner.badge]?.level || 0;
     const loserBadgeLevel = BADGE_DATA[loser.badge]?.level || 0;
 
-    // 判斷巨人殺手條件
     const isRankGiantKiller = (winnerRank - loserRank) >= 5;
     const isBadgeGiantKiller = winnerBadgeLevel < loserBadgeLevel;
 
@@ -934,17 +927,14 @@ export default function App() {
           
           <nav className="space-y-2 flex-1 overflow-y-auto">
             <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
-            
             {role === 'admin' && (
               <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                 <LayoutDashboard size={20}/> 管理概況
               </button>
             )}
-            
             <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Trophy size={20}/> 積分排行
             </button>
-            {/* [Fix 3.9] 新增「內部聯賽」按鈕 */}
             <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Swords size={20}/> 內部聯賽
             </button>
@@ -1015,16 +1005,12 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
-                {/* [Fix 2.6] 花絮標題 */}
                 {activeTab === 'gallery' && "📸 精彩花絮"}
-                {/* [Fix 3.4] 新增標題 */}
                 {activeTab === 'awards' && "🏆 獎項成就"}
-                {/* [Fix 3.9] 新增標題 */}
                 {activeTab === 'league' && "⚔️ 內部聯賽"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
-              {/* [Fix 1.1] 系統名修正 */}
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
@@ -1135,7 +1121,7 @@ export default function App() {
                   {role === 'admin' && (
                      <div className="flex gap-2">
                         <button 
-                          onClick={() => adjustPoints('EXTERNAL_COMP_PARTICIPATION', 20)} // 這裡僅示範 UI，需選擇特定學生
+                          onClick={() => adjustPoints('EXTERNAL_COMP_PARTICIPATION', 20)} 
                           className="px-4 py-2 bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md hover:bg-indigo-600 transition-all flex items-center gap-2"
                           title="需手動選擇學生操作，建議在下方列表操作"
                           disabled
@@ -1201,7 +1187,6 @@ export default function App() {
                               <div className="flex justify-center gap-2">
                                 <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button>
                                 <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button>
-                                {/* [Fix 3.9] 新增外賽獎勵按鈕 */}
                                 <button 
                                   onClick={()=> {
                                       if(confirm(`確認給予 ${s.name} 外賽獎勵 (+20分)?`)) adjustPoints(s.id, 20);
@@ -1234,7 +1219,7 @@ export default function App() {
             </div>
           )}
 
-           {/* [Fix 3.9] 內部聯賽 (League) */}
+           {/* 內部聯賽 (League) */}
            {activeTab === 'league' && role === 'admin' && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                  <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
@@ -1286,405 +1271,186 @@ export default function App() {
 
                     <div className="mt-8 text-center text-xs text-slate-400 font-bold">
                        <p>✨ 規則：基礎勝利 +10 分</p>
-                       {/* [Fix 3.9.1] 轉義 > 符號 */}
                        <p className="mt-1">🔥 巨人殺手：低章贏高章 或 贏高於自己 5 名以上對手 -&gt; <span className="text-orange-500">+20 分</span></p>
                     </div>
                  </div>
               </div>
            )}
 
-          {/* ... (其他 Tab 保持不變：schedules, competitions, gallery, awards, students, attendance, financial, settings) ... */}
-          
-          {/* 7. 系統設定 (Settings) - [Fix 3.9] 增加賽季重置 */}
-          {activeTab === 'settings' && role === 'admin' && (
-             <div className="max-w-2xl mx-auto space-y-10 animate-in zoom-in-95 duration-500 font-bold">
-                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
-                   <h3 className="text-3xl font-black mb-10 text-center">系統偏好設定</h3>
-                   {/* ... (原有設定) ... */}
-                   
-                   <div className="pt-8 border-t border-slate-100 space-y-4">
-                        {/* [Fix 3.9] 賽季重置按鈕 */}
-                        <div className="p-6 bg-orange-50 rounded-[2.5rem] border border-orange-100 mb-6">
-                           <h4 className="text-orange-600 font-black mb-2 flex items-center gap-2"><History/> 新賽季重置</h4>
-                           <p className="text-xs text-slate-400 mb-4">將所有學員積分重置為該章別的起步底分 (金:200, 銀:100...)。</p>
-                           <button 
-                             onClick={handleSeasonReset}
-                             className="w-full bg-white text-orange-600 border-2 border-orange-200 py-3 rounded-2xl font-black hover:bg-orange-600 hover:text-white transition-all"
-                           >
-                             重置積分 (開啟新賽季)
-                           </button>
+          {/* [Fix 4.1] 6. 管理概況 (Dashboard) - 完整還原 */}
+          {activeTab === 'dashboard' && role === 'admin' && (
+             <div className="space-y-10 animate-in fade-in duration-700 font-bold">
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10">
+                   <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
+                     <History className="text-blue-600"/> 最近更新活動
+                   </h3>
+                   <div className="space-y-6">
+                      {competitions.slice(0, 4).map(c => (
+                        <div key={c.id} className="flex gap-6 items-start">
+                           <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div>
+                           <div>
+                             <p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p>
+                             <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p>
+                           </div>
                         </div>
-
-                        <button 
-                          onClick={async ()=>{
-                            setIsUpdating(true);
-                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system'), systemConfig);
-                            setIsUpdating(false);
-                            alert('系統設定已更新！');
-                          }}
-                          className="w-full bg-blue-600 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
-                        >
-                          <Save size={24}/> 保存設定
-                        </button>
-                        <div className="p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex items-center gap-4">
-                          <Info className="text-blue-500 shrink-0" size={20}/>
-                          <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
-                            修改密碼後請妥善保存，否則將無法進入教練後台。系統預設密碼為 "admin"。
-                          </p>
+                      ))}
+                      {schedules.slice(0, 2).map(s => (
+                        <div key={s.id} className="flex gap-6 items-start">
+                           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div>
+                           <div>
+                             <p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p>
+                             <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p>
+                           </div>
                         </div>
+                      ))}
                    </div>
                 </div>
-                {/* ... */}
-                <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">
-                  Copyright © 2026 正覺壁球. All Rights Reserved.
-                </div>
-             </div>
-          )}
 
-          {/* 為保持代碼簡潔，這裡省略未變動的 Tab 代碼 (schedules, competitions, gallery, awards, students, attendance, financial)，請保留原樣 */}
-          {/* ... (Paste previous tabs code here) ... */}
-          
-          {/* 補回省略的 tabs 以確保完整性 (Version 3.9 Full Restore) */}
-          {activeTab === 'schedules' && (
-            <div className="space-y-8 animate-in fade-in duration-500 font-bold">
-               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-6">
-                    <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div>
-                    <div>
-                      <h3 className="text-xl font-black">訓練班日程表</h3>
-                      <p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-4 w-full md:w-auto">
-                    <div className="relative flex-1 md:flex-none">
-                      <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={18}/>
-                      <select 
-                        value={selectedClassFilter} 
-                        onChange={(e)=>setSelectedClassFilter(e.target.value)}
-                        className="w-full md:w-60 bg-slate-50 border-none outline-none pl-12 pr-6 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner"
-                      >
-                        {uniqueTrainingClasses.map(c => (
-                          <option key={c} value={c}>{c === 'ALL' ? '🌍 全部訓練班' : `🏸 ${c}`}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {role === 'admin' && (
-                      <div className="flex gap-2">
-                         <button onClick={()=>downloadTemplate('schedule')} className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border transition-all" title="下載日程範本"><Download size={20}/></button>
-                         <label className="bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm">
-                           <Upload size={18}/> 匯入 CSV 日程
-                           <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportSchedules}/>
-                         </label>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
+                      <div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div>
+                      <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">活躍隊員</p>
+                      <p className="text-6xl font-black mt-2 font-mono">{students.length}</p>
+                      <div className="mt-6 flex items-center gap-2 text-xs text-blue-200 font-bold">
+                        <TrendingUp size={14}/> 成長茁壯中
                       </div>
-                    )}
-                  </div>
-               </div>
-
-               {filteredSchedules.length === 0 ? (
-                 <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
-                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><CalendarIcon size={40}/></div>
-                    <p className="text-xl font-black text-slate-400">目前暫無訓練日程紀錄</p>
-                    <p className="text-sm text-slate-300 mt-2">請點擊上方匯入按鈕上傳 CSV 檔案</p>
-                 </div>
-               ) : (
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {filteredSchedules.map(sc => {
-                      const isToday = new Date().toISOString().split('T')[0] === sc.date;
-                      return (
-                        <div key={sc.id} className={`bg-white p-10 rounded-[3.5rem] border-2 shadow-sm hover:scale-[1.02] transition-all relative overflow-hidden group ${isToday ? 'border-blue-500 shadow-xl shadow-blue-50' : 'border-slate-100'}`}>
-                           {isToday && (
-                             <div className="absolute top-0 right-0 bg-blue-600 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest animate-pulse">
-                               Today • 今日訓練
-                             </div>
-                           )}
-                           <div className="mb-8">
-                              <span className="text-[10px] bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                {sc.trainingClass}
-                              </span>
-                              <h4 className="text-3xl font-black text-slate-800 mt-6">{sc.date}</h4>
-                              <p className="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-[0.3em]">Training Session</p>
-                           </div>
-                           
-                           <div className="space-y-5">
-                              <div className="flex items-center gap-4 text-sm text-slate-600">
-                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><MapPin size={18}/></div>
-                                <span className="font-bold">{sc.location}</span>
-                              </div>
-                              <div className="flex items-center gap-4 text-sm text-slate-600">
-                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div>
-                                <span className="font-bold">{sc.coach} 教練</span>
-                              </div>
-                              {/* 新增：手動刪除按鈕 */}
-                              {role === 'admin' && (
-                                <button 
-                                  onClick={() => {
-                                    if(window.confirm(`確定要刪除 ${sc.date} 的這堂訓練課嗎？`)) {
-                                      deleteItem('schedules', sc.id);
-                                    }
-                                  }}
-                                  className="absolute top-8 right-8 w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm z-10"
-                                  title="刪除課堂"
-                                >
-                                  <Trash2 size={20}/>
-                                </button>
-                              )}
-                              {sc.notes && (
-                                <div className="p-6 bg-slate-50 rounded-[2rem] text-xs text-slate-400 leading-relaxed italic border border-slate-100">
-                                  "{sc.notes}"
-                                </div>
-                              )}
-                           </div>
-                           
-                           {role === 'admin' && (
-                             <div className="mt-10 pt-8 border-t border-dashed border-slate-100 opacity-0 group-hover:opacity-100 transition-all flex justify-end">
-                               <button onClick={()=>deleteItem('schedules', sc.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
-                             </div>
-                           )}
-                        </div>
-                      );
-                    })}
-                 </div>
-               )}
-            </div>
-          )}
-
-          {/* 3. 快速點名 (過濾多班別學員不重複) */}
-          {activeTab === 'attendance' && role === 'admin' && (
-            <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
-               <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}>
-                  <div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div>
-                  <div className="relative z-10">
-                    <h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3>
-                    <div className="flex flex-wrap gap-4">
-                      {todaySchedule ? (
-                        <>
-                          <div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2">
-                            <Star size={14} className="text-yellow-300 fill-yellow-300"/>
-                            <span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span>
-                          </div>
-                          <div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2">
-                            <MapPin size={14}/>
-                            <span className="text-sm font-black">{todaySchedule.location}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2">
-                          <Info size={14}/>
-                          <span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner">
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p>
-                    <p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p>
-                  </div>
-               </div>
-
-               {/* [Fix 2.2] 新增：報表匯出中心 */}
-               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8">
-                 <div className="flex items-center gap-4">
-                   <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div>
-                   <div>
-                     <h4 className="font-black text-slate-800">出席率報表中心</h4>
-                     <p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p>
                    </div>
-                 </div>
-                 <div className="flex gap-2">
-                   <button 
-                     onClick={() => exportAttendanceCSV('ALL')}
-                     className="px-6 py-3 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded-2xl text-xs font-black transition-all"
-                   >
-                     匯出全部紀錄
-                   </button>
-                   {/* 這裡可以根據 selectedClassFilter 匯出特定班別 */}
-                   {attendanceClassFilter !== 'ALL' && (
-                     <button 
-                       onClick={() => exportAttendanceCSV(attendanceClassFilter)}
-                       className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"
-                     >
-                       <Download size={16}/> 匯出 {attendanceClassFilter} 報表
-                     </button>
-                   )}
-                 </div>
-               </div>
 
-               {/* 壁球班別篩選選單 */}
-               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6">
-                 <div className="flex items-center gap-3 text-slate-400 min-w-max">
-                   <Filter size={20} />
-                   <span>選擇點名班別：</span>
-                 </div>
-                 <div className="flex flex-wrap gap-2">
-                   {uniqueTrainingClasses.map(cls => (
-                     <button
-                       key={cls}
-                       onClick={() => setAttendanceClassFilter(cls)}
-                       className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${
-                         attendanceClassFilter === cls 
-                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' 
-                         : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'
-                       }`}
-                     >
-                       {cls === 'ALL' ? '🌍 全部學員' : cls}
-                     </button>
-                   ))}
-                 </div>
-               </div>
-
-               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                  {studentsInSelectedAttendanceClass.length > 0 ? (
-                    studentsInSelectedAttendanceClass.map(s => {
-                      // [Fix 2.2] 檢查是否已出席 (比對 DB 紀錄)
-                      const isAttended = todaySchedule && attendanceLogs.some(log => 
-                        log.studentId === s.id && 
-                        log.date === todaySchedule.date && 
-                        log.trainingClass === todaySchedule.trainingClass
-                      );
-
-                      return (
-                        <button 
-                          key={s.id} 
-                          onClick={() => markAttendance(s)} // [Fix 2.2] 改為呼叫寫入資料庫的函數
-                          className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden ${
-                            isAttended 
-                            ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-default' 
-                            : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-xl hover:shadow-blue-50'
-                          }`}
-                        >
-                           <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase ${
-                             isAttended
-                             ? 'bg-emerald-200 text-white rotate-12'
-                             : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:rotate-6'
-                           }`}>
-                              {s.name[0]}
-                           </div>
-                           <p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : 'text-slate-800 group-hover:text-blue-600'}`}>{s.name}</p>
-                           <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
-                           <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>
-                             {s.squashClass}
-                           </div>
-                           
-                           {/* [Fix 2.2] 狀態圖示 */}
-                           <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
-                              <CheckCircle2 size={24}/>
-                           </div>
-                           
-                           {isAttended && (
-                             <div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">
-                               已出席
-                             </div>
-                           )}
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">
-                      此班別暫無學員資料
-                    </div>
-                  )}
-               </div>
-            </div>
-          )}
-
-          {/* 4. 比賽資訊與公告 */}
-          {activeTab === 'competitions' && (
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 animate-in fade-in duration-500 font-bold">
-                <div className="lg:col-span-2 space-y-8">
-                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
-                      <div className="absolute -right-10 -top-10 text-slate-50 rotate-12"><Megaphone size={120}/></div>
-                      <div className="flex justify-between items-center mb-10 relative z-10">
-                         <div>
-                           <h3 className="text-3xl font-black">最新比賽與公告</h3>
-                           <p className="text-slate-400 text-xs mt-1">追蹤校隊最新動態與賽程詳情</p>
-                         </div>
-                         {role === 'admin' && (
-                           <div className="flex gap-2">
-                             <button onClick={generateCompetitionRoster} className="p-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center gap-2" title="生成推薦名單">
-                               <ListChecks size={24}/>
-                               <span className="text-xs font-black">推薦名單</span>
-                             </button>
-                             <button onClick={()=>{
-                               const title = prompt('公告標題');
-                               const date = prompt('比賽日期 (YYYY-MM-DD)');
-                               if(title && date) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'competitions'), { title, date, createdAt: serverTimestamp() });
-                             }} className="p-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
-                               <Plus size={24}/>
-                             </button>
-                           </div>
-                         )}
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                      <div className="absolute -right-5 -bottom-5 opacity-5"><CalendarIcon size={120}/></div>
+                      <p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">本月訓練</p>
+                      <p className="text-6xl font-black mt-2 text-slate-800 font-mono">{dashboardStats.thisMonthTrainings}</p>
+                      <div className="mt-6 flex items-center gap-2 text-xs text-slate-400 font-bold">
+                        <Clock size={14}/> 訓練不間斷
                       </div>
-                      <div className="space-y-4 relative z-10">
-                         {competitions.length === 0 && (
-                           <div className="text-center py-20 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
-                             <p className="text-slate-300 font-black">目前暫無公告發佈</p>
-                           </div>
-                         )}
-                         {competitions.sort((a,b)=>b.createdAt?.seconds - a.createdAt?.seconds).map(c => (
-                           <div key={c.id} className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-white hover:shadow-lg hover:shadow-slate-100 transition-all group">
-                              <div className="flex gap-6 items-center">
-                                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm group-hover:scale-110 transition-all">
-                                  <TrophyIcon size={24}/>
-                                </div>
-                                <div>
-                                  <p className="font-black text-xl text-slate-800">{c.title}</p>
-                                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">
-                                    <CalendarIcon size={12}/> {c.date}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-3 w-full md:w-auto">
-                                <button className="flex-1 md:flex-none px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all">查看詳情</button>
-                                {role === 'admin' && <button onClick={()=>deleteItem('competitions', c.id)} className="p-3 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>}
-                              </div>
-                           </div>
-                         ))}
+                   </div>
+
+                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
+                       <div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div>
+                      <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p>
+                      <div className="flex items-baseline gap-2 mt-2">
+                        <p className="text-6xl font-black font-mono">
+                          {dashboardStats.daysToNextMatch}
+                        </p>
+                        {dashboardStats.daysToNextMatch !== '-' && dashboardStats.daysToNextMatch !== 'Today!' && (
+                           <span className="text-xl font-bold text-slate-500">Days</span>
+                        )}
                       </div>
+                      <div className="mt-6 flex items-center gap-2 text-xs text-emerald-400 font-bold">
+                         <Target size={14}/> 全力備戰中
+                      </div>
+                   </div>
+
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden">
+                       <div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div>
+                      <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200">
+                        <TrophyIcon size={32}/>
+                      </div>
+                      <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1 z-10">本年度獎項</p>
+                      <p className="text-4xl font-black mt-1 text-slate-800 z-10">{dashboardStats.awardsThisYear}</p>
                    </div>
                 </div>
                 
-                <div className="space-y-8">
-                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
-                      <div className="absolute -right-20 -bottom-20 opacity-10"><FileText size={200}/></div>
-                      <h3 className="text-2xl font-black mb-8 flex items-center gap-3 relative z-10">
-                        檔案下載中心 <Download size={20}/>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                      <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
+                        <Target className="text-blue-600"/> 章別分佈概況
                       </h3>
-                      <div className="space-y-4 relative z-10">
-                         {downloadFiles.map(f => (
-                           <a key={f.id} href={f.url} target="_blank" className="group block p-5 bg-white/10 border border-white/10 rounded-[2rem] flex items-center justify-between hover:bg-white hover:text-slate-900 transition-all duration-500">
-                              <div className="flex items-center gap-4">
-                                <div className="p-3 bg-white/10 rounded-xl group-hover:bg-slate-100 group-hover:text-blue-600 transition-all"><FileSpreadsheet size={18}/></div>
-                                <span className="text-sm font-black">{f.name}</span>
+                      <div className="space-y-6">
+                        {Object.keys(BADGE_DATA).filter(k => k !== '無').map(badge => {
+                          const count = students.filter(s => s.badge === badge).length;
+                          const percent = students.length ? Math.round((count/students.length)*100) : 0;
+                          return (
+                            <div key={badge} className="space-y-2">
+                              <div className="flex justify-between items-center px-2">
+                                <span className={`text-xs font-black ${BADGE_DATA[badge].color}`}>{badge}</span>
+                                <span className="text-xs text-slate-400 font-mono">{count} 人 ({percent}%)</span>
                               </div>
-                              <ChevronRight size={18} className="opacity-0 group-hover:opacity-100 transition-all"/>
-                           </a>
-                         ))}
-                         {role === 'admin' && (
-                           <button onClick={()=>{
-                             const name = prompt('檔案顯示名稱');
-                             const url = prompt('Google Drive 或連結 URL');
-                             if(name && url) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'), { name, url, createdAt: serverTimestamp() });
-                           }} className="w-full py-5 border-2 border-dashed border-white/20 rounded-[2rem] text-xs font-black text-white/30 hover:text-white hover:border-white transition-all flex items-center justify-center gap-2">
-                             <Plus size={14}/> 上傳新資源
-                           </button>
-                         )}
+                              <div className="h-4 w-full bg-slate-50 rounded-full overflow-hidden border">
+                                <div className={`h-full transition-all duration-1000 ${BADGE_DATA[badge].bg.replace('bg-', 'bg-')}`} style={{width: `${percent}%`, backgroundColor: 'currentColor'}}></div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                    </div>
                    
-                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100">
-                      <h4 className="text-xl font-black mb-4">系統公告通知</h4>
-                      <p className="text-sm text-blue-100/70 leading-relaxed font-bold">
-                        本學期壁球訓練已全面數位化，請隊員定期查看「積分排行」並參與「訓練班日程」！
-                      </p>
-                      <button className="mt-8 px-6 py-3 bg-white text-blue-600 rounded-2xl text-xs font-black shadow-lg">了解更多</button>
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col h-full">
+                      <h3 className="text-2xl font-black mb-6 flex items-center gap-4">
+                        <BookOpen className="text-blue-600"/> 章別獎勵計劃
+                      </h3>
+                      <div className="flex-1 w-full bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 relative group">
+                          <iframe 
+                            src="https://docs.google.com/gview?embedded=true&url=https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" 
+                            className="w-full h-full min-h-[300px]" 
+                            frameBorder="0"
+                            title="Award Scheme Booklet"
+                          ></iframe>
+                          <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                             <a 
+                                href="https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="bg-blue-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"
+                             >
+                                <Download size={14}/> 下載 PDF
+                             </a>
+                          </div>
+                      </div>
                    </div>
                 </div>
              </div>
           )}
 
-           {/* [Fix 2.6] 精彩花絮頁面 */}
+           {/* [Fix 4.1] 5. 隊員管理 (教練專用) - 完整還原 */}
+           {activeTab === 'students' && role === 'admin' && (
+             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
+                   <div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div>
+                   <div className="relative z-10">
+                     <h3 className="text-3xl font-black">隊員檔案管理</h3>
+                     <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
+                   </div>
+                   <div className="flex gap-4 relative z-10">
+                     <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
+                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
+                        <Upload size={20}/> 批量匯入 CSV 名單
+                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
+                     </label>
+                   </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                   {students.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
+                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
+                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
+                          {s.badge}
+                        </div>
+                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
+                          {s.name[0]}
+                        </div>
+                        <p className="text-xl font-black text-slate-800">{s.name}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
+                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
+                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
+                           <button className="text-slate-200 hover:text-blue-600 p-2 transition-all"><Settings2 size={18}/></button>
+                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-200 hover:text-red-500 p-2 transition-all"><Trash2 size={18}/></button>
+                        </div>
+                     </div>
+                   ))}
+                   <button onClick={()=>{
+                     const name = prompt('隊員姓名');
+                     const cls = prompt('班別 (如: 6A)');
+                     if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });
+                   }} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
+                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
+                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
+                   </button>
+                </div>
+             </div>
+          )}
+
+           {/* 精彩花絮頁面 */}
            {activeTab === 'gallery' && (
             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1824,7 +1590,7 @@ export default function App() {
             </div>
            )}
 
-           {/* [Fix 3.4] 新增「獎項成就 (Awards)」頁面 */}
+           {/* 獎項成就 (Awards) */}
            {activeTab === 'awards' && (
              <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
