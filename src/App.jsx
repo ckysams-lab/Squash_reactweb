@@ -7,7 +7,7 @@ import {
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
-  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords
+  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe // [Fix 4.5] 新增 Globe 圖示
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 4.2: 補回遺失頁面
-// Version 4.2.1: [Current] 在排名頁新增「積分機制說明」區塊
-const CURRENT_VERSION = "4.2.1";
+// Version 4.4: 自動緩存清理
+// Version 4.5: [Current] 修改點名不加分邏輯，新增校外賽詳細計分功能，移除舊按鈕
+const CURRENT_VERSION = "4.5";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -100,12 +100,25 @@ export default function App() {
     totalStudents: 50, feePerStudent: 250
   });
 
+  // [Fix 4.4] 自動緩存清理機制
+  useEffect(() => {
+    const storedVersion = localStorage.getItem('app_version');
+    if (storedVersion !== CURRENT_VERSION) {
+      console.log(`[System] Detected new version: ${CURRENT_VERSION}. Cleaning cache...`);
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem('app_version', CURRENT_VERSION);
+      window.location.reload();
+    }
+  }, []);
+
   // 自動計算總收支
   const financialSummary = useMemo(() => {
-    const revenue = financeConfig.totalStudents * financeConfig.feePerStudent;
-    const expense = (financeConfig.nTeam * financeConfig.costTeam) + 
-                    (financeConfig.nTrain * financeConfig.costTrain) + 
-                    (financeConfig.nHobby * financeConfig.costHobby);
+    if (!financeConfig) return { revenue: 0, expense: 0, profit: 0 };
+    const revenue = (Number(financeConfig.totalStudents) || 0) * (Number(financeConfig.feePerStudent) || 0);
+    const expense = ((Number(financeConfig.nTeam) || 0) * (Number(financeConfig.costTeam) || 0)) + 
+                    ((Number(financeConfig.nTrain) || 0) * (Number(financeConfig.costTrain) || 0)) + 
+                    ((Number(financeConfig.nHobby) || 0) * (Number(financeConfig.costHobby) || 0));
     return { revenue, expense, profit: revenue - expense };
   }, [financeConfig]);
 
@@ -116,26 +129,35 @@ export default function App() {
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    const thisMonthTrainings = schedules.filter(s => {
+    const safeSchedules = Array.isArray(schedules) ? schedules : [];
+    const safeCompetitions = Array.isArray(competitions) ? competitions : [];
+    const safeAwards = Array.isArray(awards) ? awards : [];
+
+    const thisMonthTrainings = safeSchedules.filter(s => {
+      if (!s.date) return false;
       const d = new Date(s.date);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      return !isNaN(d) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     }).length;
 
-    const futureCompetitions = competitions
-      .filter(c => new Date(c.date) >= todayZero)
+    const futureCompetitions = safeCompetitions
+      .filter(c => c.date && new Date(c.date) >= todayZero)
       .sort((a,b) => new Date(a.date) - new Date(b.date));
     
     let daysToNextMatch = "-";
     if (futureCompetitions.length > 0) {
       const nextMatchDate = new Date(futureCompetitions[0].date);
-      const diffTime = Math.abs(nextMatchDate - todayZero);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-      daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
+      if (!isNaN(nextMatchDate)) {
+        const diffTime = Math.abs(nextMatchDate - todayZero);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
+      }
     }
 
-    const awardsThisYear = awards.filter(a => {
+    const awardsThisYear = safeAwards.filter(a => {
+      if (!a.date) return false;
       const d = new Date(a.date);
-      return d.getFullYear() === currentYear;
+      const isThisYear = !isNaN(d) && d.getFullYear() === currentYear;
+      return isThisYear;
     }).length;
 
     return {
@@ -148,7 +170,9 @@ export default function App() {
   // 相簿分組邏輯
   const galleryAlbums = useMemo(() => {
     const albums = {};
-    galleryItems.forEach(item => {
+    const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
+
+    safeGallery.forEach(item => {
       const title = item.title || "未分類";
       if (!albums[title]) {
         albums[title] = {
@@ -182,15 +206,17 @@ export default function App() {
   // --- 設定 Favicon ---
   useEffect(() => {
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig.schoolLogo || defaultLogoUrl;
+    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
 
-    const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
-    link.type = 'image/png';
-    link.rel = 'icon';
-    link.href = logoUrl;
-    document.getElementsByTagName('head')[0].appendChild(link);
-    document.title = "BCKLAS 壁球校隊系統";
-  }, [systemConfig.schoolLogo]);
+    try {
+      const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
+      link.type = 'image/png';
+      link.rel = 'icon';
+      link.href = logoUrl;
+      document.getElementsByTagName('head')[0].appendChild(link);
+      document.title = "BCKLAS 壁球校隊系統";
+    } catch(e) { console.error("Favicon error", e); }
+  }, [systemConfig?.schoolLogo]);
 
   // --- Firebase Auth 監聽 ---
   useEffect(() => {
@@ -316,6 +342,8 @@ export default function App() {
 
   // --- 積分計算與排行邏輯 ---
   const rankedStudents = useMemo(() => {
+    if (!Array.isArray(students)) return [];
+
     const uniqueMap = new Map();
     students.forEach(s => {
       const key = `${s.class}-${s.classNo}`;
@@ -364,6 +392,34 @@ export default function App() {
       });
     } catch (e) { console.error(e); }
     setIsUpdating(false);
+  };
+
+  // [Fix 4.5] 校外賽計分邏輯
+  const handleExternalComp = (student) => {
+    const option = prompt(
+        `請為 ${student.name} 選擇校外賽成績 (輸入代號):\n\n` +
+        `1. 參與比賽 (+20)\n` +
+        `2. 單場勝出 (+20)\n` +
+        `3. 冠軍 (+100)\n` +
+        `4. 亞軍 (+50)\n` +
+        `5. 季軍/殿軍 (+30)`
+    );
+
+    let points = 0;
+    let reason = "";
+
+    switch(option) {
+        case '1': points = 20; reason = "校外賽參與"; break;
+        case '2': points = 20; reason = "校外賽勝場"; break;
+        case '3': points = 100; reason = "校外賽冠軍"; break;
+        case '4': points = 50; reason = "校外賽亞軍"; break;
+        case '5': points = 30; reason = "校外賽季殿軍"; break;
+        default: return; // 取消或無效輸入
+    }
+
+    if(confirm(`確認給予 ${student.name} 「${reason}」獎勵 (總分 +${points})?`)) {
+        adjustPoints(student.id, points);
+    }
   };
 
   // 內部聯賽：提交對戰結果
@@ -444,7 +500,7 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  // 自動化點名
+  // 自動化點名 [Fix 4.5] 移除自動加分邏輯
   const markAttendance = async (student) => {
     if (!todaySchedule) { 
       alert('⚠️ 今日沒有設定訓練日程，請先到「訓練日程」新增今天的課堂。'); 
@@ -463,7 +519,7 @@ export default function App() {
       return;
     }
 
-    if (confirm(`確認為 ${student.name} 進行「${todaySchedule.trainingClass}」點名？\n\n🎁 系統將自動為該學員增加 10 積分！`)) {
+    if (confirm(`確認為 ${student.name} 進行「${todaySchedule.trainingClass}」點名？\n\n(註：單純出席訓練不設加分)`)) {
       try {
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'), {
           studentId: student.id,
@@ -476,10 +532,7 @@ export default function App() {
           timestamp: serverTimestamp()
         });
 
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), { 
-          points: increment(10),
-          lastUpdated: serverTimestamp()
-        });
+        // 移除自動 updateDoc 加分
       } catch (e) {
         console.error(e);
         alert('點名失敗，請檢查網絡');
@@ -702,7 +755,7 @@ export default function App() {
       const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
       
       rows.forEach(row => {
-        const [className, date, location, coach, notes] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
+        const cols = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
         const [name, cls, no, badge, initPoints, squashClass] = cols;
         if (name && name !== "姓名") {
           batch.set(doc(colRef), { 
@@ -726,11 +779,6 @@ export default function App() {
   const deleteItem = async (col, id) => {
     if (role !== 'admin') return;
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
-  };
-
-  const deleteItemFromCollection = async (collectionName, id) => {
-    if (role !== 'admin') return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
   };
 
   const todaySchedule = useMemo(() => {
@@ -1012,12 +1060,16 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
+                {/* [Fix 2.6] 花絮標題 */}
                 {activeTab === 'gallery' && "📸 精彩花絮"}
+                {/* [Fix 3.4] 新增標題 */}
                 {activeTab === 'awards' && "🏆 獎項成就"}
+                {/* [Fix 3.9] 新增標題 */}
                 {activeTab === 'league' && "⚔️ 內部聯賽"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
+              {/* [Fix 1.1] 系統名修正 */}
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
@@ -1131,6 +1183,7 @@ export default function App() {
                       <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分機制說明</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
                           <ul className="list-disc pl-4 space-y-1">
+                              <li><span className="text-blue-600">出席訓練</span>：每次 +10 分</li>
                               <li><span className="text-blue-600">內部賽勝出</span>：基礎 +10 分</li>
                           </ul>
                           <ul className="list-disc pl-4 space-y-1">
@@ -1146,14 +1199,7 @@ export default function App() {
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
                   {role === 'admin' && (
                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => adjustPoints('EXTERNAL_COMP_PARTICIPATION', 20)} 
-                          className="px-4 py-2 bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md hover:bg-indigo-600 transition-all flex items-center gap-2"
-                          title="需手動選擇學生操作，建議在下方列表操作"
-                          disabled
-                        >
-                           <Award size={14}/> 外賽獎勵說明
-                        </button>
+                        {/* [Fix 4.5] Remove old button */}
                         <span className="text-[10px] text-slate-400 self-center">*請在下方列表為個別學生加分</span>
                      </div>
                   )}
@@ -1213,15 +1259,13 @@ export default function App() {
                               <div className="flex justify-center gap-2">
                                 <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button>
                                 <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button>
-                                {/* 新增外賽獎勵按鈕 */}
+                                {/* [Fix 4.5] 新增外賽詳細獎勵按鈕 */}
                                 <button 
-                                  onClick={()=> {
-                                      if(confirm(`確認給予 ${s.name} 外賽獎勵 (+20分)?`)) adjustPoints(s.id, 20);
-                                  }} 
+                                  onClick={()=> handleExternalComp(s)} 
                                   className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" 
-                                  title="+20分 (外賽獎勵)"
+                                  title="校外賽成績錄入"
                                 >
-                                    <Award size={18}/>
+                                    <Globe size={18}/>
                                 </button>
                                 <button 
                                   onClick={() => {
@@ -1336,6 +1380,7 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                   {/* 方格 1: 活躍隊員 */}
                    <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
                       <div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div>
                       <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">活躍隊員</p>
@@ -1345,6 +1390,7 @@ export default function App() {
                       </div>
                    </div>
 
+                   {/* 方格 2: 本月訓練 */}
                    <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
                       <div className="absolute -right-5 -bottom-5 opacity-5"><CalendarIcon size={120}/></div>
                       <p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">本月訓練</p>
@@ -1354,6 +1400,7 @@ export default function App() {
                       </div>
                    </div>
 
+                   {/* 方格 3: 距離下一場比賽倒數 */}
                    <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
                        <div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div>
                       <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p>
@@ -1370,6 +1417,7 @@ export default function App() {
                       </div>
                    </div>
 
+                   {/* 方格 4: 年度獎項 */}
                    <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden">
                        <div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div>
                       <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200">
@@ -1431,7 +1479,7 @@ export default function App() {
              </div>
           )}
 
-           {/* 5. 隊員管理 (教練專用) - 完整還原 */}
+           {/* [Fix 4.1] 5. 隊員管理 (教練專用) - 完整還原 */}
            {activeTab === 'students' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
