@@ -47,9 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 (Version Control) ---
-// Version 4.2: 補回遺失頁面
-// Version 4.3: [Current] 加入數據防崩潰檢查 (Safe Rendering)，解決緩存衝突導致的白畫面
-const CURRENT_VERSION = "4.3";
+// Version 4.1: 嘗試還原
+// Version 4.2: [Current] 補回遺失的 Dashboard/Students 頁面代碼，並開放學生瀏覽 Dashboard
+const CURRENT_VERSION = "4.2";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -102,12 +102,10 @@ export default function App() {
 
   // 自動計算總收支
   const financialSummary = useMemo(() => {
-    // [Fix 4.3] 安全檢查：確保 financeConfig 存在且為數字
-    if (!financeConfig) return { revenue: 0, expense: 0, profit: 0 };
-    const revenue = (Number(financeConfig.totalStudents) || 0) * (Number(financeConfig.feePerStudent) || 0);
-    const expense = ((Number(financeConfig.nTeam) || 0) * (Number(financeConfig.costTeam) || 0)) + 
-                    ((Number(financeConfig.nTrain) || 0) * (Number(financeConfig.costTrain) || 0)) + 
-                    ((Number(financeConfig.nHobby) || 0) * (Number(financeConfig.costHobby) || 0));
+    const revenue = financeConfig.totalStudents * financeConfig.feePerStudent;
+    const expense = (financeConfig.nTeam * financeConfig.costTeam) + 
+                    (financeConfig.nTrain * financeConfig.costTrain) + 
+                    (financeConfig.nHobby * financeConfig.costHobby);
     return { revenue, expense, profit: revenue - expense };
   }, [financeConfig]);
 
@@ -118,36 +116,26 @@ export default function App() {
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    // [Fix 4.3] 安全檢查：確保 schedules 和 competitions 是陣列
-    const safeSchedules = Array.isArray(schedules) ? schedules : [];
-    const safeCompetitions = Array.isArray(competitions) ? competitions : [];
-    const safeAwards = Array.isArray(awards) ? awards : [];
-
-    const thisMonthTrainings = safeSchedules.filter(s => {
-      if (!s.date) return false;
+    const thisMonthTrainings = schedules.filter(s => {
       const d = new Date(s.date);
-      return !isNaN(d) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     }).length;
 
-    const futureCompetitions = safeCompetitions
-      .filter(c => c.date && new Date(c.date) >= todayZero)
+    const futureCompetitions = competitions
+      .filter(c => new Date(c.date) >= todayZero)
       .sort((a,b) => new Date(a.date) - new Date(b.date));
     
     let daysToNextMatch = "-";
     if (futureCompetitions.length > 0) {
       const nextMatchDate = new Date(futureCompetitions[0].date);
-      if (!isNaN(nextMatchDate)) {
-        const diffTime = Math.abs(nextMatchDate - todayZero);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-        daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
-      }
+      const diffTime = Math.abs(nextMatchDate - todayZero);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+      daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
     }
 
-    const awardsThisYear = safeAwards.filter(a => {
-      if (!a.date) return false;
+    const awardsThisYear = awards.filter(a => {
       const d = new Date(a.date);
-      const isThisYear = !isNaN(d) && d.getFullYear() === currentYear;
-      return isThisYear;
+      return d.getFullYear() === currentYear;
     }).length;
 
     return {
@@ -160,9 +148,7 @@ export default function App() {
   // 相簿分組邏輯
   const galleryAlbums = useMemo(() => {
     const albums = {};
-    const safeGallery = Array.isArray(galleryItems) ? galleryItems : []; // [Fix 4.3] 安全檢查
-
-    safeGallery.forEach(item => {
+    galleryItems.forEach(item => {
       const title = item.title || "未分類";
       if (!albums[title]) {
         albums[title] = {
@@ -195,19 +181,16 @@ export default function App() {
 
   // --- 設定 Favicon ---
   useEffect(() => {
-    // [Fix 4.3] 增加 ?. 檢查，防止 systemConfig 未載入時崩潰
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
+    const logoUrl = systemConfig.schoolLogo || defaultLogoUrl;
 
-    try {
-      const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
-      link.type = 'image/png';
-      link.rel = 'icon';
-      link.href = logoUrl;
-      document.getElementsByTagName('head')[0].appendChild(link);
-      document.title = "BCKLAS 壁球校隊系統";
-    } catch(e) { console.error("Favicon error", e); }
-  }, [systemConfig?.schoolLogo]);
+    const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
+    link.type = 'image/png';
+    link.rel = 'icon';
+    link.href = logoUrl;
+    document.getElementsByTagName('head')[0].appendChild(link);
+    document.title = "BCKLAS 壁球校隊系統";
+  }, [systemConfig.schoolLogo]);
 
   // --- Firebase Auth 監聽 ---
   useEffect(() => {
@@ -333,9 +316,6 @@ export default function App() {
 
   // --- 積分計算與排行邏輯 ---
   const rankedStudents = useMemo(() => {
-    // [Fix 4.3] 安全檢查
-    if (!Array.isArray(students)) return [];
-
     const uniqueMap = new Map();
     students.forEach(s => {
       const key = `${s.class}-${s.classNo}`;
@@ -345,6 +325,7 @@ export default function App() {
       } else {
         const existing = uniqueMap.get(key);
         const existingPoints = Number(existing.points) || 0;
+        // 保留分數高的，若分數相同保留時間早的
         if (currentPoints > existingPoints) uniqueMap.set(key, s);
       }
     });
@@ -354,6 +335,7 @@ export default function App() {
       totalPoints: Number(s.points) || 0 
     })).sort((a, b) => {
       if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+      // 同分決勝：先到先得
       const timeA = a.lastUpdated?.seconds || Infinity;
       const timeB = b.lastUpdated?.seconds || Infinity;
       return timeA - timeB;
@@ -722,7 +704,7 @@ export default function App() {
       const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
       
       rows.forEach(row => {
-        const [className, date, location, coach, notes] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
+        const cols = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
         const [name, cls, no, badge, initPoints, squashClass] = cols;
         if (name && name !== "姓名") {
           batch.set(doc(colRef), { 
@@ -746,11 +728,6 @@ export default function App() {
   const deleteItem = async (col, id) => {
     if (role !== 'admin') return;
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
-  };
-
-  const deleteItemFromCollection = async (collectionName, id) => {
-    if (role !== 'admin') return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
   };
 
   const todaySchedule = useMemo(() => {
@@ -805,7 +782,7 @@ export default function App() {
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
+    const logoUrl = systemConfig.schoolLogo || defaultLogoUrl;
 
     if (error) {
       return <ShieldCheck className={`${className}`} size={size} />;
@@ -953,12 +930,11 @@ export default function App() {
           <nav className="space-y-2 flex-1 overflow-y-auto">
             <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
             
-            {(role === 'admin' || role === 'student') && (
-              <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+            {/* [Fix 4.2] 開放學生查看 Dashboard */}
+            <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                 <LayoutDashboard size={20}/> 管理概況
-              </button>
-            )}
-            
+            </button>
+
             <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Trophy size={20}/> 積分排行
             </button>
@@ -1032,12 +1008,16 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
+                {/* [Fix 2.6] 花絮標題 */}
                 {activeTab === 'gallery' && "📸 精彩花絮"}
+                {/* [Fix 3.4] 新增標題 */}
                 {activeTab === 'awards' && "🏆 獎項成就"}
+                {/* [Fix 3.9] 新增標題 */}
                 {activeTab === 'league' && "⚔️ 內部聯賽"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
+              {/* [Fix 1.1] 系統名修正 */}
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
@@ -1214,6 +1194,7 @@ export default function App() {
                               <div className="flex justify-center gap-2">
                                 <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button>
                                 <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button>
+                                {/* [Fix 3.9] 新增外賽獎勵按鈕 */}
                                 <button 
                                   onClick={()=> {
                                       if(confirm(`確認給予 ${s.name} 外賽獎勵 (+20分)?`)) adjustPoints(s.id, 20);
@@ -1246,7 +1227,7 @@ export default function App() {
             </div>
           )}
 
-           {/* 內部聯賽 (League) */}
+           {/* [Fix 3.9] 內部聯賽 (League) */}
            {activeTab === 'league' && role === 'admin' && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                  <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
@@ -1304,6 +1285,8 @@ export default function App() {
               </div>
            )}
 
+          {/* ... (其他 Tab 保持不變：schedules, competitions, gallery, awards, students, attendance, financial, settings) ... */}
+          
           {/* [Fix 4.1/4.2] 6. 管理概況 (Dashboard) - 完整還原 + 開放學生瀏覽 */}
           {activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
@@ -1486,7 +1469,7 @@ export default function App() {
 
           {/* ... (其他 Tab 保持不變：schedules, competitions, gallery, awards, attendance, financial, settings) ... */}
           
-          {/* 補回省略的 tabs 以確保完整性 (Version 4.1 Full Restore) */}
+          {/* 補回省略的 tabs 以確保完整性 (Version 4.2 Full Restore) */}
           {activeTab === 'schedules' && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1592,7 +1575,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 3. 快速點名 */}
+          {/* 3. 快速點名 (過濾多班別學員不重複) */}
           {activeTab === 'attendance' && role === 'admin' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
                <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}>
@@ -1625,7 +1608,7 @@ export default function App() {
                   </div>
                </div>
 
-               {/* 報表匯出中心 */}
+               {/* [Fix 2.2] 新增：報表匯出中心 */}
                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8">
                  <div className="flex items-center gap-4">
                    <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div>
@@ -1641,6 +1624,7 @@ export default function App() {
                    >
                      匯出全部紀錄
                    </button>
+                   {/* 這裡可以根據 selectedClassFilter 匯出特定班別 */}
                    {attendanceClassFilter !== 'ALL' && (
                      <button 
                        onClick={() => exportAttendanceCSV(attendanceClassFilter)}
@@ -1678,6 +1662,7 @@ export default function App() {
                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                   {studentsInSelectedAttendanceClass.length > 0 ? (
                     studentsInSelectedAttendanceClass.map(s => {
+                      // [Fix 2.2] 檢查是否已出席 (比對 DB 紀錄)
                       const isAttended = todaySchedule && attendanceLogs.some(log => 
                         log.studentId === s.id && 
                         log.date === todaySchedule.date && 
@@ -1687,7 +1672,7 @@ export default function App() {
                       return (
                         <button 
                           key={s.id} 
-                          onClick={() => markAttendance(s)} 
+                          onClick={() => markAttendance(s)} // [Fix 2.2] 改為呼叫寫入資料庫的函數
                           className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden ${
                             isAttended 
                             ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-default' 
@@ -1707,7 +1692,7 @@ export default function App() {
                              {s.squashClass}
                            </div>
                            
-                           {/* 狀態圖示 */}
+                           {/* [Fix 2.2] 狀態圖示 */}
                            <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
                               <CheckCircle2 size={24}/>
                            </div>
@@ -1729,7 +1714,102 @@ export default function App() {
             </div>
           )}
 
-           {/* 精彩花絮頁面 */}
+          {/* 4. 比賽資訊與公告 */}
+          {activeTab === 'competitions' && (
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 animate-in fade-in duration-500 font-bold">
+                <div className="lg:col-span-2 space-y-8">
+                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                      <div className="absolute -right-10 -top-10 text-slate-50 rotate-12"><Megaphone size={120}/></div>
+                      <div className="flex justify-between items-center mb-10 relative z-10">
+                         <div>
+                           <h3 className="text-3xl font-black">最新比賽與公告</h3>
+                           <p className="text-slate-400 text-xs mt-1">追蹤校隊最新動態與賽程詳情</p>
+                         </div>
+                         {role === 'admin' && (
+                           <div className="flex gap-2">
+                             <button onClick={generateCompetitionRoster} className="p-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center gap-2" title="生成推薦名單">
+                               <ListChecks size={24}/>
+                               <span className="text-xs font-black">推薦名單</span>
+                             </button>
+                             <button onClick={()=>{
+                               const title = prompt('公告標題');
+                               const date = prompt('比賽日期 (YYYY-MM-DD)');
+                               if(title && date) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'competitions'), { title, date, createdAt: serverTimestamp() });
+                             }} className="p-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
+                               <Plus size={24}/>
+                             </button>
+                           </div>
+                         )}
+                      </div>
+                      <div className="space-y-4 relative z-10">
+                         {competitions.length === 0 && (
+                           <div className="text-center py-20 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
+                             <p className="text-slate-300 font-black">目前暫無公告發佈</p>
+                           </div>
+                         )}
+                         {competitions.sort((a,b)=>b.createdAt?.seconds - a.createdAt?.seconds).map(c => (
+                           <div key={c.id} className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-white hover:shadow-lg hover:shadow-slate-100 transition-all group">
+                              <div className="flex gap-6 items-center">
+                                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm group-hover:scale-110 transition-all">
+                                  <TrophyIcon size={24}/>
+                                </div>
+                                <div>
+                                  <p className="font-black text-xl text-slate-800">{c.title}</p>
+                                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">
+                                    <CalendarIcon size={12}/> {c.date}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 w-full md:w-auto">
+                                <button className="flex-1 md:flex-none px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all">查看詳情</button>
+                                {role === 'admin' && <button onClick={()=>deleteItem('competitions', c.id)} className="p-3 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>}
+                              </div>
+                           </div>
+                         ))}
+                      </div>
+                   </div>
+                </div>
+                
+                <div className="space-y-8">
+                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
+                      <div className="absolute -right-20 -bottom-20 opacity-10"><FileText size={200}/></div>
+                      <h3 className="text-2xl font-black mb-8 flex items-center gap-3 relative z-10">
+                        檔案下載中心 <Download size={20}/>
+                      </h3>
+                      <div className="space-y-4 relative z-10">
+                         {downloadFiles.map(f => (
+                           <a key={f.id} href={f.url} target="_blank" className="group block p-5 bg-white/10 border border-white/10 rounded-[2rem] flex items-center justify-between hover:bg-white hover:text-slate-900 transition-all duration-500">
+                              <div className="flex items-center gap-4">
+                                <div className="p-3 bg-white/10 rounded-xl group-hover:bg-slate-100 group-hover:text-blue-600 transition-all"><FileSpreadsheet size={18}/></div>
+                                <span className="text-sm font-black">{f.name}</span>
+                              </div>
+                              <ChevronRight size={18} className="opacity-0 group-hover:opacity-100 transition-all"/>
+                           </a>
+                         ))}
+                         {role === 'admin' && (
+                           <button onClick={()=>{
+                             const name = prompt('檔案顯示名稱');
+                             const url = prompt('Google Drive 或連結 URL');
+                             if(name && url) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'), { name, url, createdAt: serverTimestamp() });
+                           }} className="w-full py-5 border-2 border-dashed border-white/20 rounded-[2rem] text-xs font-black text-white/30 hover:text-white hover:border-white transition-all flex items-center justify-center gap-2">
+                             <Plus size={14}/> 上傳新資源
+                           </button>
+                         )}
+                      </div>
+                   </div>
+                   
+                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100">
+                      <h4 className="text-xl font-black mb-4">系統公告通知</h4>
+                      <p className="text-sm text-blue-100/70 leading-relaxed font-bold">
+                        本學期壁球訓練已全面數位化，請隊員定期查看「積分排行」並參與「訓練班日程」！
+                      </p>
+                      <button className="mt-8 px-6 py-3 bg-white text-blue-600 rounded-2xl text-xs font-black shadow-lg">了解更多</button>
+                   </div>
+                </div>
+             </div>
+          )}
+
+           {/* [Fix 2.6] 精彩花絮頁面 */}
            {activeTab === 'gallery' && (
             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
