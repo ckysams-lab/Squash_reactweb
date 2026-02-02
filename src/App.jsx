@@ -46,9 +46,7 @@ const db = getFirestore(app);
 // 強制鎖定 App ID
 const appId = 'bcklas-squash-core-v1'; 
 
-// --- 版本控制 (Version Control) ---
-// Version 4.6: 穩定版 (計分規則優化)
-// Version 4.7: [Current] 基於 4.6，新增隊員生日錄入、梯隊統計、年份篩選
+// --- 版本控制 ---
 const CURRENT_VERSION = "4.7";
 
 export default function App() {
@@ -88,7 +86,7 @@ export default function App() {
   const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
   const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL');
   
-  // [Fix 4.7] 新增出生年份篩選狀態
+  // [Fix 4.7] 年份篩選狀態
   const [selectedYearFilter, setSelectedYearFilter] = useState('ALL');
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -427,13 +425,12 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  // [Fix 4.7] 更新學生生日 Handler
+  // [Fix 4.7] 更新學生生日
   const handleUpdateDOB = async (student) => {
     const currentDob = student.dob || "";
     const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
     
     if (newDob !== null) { 
-        // 簡易格式檢查
         const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
         if (!dateRegex.test(newDob) && newDob !== "") {
             alert("格式錯誤！請使用 YYYY-MM-DD 格式 (例如: 2012-05-20)");
@@ -858,9 +855,6 @@ export default function App() {
       : schedules.filter(s => s.trainingClass === selectedClassFilter);
     return filtered.sort((a,b) => a.date.localeCompare(b.date));
   }, [schedules, selectedClassFilter]);
-
-  // [Fix 4.7] 移到上方去定義 (為了 birthYearStats 使用)
-  // const filteredStudents = ... (保留在下方)
 
   const studentsInSelectedAttendanceClass = useMemo(() => {
     const sorted = [...students].sort((a,b) => a.class.localeCompare(b.class));
@@ -1544,7 +1538,6 @@ export default function App() {
                         <span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span>
                         <span className="text-xl font-black">{students.length}</span>
                     </div>
-                    {/* 自動生成年份統計卡片 */}
                     {Object.entries(birthYearStats).sort().map(([year, count]) => (
                         <div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0">
                             <span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span>
@@ -1627,101 +1620,6 @@ export default function App() {
                      <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
                      <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
                    </button>
-                </div>
-             </div>
-          )}
-
-          {/* 4. 比賽資訊與公告 */}
-          {activeTab === 'competitions' && (
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 animate-in fade-in duration-500 font-bold">
-                <div className="lg:col-span-2 space-y-8">
-                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
-                      <div className="absolute -right-10 -top-10 text-slate-50 rotate-12"><Megaphone size={120}/></div>
-                      <div className="flex justify-between items-center mb-10 relative z-10">
-                         <div>
-                           <h3 className="text-3xl font-black">最新比賽與公告</h3>
-                           <p className="text-slate-400 text-xs mt-1">追蹤校隊最新動態與賽程詳情</p>
-                         </div>
-                         {role === 'admin' && (
-                           <div className="flex gap-2">
-                             <button onClick={generateCompetitionRoster} className="p-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center gap-2" title="生成推薦名單">
-                               <ListChecks size={24}/>
-                               <span className="text-xs font-black">推薦名單</span>
-                             </button>
-                             <button onClick={()=>{
-                               const title = prompt('公告標題');
-                               const date = prompt('比賽日期 (YYYY-MM-DD)');
-                               if(title && date) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'competitions'), { title, date, createdAt: serverTimestamp() });
-                             }} className="p-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
-                               <Plus size={24}/>
-                             </button>
-                           </div>
-                         )}
-                      </div>
-                      <div className="space-y-4 relative z-10">
-                         {competitions.length === 0 && (
-                           <div className="text-center py-20 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
-                             <p className="text-slate-300 font-black">目前暫無公告發佈</p>
-                           </div>
-                         )}
-                         {competitions.sort((a,b)=>b.createdAt?.seconds - a.createdAt?.seconds).map(c => (
-                           <div key={c.id} className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-white hover:shadow-lg hover:shadow-slate-100 transition-all group">
-                              <div className="flex gap-6 items-center">
-                                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm group-hover:scale-110 transition-all">
-                                  <TrophyIcon size={24}/>
-                                </div>
-                                <div>
-                                  <p className="font-black text-xl text-slate-800">{c.title}</p>
-                                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">
-                                    <CalendarIcon size={12}/> {c.date}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-3 w-full md:w-auto">
-                                <button className="flex-1 md:flex-none px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-black hover:bg-blue-600 hover:text-white transition-all">查看詳情</button>
-                                {role === 'admin' && <button onClick={()=>deleteItem('competitions', c.id)} className="p-3 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>}
-                              </div>
-                           </div>
-                         ))}
-                      </div>
-                   </div>
-                </div>
-                
-                <div className="space-y-8">
-                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
-                      <div className="absolute -right-20 -bottom-20 opacity-10"><FileText size={200}/></div>
-                      <h3 className="text-2xl font-black mb-8 flex items-center gap-3 relative z-10">
-                        檔案下載中心 <Download size={20}/>
-                      </h3>
-                      <div className="space-y-4 relative z-10">
-                         {downloadFiles.map(f => (
-                           <a key={f.id} href={f.url} target="_blank" className="group block p-5 bg-white/10 border border-white/10 rounded-[2rem] flex items-center justify-between hover:bg-white hover:text-slate-900 transition-all duration-500">
-                              <div className="flex items-center gap-4">
-                                <div className="p-3 bg-white/10 rounded-xl group-hover:bg-slate-100 group-hover:text-blue-600 transition-all"><FileSpreadsheet size={18}/></div>
-                                <span className="text-sm font-black">{f.name}</span>
-                              </div>
-                              <ChevronRight size={18} className="opacity-0 group-hover:opacity-100 transition-all"/>
-                           </a>
-                         ))}
-                         {role === 'admin' && (
-                           <button onClick={()=>{
-                             const name = prompt('檔案顯示名稱');
-                             const url = prompt('Google Drive 或連結 URL');
-                             if(name && url) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'), { name, url, createdAt: serverTimestamp() });
-                           }} className="w-full py-5 border-2 border-dashed border-white/20 rounded-[2rem] text-xs font-black text-white/30 hover:text-white hover:border-white transition-all flex items-center justify-center gap-2">
-                             <Plus size={14}/> 上傳新資源
-                           </button>
-                         )}
-                      </div>
-                   </div>
-                   
-                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100">
-                      <h4 className="text-xl font-black mb-4">系統公告通知</h4>
-                      <p className="text-sm text-blue-100/70 leading-relaxed font-bold">
-                        本學期壁球訓練已全面數位化，請隊員定期查看「積分排行」並參與「訓練班日程」！
-                      </p>
-                      <button className="mt-8 px-6 py-3 bg-white text-blue-600 rounded-2xl text-xs font-black shadow-lg">了解更多</button>
-                   </div>
                 </div>
              </div>
           )}
@@ -1928,101 +1826,6 @@ export default function App() {
                 )}
              </div>
             )}
-
-          {/* [Fix 1.0] 修正：正確的財務組件渲染位置 */}
-          {activeTab === 'financial' && role === 'admin' && (
-             <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
-                <div className="flex justify-end">
-                  <button 
-                      onClick={saveFinanceConfig}
-                      className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-lg hover:bg-blue-700 transition-all active:scale-95"
-                  >
-                      <Save size={20} />
-                      儲存財務設定
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-                    <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6">
-                      <TrendingUp size={32}/>
-                    </div>
-                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總收入</p>
-                    <h3 className="text-4xl font-black text-emerald-500">${financialSummary.revenue.toLocaleString()}</h3>
-                  </div>
-
-                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-                    <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6">
-                      <Trash2 size={32}/>
-                    </div>
-                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總支出</p>
-                    <h3 className="text-4xl font-black text-rose-500">${financialSummary.expense.toLocaleString()}</h3>
-                  </div>
-
-                  <div className={`p-10 rounded-[3.5rem] border shadow-sm flex flex-col justify-center items-center text-center ${financialSummary.profit >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${financialSummary.profit >= 0 ? 'bg-white text-blue-600 shadow-sm' : 'bg-white text-rose-600 shadow-sm'}`}>
-                      <DollarSign size={32}/>
-                    </div>
-                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計資助盈餘</p>
-                    <h3 className={`text-4xl font-black ${financialSummary.profit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-                      ${financialSummary.profit.toLocaleString()}
-                    </h3>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-4 mb-10">
-                      <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center shadow-sm"><Trash2 size={24}/></div>
-                      <h4 className="text-2xl font-black text-slate-800">支出設定 (教練費)</h4>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      {[
-                        { label: '校隊教練次數', key: 'nTeam' }, { label: '單次校隊成本', key: 'costTeam' },
-                        { label: '進階班次數', key: 'nTrain' }, { label: '單次進階成本', key: 'costTrain' },
-                        { label: '趣味班次數', key: 'nHobby' }, { label: '單次趣味成本', key: 'costHobby' },
-                      ].map(item => (
-                        <div key={item.key}>
-                          <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">{item.label}</label>
-                          <input 
-                            type="number" 
-                            className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-rose-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
-                            value={financeConfig[item.key]}
-                            onChange={e => setFinanceConfig({...financeConfig, [item.key]: Number(e.target.value)})}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-4 mb-10">
-                      <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm"><DollarSign size={24}/></div>
-                      <h4 className="text-2xl font-black text-slate-800">預計收入 (學費)</h4>
-                    </div>
-                    <div className="space-y-10">
-                      <div>
-                        <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">預計總人數</label>
-                        <input 
-                          type="number" 
-                          className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
-                          value={financeConfig.totalStudents}
-                          onChange={e => setFinanceConfig({...financeConfig, totalStudents: Number(e.target.value)})}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">每位學員學費 ($)</label>
-                        <input 
-                          type="number" 
-                          className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
-                          value={financeConfig.feePerStudent}
-                          onChange={e => setFinanceConfig({...financeConfig, feePerStudent: Number(e.target.value)})}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-             </div>
-          )}
 
           {/* 7. 系統設定 (教練專用) */}
           {activeTab === 'settings' && role === 'admin' && (
