@@ -118,7 +118,7 @@ export default function App() {
     }
   }, []);
 
-  // 自動計算總收支
+  // 自動計算收支
   const financialSummary = useMemo(() => {
     if (!financeConfig) return { revenue: 0, expense: 0, profit: 0 };
     const revenue = (Number(financeConfig.totalStudents) || 0) * (Number(financeConfig.feePerStudent) || 0);
