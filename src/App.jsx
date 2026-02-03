@@ -555,7 +555,7 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  // 自動化點名 (不加分)
+  // 自動化點名
   const markAttendance = async (student) => {
     if (!todaySchedule) { 
       alert('⚠️ 今日沒有設定訓練日程，請先到「訓練日程」新增今天的課堂。'); 
@@ -855,6 +855,14 @@ export default function App() {
       : schedules.filter(s => s.trainingClass === selectedClassFilter);
     return filtered.sort((a,b) => a.date.localeCompare(b.date));
   }, [schedules, selectedClassFilter]);
+
+  const filteredStudents = useMemo(() => {
+    return rankedStudents.filter(s => {
+      const matchSearch = s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
+      const matchYear = selectedYearFilter === 'ALL' || (s.dob && s.dob.startsWith(selectedYearFilter)) || (selectedYearFilter === '未知' && !s.dob);
+      return matchSearch && matchYear;
+    });
+  }, [rankedStudents, searchTerm, selectedYearFilter]);
 
   const studentsInSelectedAttendanceClass = useMemo(() => {
     const sorted = [...students].sort((a,b) => a.class.localeCompare(b.class));
@@ -1305,7 +1313,6 @@ export default function App() {
                               <div className="flex justify-center gap-2">
                                 <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button>
                                 <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button>
-                                {/* 新增外賽詳細獎勵按鈕 */}
                                 <button 
                                   onClick={()=> handleExternalComp(s)} 
                                   className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" 
@@ -1424,7 +1431,6 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                   {/* 方格 1: 活躍隊員 */}
                    <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
                       <div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div>
                       <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">活躍隊員</p>
@@ -1434,7 +1440,6 @@ export default function App() {
                       </div>
                    </div>
 
-                   {/* 方格 2: 本月訓練 */}
                    <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
                       <div className="absolute -right-5 -bottom-5 opacity-5"><CalendarIcon size={120}/></div>
                       <p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">本月訓練</p>
@@ -1444,7 +1449,6 @@ export default function App() {
                       </div>
                    </div>
 
-                   {/* 方格 3: 距離下一場比賽倒數 */}
                    <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
                        <div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div>
                       <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p>
@@ -1461,7 +1465,6 @@ export default function App() {
                       </div>
                    </div>
 
-                   {/* 方格 4: 年度獎項 */}
                    <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden">
                        <div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div>
                       <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200">
@@ -1526,7 +1529,7 @@ export default function App() {
            {/* 5. 隊員管理 (教練專用) - [Fix 4.7] */}
            {activeTab === 'students' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
-                {/* [Fix 4.7] 梯隊統計 Bar (出生年份) */}
+                {/* 梯隊統計 Bar */}
                 <div className="flex overflow-x-auto gap-4 pb-4">
                     <div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0">
                         <span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span>
@@ -1547,7 +1550,7 @@ export default function App() {
                      <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
                    </div>
                    <div className="flex gap-4 relative z-10 flex-wrap justify-center">
-                     {/* [Fix 4.7] 年份篩選器 */}
+                     {/* 年份篩選器 */}
                      <div className="relative">
                         <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
                         <select 
@@ -1583,7 +1586,7 @@ export default function App() {
                         <p className="text-xl font-black text-slate-800">{s.name}</p>
                         <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
                         
-                        {/* [Fix 4.7] 顯示出生日期標籤 */}
+                        {/* 顯示出生日期標籤 */}
                         {s.dob ? (
                             <div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100">
                                 <Cake size={10}/> {s.dob}
@@ -1594,7 +1597,7 @@ export default function App() {
 
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
                         <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
-                           {/* [Fix 4.7] 修改設定按鈕為生日錄入 */}
+                           {/* 生日錄入按鈕 */}
                            <button 
                              onClick={() => handleUpdateDOB(s)}
                              className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all"
@@ -1690,7 +1693,6 @@ export default function App() {
                                 <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div>
                                 <span className="font-bold">{sc.coach} 教練</span>
                               </div>
-                              {/* 新增：手動刪除按鈕 */}
                               {role === 'admin' && (
                                 <button 
                                   onClick={() => {
