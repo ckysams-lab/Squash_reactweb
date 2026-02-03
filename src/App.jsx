@@ -7,7 +7,7 @@ import {
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
-  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Zap, Unlock
+  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Zap, Unlock, Key
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -47,8 +47,8 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 ---
-// Version 4.8: 完整修復
-// Version 4.9: [Current] 放大比賽公告UI，新增學生能力分析頁(含密碼保護)
+// Version 4.8: 完整修復與功能整合
+// Version 4.9: [Current] 新增能力分析頁(含密碼鎖)、放大比賽公告UI
 const CURRENT_VERSION = "4.9";
 
 export default function App() {
@@ -80,18 +80,21 @@ export default function App() {
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  // 能力分析頁狀態
+  const [abilityAccessInput, setAbilityAccessInput] = useState('');
+  const [unlockedAbility, setUnlockedAbility] = useState(false);
+
   // 對戰錄入狀態
   const [matchWinner, setMatchWinner] = useState('');
   const [matchLoser, setMatchLoser] = useState('');
 
-  // 能力分析頁狀態 [Fix 4.9]
-  const [abilityAccessInput, setAbilityAccessInput] = useState('');
-  const [unlockedAbility, setUnlockedAbility] = useState(false);
-
   const [importEncoding, setImportEncoding] = useState('AUTO');
   const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
   const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL');
+  
+  // 年份篩選狀態
   const [selectedYearFilter, setSelectedYearFilter] = useState('ALL');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -105,7 +108,7 @@ export default function App() {
     totalStudents: 50, feePerStudent: 250
   });
 
-  // 自動緩存清理
+  // 自動緩存清理機制
   useEffect(() => {
     const storedVersion = localStorage.getItem('app_version');
     if (storedVersion !== CURRENT_VERSION) {
@@ -127,7 +130,7 @@ export default function App() {
     return { revenue, expense, profit: revenue - expense };
   }, [financeConfig]);
 
-  // Dashboard 統計
+  // Dashboard 統計數據
   const dashboardStats = useMemo(() => {
     const now = new Date();
     const todayZero = new Date(now.setHours(0,0,0,0));
@@ -172,7 +175,7 @@ export default function App() {
     };
   }, [schedules, competitions, awards]);
 
-  // 相簿分組
+  // 相簿分組邏輯
   const galleryAlbums = useMemo(() => {
     const albums = {};
     const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
@@ -343,7 +346,6 @@ export default function App() {
     setCurrentUserInfo(null); 
     setShowLoginModal(true); 
     setSidebarOpen(false);
-    // 重置能力頁狀態
     setUnlockedAbility(false);
     setAbilityAccessInput('');
   };
@@ -376,7 +378,7 @@ export default function App() {
     });
   }, [students]);
 
-  // 統計各出生年份的人數
+  // 統計各出生年份的人數 (Ladder Stats)
   const birthYearStats = useMemo(() => {
     const stats = {};
     if (Array.isArray(rankedStudents)) {
@@ -396,7 +398,7 @@ export default function App() {
     return stats;
   }, [rankedStudents]);
 
-  // 隊員過濾邏輯
+  // 隊員過濾邏輯：新增「年份」過濾
   const filteredStudents = useMemo(() => {
     return rankedStudents.filter(s => {
       const matchSearch = s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
@@ -442,36 +444,45 @@ export default function App() {
             alert("格式錯誤！請使用 YYYY-MM-DD 格式 (例如: 2012-05-20)");
             return;
         }
+
         try {
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
                 dob: newDob,
                 lastUpdated: serverTimestamp()
             });
-        } catch (e) { console.error("Update DOB failed", e); }
+        } catch (e) {
+            console.error("Update DOB failed", e);
+            alert("更新失敗");
+        }
     }
   };
 
   // [Fix 4.9] 更新學生能力強弱
   const handleUpdateAbility = async (student, field, currentValue) => {
-      const newValue = prompt(`請輸入 ${student.name} 的${field === 'strength' ? '強項' : field === 'weakness' ? '弱項' : '專屬密碼'}:`, currentValue || "");
+      const label = field === 'strength' ? '強項' : field === 'weakness' ? '弱項' : '專屬密碼';
+      const newValue = prompt(`請輸入 ${student.name} 的${label}:`, currentValue || "");
+      
       if (newValue !== null) {
           try {
               await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
                   [field]: newValue,
                   lastUpdated: serverTimestamp()
               });
-              alert("更新成功！");
-          } catch (e) { console.error(e); alert("更新失敗"); }
+              // alert("更新成功！"); // Optional feedback
+          } catch (e) { 
+              console.error(e); 
+              alert("更新失敗"); 
+          }
       }
   };
 
   // [Fix 4.9] 學生驗證能力頁面密碼
   const handleVerifyAbilityAccess = () => {
       if (!currentUserInfo) return;
-      if (abilityAccessInput === currentUserInfo.accessCode) {
+      if (abilityAccessInput && abilityAccessInput === currentUserInfo.accessCode) {
           setUnlockedAbility(true);
       } else {
-          alert("密碼錯誤，請重新輸入");
+          alert("密碼錯誤，請重新輸入。如忘記密碼請向教練查詢。");
       }
   };
 
@@ -1067,7 +1078,7 @@ export default function App() {
             <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Trophy size={20}/> 積分排行
             </button>
-
+            
             {/* [Fix 4.9] 新增「能力分析」按鈕 */}
             <button onClick={() => {setActiveTab('ability'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'ability' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Zap size={20}/> 能力分析
@@ -1292,7 +1303,7 @@ export default function App() {
                                                 <p className="text-[10px] text-indigo-500 uppercase tracking-widest mb-1">專屬密碼 Password</p>
                                                 <p className="text-sm font-bold text-slate-700 font-mono">{s.accessCode || "未設定"}</p>
                                             </div>
-                                            <Lock size={16} className="text-indigo-300"/>
+                                            <Key size={16} className="text-indigo-300"/>
                                         </div>
                                     </div>
                                 </div>
@@ -1392,7 +1403,6 @@ export default function App() {
              </div>
            )}
 
-          {/* ... (Other Tabs: Rankings, League, Gallery, Awards, Schedules, Students, Attendance, Financial, Settings) ... */}
           {/* 1. 積分排行 */}
           {activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -1779,102 +1789,7 @@ export default function App() {
              </div>
           )}
 
-           {/* [Fix 4.1] 5. 隊員管理 (教練專用) - [Fix 4.7] 新增梯隊功能 */}
-           {activeTab === 'students' && role === 'admin' && (
-             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
-                {/* [Fix 4.7] 梯隊統計 Bar (出生年份) */}
-                <div className="flex overflow-x-auto gap-4 pb-4">
-                    <div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0">
-                        <span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span>
-                        <span className="text-xl font-black">{students.length}</span>
-                    </div>
-                    {Object.entries(birthYearStats).sort().map(([year, count]) => (
-                        <div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0">
-                            <span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span>
-                            <span className="text-xl font-black text-slate-800">{count} 人</span>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
-                   <div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div>
-                   <div className="relative z-10">
-                     <h3 className="text-3xl font-black">隊員檔案管理</h3>
-                     <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
-                   </div>
-                   <div className="flex gap-4 relative z-10 flex-wrap justify-center">
-                     {/* [Fix 4.7] 年份篩選器 */}
-                     <div className="relative">
-                        <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
-                        <select 
-                            value={selectedYearFilter}
-                            onChange={(e) => setSelectedYearFilter(e.target.value)}
-                            className="pl-10 pr-10 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 outline-none shadow-sm"
-                        >
-                            <option value="ALL">全部年份</option>
-                            {Object.keys(birthYearStats).sort().map(year => (
-                                <option key={year} value={year}>{year} 年出生 ({birthYearStats[year]}人)</option>
-                            ))}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/>
-                     </div>
-
-                     <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
-                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
-                        <Upload size={20}/> 批量匯入 CSV 名單
-                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
-                     </label>
-                   </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                   {filteredStudents.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
-                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
-                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
-                          {s.badge}
-                        </div>
-                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
-                          {s.name[0]}
-                        </div>
-                        <p className="text-xl font-black text-slate-800">{s.name}</p>
-                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
-                        
-                        {/* [Fix 4.7] 顯示出生日期標籤 */}
-                        {s.dob ? (
-                            <div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100">
-                                <Cake size={10}/> {s.dob}
-                            </div>
-                        ) : (
-                            <div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>
-                        )}
-
-                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
-                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
-                           {/* [Fix 4.7] 修改設定按鈕為生日錄入 */}
-                           <button 
-                             onClick={() => handleUpdateDOB(s)}
-                             className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all"
-                             title="設定出生日期"
-                           >
-                              <Cake size={18}/>
-                           </button>
-                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={18}/></button>
-                        </div>
-                     </div>
-                   ))}
-                   <button onClick={()=>{
-                     const name = prompt('隊員姓名');
-                     const cls = prompt('班別 (如: 6A)');
-                     if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });
-                   }} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
-                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
-                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
-                   </button>
-                </div>
-             </div>
-          )}
-          
-          {/* [Restore] 2. 訓練班日程 */}
+           {/* [Restore] 2. 訓練班日程 */}
           {activeTab === 'schedules' && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1980,7 +1895,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 3. 快速點名 (過濾多班別學員不重複) */}
+          {/* [Restore] 3. 快速點名 (過濾多班別學員不重複) */}
           {activeTab === 'attendance' && role === 'admin' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
                <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}>
@@ -2119,6 +2034,101 @@ export default function App() {
             </div>
           )}
 
+           {/* [Fix 4.1] 5. 隊員管理 (教練專用) - [Fix 4.7] 新增梯隊功能 */}
+           {activeTab === 'students' && role === 'admin' && (
+             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
+                {/* [Fix 4.7] 梯隊統計 Bar (出生年份) */}
+                <div className="flex overflow-x-auto gap-4 pb-4">
+                    <div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0">
+                        <span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span>
+                        <span className="text-xl font-black">{students.length}</span>
+                    </div>
+                    {Object.entries(birthYearStats).sort().map(([year, count]) => (
+                        <div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0">
+                            <span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span>
+                            <span className="text-xl font-black text-slate-800">{count} 人</span>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
+                   <div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div>
+                   <div className="relative z-10">
+                     <h3 className="text-3xl font-black">隊員檔案管理</h3>
+                     <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
+                   </div>
+                   <div className="flex gap-4 relative z-10 flex-wrap justify-center">
+                     {/* [Fix 4.7] 年份篩選器 */}
+                     <div className="relative">
+                        <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                        <select 
+                            value={selectedYearFilter}
+                            onChange={(e) => setSelectedYearFilter(e.target.value)}
+                            className="pl-10 pr-10 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 outline-none shadow-sm"
+                        >
+                            <option value="ALL">全部年份</option>
+                            {Object.keys(birthYearStats).sort().map(year => (
+                                <option key={year} value={year}>{year} 年出生 ({birthYearStats[year]}人)</option>
+                            ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/>
+                     </div>
+
+                     <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
+                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
+                        <Upload size={20}/> 批量匯入 CSV 名單
+                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
+                     </label>
+                   </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                   {filteredStudents.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
+                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
+                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
+                          {s.badge}
+                        </div>
+                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
+                          {s.name[0]}
+                        </div>
+                        <p className="text-xl font-black text-slate-800">{s.name}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
+                        
+                        {/* [Fix 4.7] 顯示出生日期標籤 */}
+                        {s.dob ? (
+                            <div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100">
+                                <Cake size={10}/> {s.dob}
+                            </div>
+                        ) : (
+                            <div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>
+                        )}
+
+                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
+                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
+                           {/* [Fix 4.7] 修改設定按鈕為生日錄入 */}
+                           <button 
+                             onClick={() => handleUpdateDOB(s)}
+                             className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all"
+                             title="設定出生日期"
+                           >
+                              <Cake size={18}/>
+                           </button>
+                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={18}/></button>
+                        </div>
+                     </div>
+                   ))}
+                   <button onClick={()=>{
+                     const name = prompt('隊員姓名');
+                     const cls = prompt('班別 (如: 6A)');
+                     if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });
+                   }} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
+                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
+                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
+                   </button>
+                </div>
+             </div>
+          )}
+
           {activeTab === 'financial' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
                 <div className="flex justify-end">
@@ -2244,6 +2254,7 @@ export default function App() {
                         </select>
                       </div>
 
+                      {/* [Fix 2.7] 新增：校徽圖片上傳區域 */}
                       <div className="space-y-3">
                         <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">學校校徽 (School Logo)</label>
                         <div className="flex flex-col items-center gap-4 p-8 border-2 border-dashed border-slate-200 rounded-[2rem] bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer relative" onClick={() => document.getElementById('logoInput').click()}>
@@ -2289,6 +2300,7 @@ export default function App() {
                       </div>
 
                       <div className="pt-8 border-t border-slate-100 space-y-4">
+                        {/* [Fix 3.9] 賽季重置按鈕 */}
                         <div className="p-6 bg-orange-50 rounded-[2.5rem] border border-orange-100 mb-6">
                            <h4 className="text-orange-600 font-black mb-2 flex items-center gap-2"><History/> 新賽季重置</h4>
                            <p className="text-xs text-slate-400 mb-4">將所有學員積分重置為該章別的起步底分 (金:200, 銀:100...)。</p>
