@@ -47,7 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "4.8";
+// Version 4.8: 整合所有功能 (梯隊/生日/聯賽/修復日程與點名)
+// 標註：目前最好的版本 (Best Stable Version)
+const CURRENT_VERSION = "4.8 (Best)";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -390,7 +392,7 @@ export default function App() {
     return stats;
   }, [rankedStudents]);
 
-  // 隊員過濾邏輯
+  // 隊員過濾邏輯：新增「年份」過濾
   const filteredStudents = useMemo(() => {
     return rankedStudents.filter(s => {
       const matchSearch = s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
@@ -834,6 +836,11 @@ export default function App() {
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
   };
 
+  const deleteItemFromCollection = async (collectionName, id) => {
+    if (role !== 'admin') return;
+    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
+  };
+
   const todaySchedule = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return schedules.find(s => s.date === today);
@@ -850,6 +857,14 @@ export default function App() {
       : schedules.filter(s => s.trainingClass === selectedClassFilter);
     return filtered.sort((a,b) => a.date.localeCompare(b.date));
   }, [schedules, selectedClassFilter]);
+
+  const filteredStudents = useMemo(() => {
+    return rankedStudents.filter(s => {
+      const matchSearch = s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
+      const matchYear = selectedYearFilter === 'ALL' || (s.dob && s.dob.startsWith(selectedYearFilter)) || (selectedYearFilter === '未知' && !s.dob);
+      return matchSearch && matchYear;
+    });
+  }, [rankedStudents, searchTerm, selectedYearFilter]);
 
   const studentsInSelectedAttendanceClass = useMemo(() => {
     const sorted = [...students].sort((a,b) => a.class.localeCompare(b.class));
@@ -1138,6 +1153,72 @@ export default function App() {
 
         <div className="p-10 max-w-7xl mx-auto pb-40">
           
+          {/* [Fix 5.0] 比賽資訊與公告 (Competitions) - 放大版面 + 移除下載中心 */}
+          {activeTab === 'competitions' && (
+             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
+                {/* 使用單欄全寬設計 */}
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                   <div className="absolute -right-10 -top-10 text-slate-50 rotate-12"><Megaphone size={200}/></div>
+                   <div className="flex justify-between items-center mb-16 relative z-10">
+                      <div>
+                        <h3 className="text-4xl font-black">最新比賽與公告</h3>
+                        <p className="text-slate-400 text-lg mt-2">追蹤校隊最新動態與賽程詳情</p>
+                      </div>
+                      {role === 'admin' && (
+                        <div className="flex gap-2">
+                          <button onClick={generateCompetitionRoster} className="p-6 bg-emerald-500 text-white rounded-3xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center gap-3" title="生成推薦名單">
+                            <ListChecks size={28}/>
+                            <span className="text-sm font-black hidden md:block">推薦名單</span>
+                          </button>
+                          <button onClick={()=>{
+                            const title = prompt('公告標題');
+                            const date = prompt('發佈日期 (YYYY-MM-DD)');
+                            const url = prompt('相關連結 (如報名表 Google Drive / 官網網址) - 可選:');
+                            if(title && date) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'competitions'), { title, date, url: url || '', createdAt: serverTimestamp() });
+                          }} className="p-6 bg-blue-600 text-white rounded-3xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
+                            <Plus size={28}/>
+                          </button>
+                        </div>
+                      )}
+                   </div>
+                   <div className="space-y-8 relative z-10">
+                      {competitions.length === 0 && (
+                        <div className="text-center py-32 bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-200">
+                          <p className="text-slate-300 font-black text-xl">目前暫無公告發佈</p>
+                        </div>
+                      )}
+                      {competitions.sort((a,b)=>b.createdAt?.seconds - a.createdAt?.seconds).map(c => (
+                        <div key={c.id} className="p-12 bg-white rounded-[3.5rem] border border-slate-200 shadow-md hover:shadow-2xl hover:scale-[1.01] transition-all group flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+                           <div className="flex gap-8 items-center flex-1">
+                             <div className="w-24 h-24 bg-blue-50 rounded-[2.5rem] flex items-center justify-center text-blue-600 shadow-inner group-hover:bg-blue-600 group-hover:text-white transition-all duration-500">
+                               <TrophyIcon size={40}/>
+                             </div>
+                             <div>
+                               <p className="font-black text-3xl text-slate-800 mb-2 leading-tight">{c.title}</p>
+                               <div className="flex items-center gap-3 text-slate-400 text-sm font-black uppercase tracking-widest mt-1">
+                                 <CalendarIcon size={16}/> {c.date}
+                               </div>
+                             </div>
+                           </div>
+                           <div className="flex items-center gap-4 w-full md:w-auto mt-4 md:mt-0">
+                             <button 
+                                onClick={() => {
+                                    if (c.url) window.open(c.url, '_blank');
+                                    else alert('此公告暫無詳細連結');
+                                }}
+                                className={`flex-1 md:flex-none px-10 py-5 rounded-2xl text-base font-black transition-all flex items-center justify-center gap-3 ${c.url ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-xl shadow-blue-200' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                             >
+                                <ExternalLink size={20}/> {c.url ? "查看詳情 / 報名" : "暫無詳情"}
+                             </button>
+                             {role === 'admin' && <button onClick={()=>deleteItem('competitions', c.id)} className="p-5 text-slate-300 hover:text-red-500 bg-slate-50 rounded-2xl hover:bg-red-50 transition-all"><Trash2 size={24}/></button>}
+                           </div>
+                        </div>
+                      ))}
+                   </div>
+                </div>
+             </div>
+          )}
+
           {/* 1. 積分排行 */}
           {activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -1865,214 +1946,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 4. 比賽資訊與公告 */}
-          {activeTab === 'competitions' && (
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 animate-in fade-in duration-500 font-bold">
-                <div className="lg:col-span-2 space-y-8">
-                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
-                      <div className="absolute -right-10 -top-10 text-slate-50 rotate-12"><Megaphone size={120}/></div>
-                      <div className="flex justify-between items-center mb-10 relative z-10">
-                         <div>
-                           <h3 className="text-3xl font-black">最新比賽與公告</h3>
-                           <p className="text-slate-400 text-xs mt-1">追蹤校隊最新動態與賽程詳情</p>
-                         </div>
-                         {role === 'admin' && (
-                           <div className="flex gap-2">
-                             <button onClick={generateCompetitionRoster} className="p-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center gap-2" title="生成推薦名單">
-                               <ListChecks size={24}/>
-                               <span className="text-xs font-black">推薦名單</span>
-                             </button>
-                             <button onClick={()=>{
-                               const title = prompt('公告標題');
-                               const date = prompt('比賽日期 (YYYY-MM-DD)');
-                               const url = prompt('相關連結 (如報名表 Google Drive / 官網網址) - 可選:');
-                               if(title && date) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'competitions'), { title, date, url: url || '', createdAt: serverTimestamp() });
-                             }} className="p-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
-                               <Plus size={24}/>
-                             </button>
-                           </div>
-                         )}
-                      </div>
-                      <div className="space-y-4 relative z-10">
-                         {competitions.length === 0 && (
-                           <div className="text-center py-20 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
-                             <p className="text-slate-300 font-black">目前暫無公告發佈</p>
-                           </div>
-                         )}
-                         {competitions.sort((a,b)=>b.createdAt?.seconds - a.createdAt?.seconds).map(c => (
-                           <div key={c.id} className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-white hover:shadow-lg hover:shadow-slate-100 transition-all group">
-                              <div className="flex gap-6 items-center flex-1">
-                                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm group-hover:scale-110 transition-all">
-                                  <TrophyIcon size={24}/>
-                                </div>
-                                <div>
-                                  <p className="font-black text-xl text-slate-800">{c.title}</p>
-                                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">
-                                    <CalendarIcon size={12}/> {c.date}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-3 w-full md:w-auto">
-                                <button 
-                                  onClick={() => {
-                                      if (c.url) window.open(c.url, '_blank');
-                                      else alert('此公告暫無詳細連結');
-                                  }}
-                                  className={`flex-1 md:flex-none px-6 py-3 border rounded-xl text-xs font-black transition-all flex items-center gap-2 ${c.url ? 'bg-blue-600 text-white border-transparent hover:bg-blue-700' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`}
-                                >
-                                   <ExternalLink size={14}/> 查看詳情
-                                </button>
-                                {role === 'admin' && <button onClick={()=>deleteItem('competitions', c.id)} className="p-3 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>}
-                              </div>
-                           </div>
-                         ))}
-                      </div>
-                   </div>
-                </div>
-             </div>
-          )}
-
-           {/* [Fix 2.6] 精彩花絮頁面 */}
-           {activeTab === 'gallery' && (
-            <div className="space-y-10 animate-in fade-in duration-500 font-bold">
-               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-6">
-                    {currentAlbum ? (
-                        <button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all">
-                            <ArrowLeft size={24}/>
-                        </button>
-                    ) : (
-                        <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>
-                    )}
-                    
-                    <div>
-                      <h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3>
-                      <p className="text-xs text-slate-400 mt-1">
-                          {currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {role === 'admin' && (
-                     <div className="flex items-center gap-3">
-                         {isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}
-                         <button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50">
-                           <PlusCircle size={18}/> 新增相片/影片
-                         </button>
-                     </div>
-                  )}
-               </div>
-
-               {galleryItems.length === 0 ? (
-                 <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
-                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div>
-                    <p className="text-xl font-black text-slate-400">目前暫無花絮內容</p>
-                    <p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p>
-                 </div>
-               ) : (
-                 <>
-                    {!currentAlbum && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                             {galleryAlbums.map((album) => (
-                                 <div 
-                                    key={album.title} 
-                                    onClick={() => setCurrentAlbum(album.title)}
-                                    className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"
-                                 >
-                                     <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">
-                                         {album.cover ? (
-                                             album.type === 'video' ? (
-                                                <div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300">
-                                                    <Video size={48}/>
-                                                </div>
-                                             ) : (
-                                                <img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>
-                                             )
-                                         ) : (
-                                             <div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300">
-                                                 <Folder size={48}/>
-                                             </div>
-                                         )}
-                                         <div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">
-                                             {album.count} 項目
-                                         </div>
-                                     </div>
-                                     
-                                     <div className="px-2 pb-2">
-                                         <h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4>
-                                         <p className="text-xs text-slate-400 mt-1">
-                                             點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/>
-                                         </p>
-                                     </div>
-                                 </div>
-                             ))}
-                        </div>
-                    )}
-
-                    {currentAlbum && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {galleryItems
-                                .filter(item => (item.title || "未分類") === currentAlbum)
-                                .sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0))
-                                .map(item => (
-                                <div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
-                                    <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">
-                                        {item.type === 'video' ? (
-                                        getYouTubeEmbedUrl(item.url) ? (
-                                            <iframe 
-                                                src={getYouTubeEmbedUrl(item.url)} 
-                                                className="w-full h-full" 
-                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                                allowFullScreen
-                                                title={item.title}
-                                            />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-slate-400">
-                                                <Video size={48}/>
-                                                <span className="ml-2 text-xs">影片連結無效</span>
-                                            </div>
-                                        )
-                                        ) : (
-                                        <img 
-                                            src={item.url} 
-                                            alt={item.title} 
-                                            onClick={() => setViewingImage(item)} 
-                                            className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"
-                                        />
-                                        )}
-                                        
-                                        <div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">
-                                        {item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}
-                                        {item.type === 'video' ? 'Video' : 'Photo'}
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="px-2">
-                                        <p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p>
-                                    </div>
-
-                                    {role === 'admin' && (
-                                        <div className="mt-6 pt-4 border-t border-slate-50 flex justify-end">
-                                            <button 
-                                            onClick={() => {
-                                                if(confirm('確定要刪除此項目嗎？')) deleteItem('gallery', item.id);
-                                            }}
-                                            className="text-slate-300 hover:text-red-500 p-2"
-                                            >
-                                            <Trash2 size={18}/>
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                 </>
-               )}
-            </div>
-           )}
-
-           {/* 獎項成就 (Awards) */}
+          {/* [Fix 5.0] 獎項成就 (Awards) - 縮小版面、三列顯示、新增照片與班別顯示 */}
            {activeTab === 'awards' && (
              <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -2098,38 +1972,61 @@ export default function App() {
                      <p className="text-sm text-slate-300 mt-2">請教練新增比賽獲獎紀錄</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                     {awards.sort((a,b) => b.date.localeCompare(a.date)).map((award) => (
-                        <div key={award.id} className="relative group bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:border-yellow-200 transition-all flex flex-col md:flex-row items-center gap-6">
-                           <div className="w-16 h-16 bg-gradient-to-br from-yellow-100 to-orange-100 text-yellow-600 rounded-2xl flex items-center justify-center shadow-inner flex-shrink-0">
-                             <Medal size={32}/>
-                           </div>
-                           <div className="flex-1 text-center md:text-left">
-                              <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 mb-1">
-                                <h4 className="text-xl font-black text-slate-800">{award.title}</h4>
-                                <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[10px] font-black w-fit mx-auto md:mx-0">{award.rank}</span>
-                              </div>
-                              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-6 text-sm text-slate-500">
-                                 <span className="flex items-center justify-center gap-1"><User size={14}/> {award.studentName}</span>
-                                 <span className="flex items-center justify-center gap-1"><CalendarIcon size={14}/> {award.date}</span>
-                              </div>
-                              {award.description && (
-                                <p className="text-xs text-slate-400 mt-2 font-medium bg-slate-50 p-2 rounded-lg inline-block">“{award.description}”</p>
-                              )}
-                           </div>
-                           
-                           {role === 'admin' && (
-                              <button 
-                                onClick={() => {
-                                   if(confirm(`確定要刪除 "${award.title}" 嗎？`)) deleteItem('awards', award.id);
-                                }}
-                                className="absolute top-6 right-6 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
-                              >
-                                <Trash2 size={18}/>
-                              </button>
-                           )}
-                        </div>
-                     ))}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                     {awards.sort((a,b) => b.date.localeCompare(a.date)).map((award) => {
+                        // [Fix 5.1] 自動比對學生班別
+                        const student = students.find(s => s.name === award.studentName);
+                        return (
+                          <div key={award.id} className="relative group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:scale-105 transition-all flex flex-col gap-4">
+                             {/* [Fix 5.0] 顯示獎項照片或預設圖 */}
+                             <div className="w-full aspect-[4/3] rounded-2xl bg-slate-50 overflow-hidden relative border border-slate-100">
+                                 {award.photoUrl ? (
+                                     <img src={award.photoUrl} alt="Award" className="w-full h-full object-cover" />
+                                 ) : (
+                                     <div className="w-full h-full flex items-center justify-center text-yellow-200/50">
+                                         <Trophy size={64}/>
+                                     </div>
+                                 )}
+                                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black text-slate-500 shadow-sm">
+                                     {award.date}
+                                 </div>
+                                 <div className="absolute bottom-3 right-3 bg-yellow-400 text-white px-4 py-1 rounded-full text-xs font-black shadow-lg shadow-yellow-100">
+                                     {award.rank}
+                                 </div>
+                             </div>
+
+                             <div className="px-1">
+                                 <h4 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight mb-2">{award.title}</h4>
+                                 <div className="flex items-center gap-2 text-slate-500 text-sm">
+                                    <User size={14} className="text-blue-500"/>
+                                    <span className="font-bold">{award.studentName}</span>
+                                    {/* [Fix 5.1] 顯示班別 */}
+                                    {student && (
+                                       <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-lg text-xs">
+                                         {student.class}
+                                       </span>
+                                    )}
+                                 </div>
+                                 {award.description && (
+                                   <p className="text-xs text-slate-400 mt-3 font-medium bg-slate-50 p-2 rounded-lg line-clamp-2">
+                                      {award.description}
+                                   </p>
+                                 )}
+                             </div>
+                             
+                             {role === 'admin' && (
+                                <button 
+                                  onClick={() => {
+                                     if(confirm(`確定要刪除 "${award.title}" 嗎？`)) deleteItem('awards', award.id);
+                                  }}
+                                  className="absolute top-4 right-4 p-2 bg-white/50 backdrop-blur text-slate-400 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100"
+                                >
+                                  <Trash2 size={16}/>
+                                </button>
+                             )}
+                          </div>
+                        );
+                     })}
                   </div>
                 )}
              </div>
