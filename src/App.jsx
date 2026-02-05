@@ -7,7 +7,7 @@ import {
   ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
-  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Zap, Key, Unlock
+  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Zap, Key
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -47,7 +47,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "4.9.1";
+// Version 4.8: 完整功能基礎
+// Version 5.2: [Current] 修復重複變數錯誤，移除能力頁，僅優化獎項頁(照片/班別)
+const CURRENT_VERSION = "5.2";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -77,10 +79,6 @@ export default function App() {
   const [viewingImage, setViewingImage] = useState(null);
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-
-  // 能力分析頁面狀態
-  const [abilityAccessInput, setAbilityAccessInput] = useState('');
-  const [unlockedAbility, setUnlockedAbility] = useState(false);
 
   // 對戰錄入狀態
   const [matchWinner, setMatchWinner] = useState('');
@@ -344,8 +342,6 @@ export default function App() {
     setCurrentUserInfo(null); 
     setShowLoginModal(true); 
     setSidebarOpen(false);
-    setUnlockedAbility(false);
-    setAbilityAccessInput('');
   };
 
   // --- 積分計算與排行邏輯 ---
@@ -396,7 +392,7 @@ export default function App() {
     return stats;
   }, [rankedStudents]);
 
-  // 隊員過濾邏輯：新增「年份」過濾 (Fixed: Removed duplicate declaration)
+  // 隊員過濾邏輯
   const filteredStudents = useMemo(() => {
     return rankedStudents.filter(s => {
       const matchSearch = s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
@@ -448,40 +444,27 @@ export default function App() {
                 dob: newDob,
                 lastUpdated: serverTimestamp()
             });
-        } catch (e) {
-            console.error("Update DOB failed", e);
-            alert("更新失敗");
-        }
+        } catch (e) { console.error("Update DOB failed", e); alert("更新失敗"); }
     }
   };
 
-  // [New in V4.9] 更新學生能力強弱與密碼
-  const handleUpdateAbility = async (student, field, currentValue) => {
-      const label = field === 'strength' ? '強項' : field === 'weakness' ? '弱項' : '專屬密碼';
-      const newValue = prompt(`請輸入 ${student.name} 的${label}:`, currentValue || "");
-      
-      if (newValue !== null) {
-          try {
-              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
-                  [field]: newValue,
-                  lastUpdated: serverTimestamp()
-              });
-              // alert("更新成功！"); // Optional feedback
-          } catch (e) { 
-              console.error(e); 
-              alert("更新失敗"); 
-          }
-      }
-  };
-
-  // [New in V4.9] 學生驗證能力頁面密碼
-  const handleVerifyAbilityAccess = () => {
-      if (!currentUserInfo) return;
-      if (abilityAccessInput && abilityAccessInput === currentUserInfo.accessCode) {
-          setUnlockedAbility(true);
-      } else {
-          alert("密碼錯誤，請重新輸入。如忘記密碼請向教練查詢。");
-      }
+  // [Fix 5.2] 教練設定學生資料 (包含密碼)
+  const handleUpdateStudentData = async (student, field) => {
+    let promptMsg = "";
+    let currentVal = "";
+    
+    if (field === 'accessCode') { promptMsg = `請設定 ${student.name} 的「專屬查閱密碼」:`; currentVal = student.accessCode || ""; }
+    
+    const newVal = prompt(promptMsg, currentVal);
+    if (newVal !== null) {
+      try {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
+            [field]: newVal,
+            lastUpdated: serverTimestamp()
+        });
+        alert("設定成功！");
+      } catch (e) { console.error(e); alert("更新失敗"); }
+    }
   };
 
   // 校外賽計分邏輯
@@ -677,7 +660,7 @@ export default function App() {
     link.click();
   };
 
-  // [New in V4.9] 批量匯入能力與密碼 CSV
+  // [New in V4.9] 批量匯入能力與密碼 CSV (保留供教練使用)
   const handleCSVImportAbilities = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -692,7 +675,6 @@ export default function App() {
         const cols = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
         const [name, cls, no, strength, weakness, accessCode] = cols;
         
-        // 尋找匹配的學生 (Name + Class + ClassNo)
         const targetStudent = students.find(s => 
             s.name === name && 
             s.class === (cls || '').toUpperCase() && 
@@ -711,10 +693,10 @@ export default function App() {
         }
       });
       await batch.commit();
-      alert(`成功更新 ${updateCount} 位學生的能力資料與密碼！`);
+      alert(`成功更新 ${updateCount} 位學生的資料！`);
     } catch (err) { 
         console.error(err);
-        alert('匯入失敗，請檢查 CSV 格式：\n姓名,班別,班號,強項,弱項,密碼'); 
+        alert('匯入失敗，請檢查 CSV 格式'); 
     }
     setIsUpdating(false);
     e.target.value = null;
@@ -949,12 +931,9 @@ export default function App() {
     if(type === 'schedule') {
       csv = "班別名稱,日期(YYYY-MM-DD),地點,教練,備註\n初級班A,2024-03-20,學校壁球場,王教練,第一課\n校隊訓練,2024-03-25,歌和老街,李教練,專項訓練";
       filename = "訓練日程匯入範本.csv";
-    } else if (type === 'students') {
+    } else {
       csv = "姓名,班別,班號,章別(無/銅章/銀章/金章/白金章),初始積分,壁球班別\n陳小明,6A,01,銅章,120,校隊訓練班\n張小華,5C,12,無,100,壁球中級訓練班";
       filename = "學員匯入範本.csv";
-    } else if (type === 'abilities') {
-        csv = "姓名,班別,班號,強項,弱項,密碼\n陳小明,6A,01,正手擊球,反手截擊,123456\n張小華,5C,12,體能耐力,發球,password";
-        filename = "能力與密碼匯入範本.csv";
     }
     const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement("a");
@@ -987,7 +966,7 @@ export default function App() {
     );
   };
 
-  // 新增獎項功能
+  // [Fix 5.0] 新增獎項功能 - 包含圖片連結
   const handleAddAward = async () => {
     const title = prompt("獎項名稱 (例如：全港學界壁球賽 冠軍):");
     if (!title) return;
@@ -995,6 +974,7 @@ export default function App() {
     if (!studentName) return;
     const date = prompt("獲獎日期 (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
     const rank = prompt("名次 (例如：冠軍, 亞軍, 季軍, 優異):");
+    const photoUrl = prompt("得獎照片網址 (可選，空白則使用預設圖):"); 
     const desc = prompt("備註 (可選):") || "";
 
     try {
@@ -1003,6 +983,7 @@ export default function App() {
             studentName,
             date,
             rank,
+            photoUrl: photoUrl || "", 
             description: desc,
             timestamp: serverTimestamp()
         });
@@ -1122,12 +1103,6 @@ export default function App() {
             <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Trophy size={20}/> 積分排行
             </button>
-
-            {/* [New in V4.9] 新增「能力分析」按鈕 */}
-            <button onClick={() => {setActiveTab('ability'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'ability' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-              <Zap size={20}/> 能力分析
-            </button>
-
             <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Swords size={20}/> 內部聯賽
             </button>
@@ -1204,8 +1179,6 @@ export default function App() {
                 {activeTab === 'awards' && "🏆 獎項成就"}
                 {/* [Fix 3.9] 新增標題 */}
                 {activeTab === 'league' && "⚔️ 內部聯賽"}
-                {/* [Fix 4.9] 新增標題 */}
-                {activeTab === 'ability' && "📊 能力分析"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
@@ -1284,7 +1257,7 @@ export default function App() {
                                     if (c.url) window.open(c.url, '_blank');
                                     else alert('此公告暫無詳細連結');
                                 }}
-                                className={`flex-1 md:flex-none px-6 py-3 border border-slate-200 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${c.url ? 'bg-blue-600 text-white border-transparent hover:bg-blue-700' : 'bg-white text-slate-400 hover:text-slate-600'}`}
+                                className={`flex-1 md:flex-none px-6 py-3 border rounded-xl text-xs font-black transition-all flex items-center gap-2 ${c.url ? 'bg-blue-600 text-white border-transparent hover:bg-blue-700' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`}
                              >
                                 <ExternalLink size={14}/> 查看詳情
                              </button>
@@ -1297,157 +1270,6 @@ export default function App() {
              </div>
           )}
 
-          {/* [Fix 4.9] 能力分析頁面 (Ability) */}
-          {activeTab === 'ability' && (
-             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
-                 {/* 模式 A: 教練管理模式 */}
-                 {role === 'admin' ? (
-                     <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
-                         <div className="flex items-center gap-6 mb-10">
-                             <div className="p-4 bg-purple-100 text-purple-600 rounded-2xl"><Zap size={32}/></div>
-                             <div>
-                                <h3 className="text-3xl font-black">能力分析管理</h3>
-                                <p className="text-slate-400 mt-1">設定每位學生的強弱項及專屬密碼</p>
-                             </div>
-                         </div>
-                         
-                         <div className="grid grid-cols-1 gap-6">
-                            {students.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
-                                <div key={s.id} className="p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex flex-col lg:flex-row items-start lg:items-center gap-6">
-                                    <div className="flex items-center gap-4 min-w-[200px]">
-                                        <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center font-black text-slate-400 border border-slate-200">
-                                            {s.name[0]}
-                                        </div>
-                                        <div>
-                                            <p className="text-lg font-black text-slate-800">{s.name}</p>
-                                            <p className="text-xs text-slate-400 uppercase tracking-widest">{s.class} {s.classNo}</p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-                                        <div 
-                                          onClick={() => handleUpdateAbility(s, 'strength', s.strength)}
-                                          className="p-4 bg-white rounded-2xl border border-emerald-100 cursor-pointer hover:border-emerald-400 transition-all"
-                                        >
-                                            <p className="text-[10px] text-emerald-500 uppercase tracking-widest mb-1">強項 Strength</p>
-                                            <p className="text-sm font-bold text-slate-700 truncate">{s.strength || "未設定"}</p>
-                                        </div>
-                                        <div 
-                                          onClick={() => handleUpdateAbility(s, 'weakness', s.weakness)}
-                                          className="p-4 bg-white rounded-2xl border border-rose-100 cursor-pointer hover:border-rose-400 transition-all"
-                                        >
-                                            <p className="text-[10px] text-rose-500 uppercase tracking-widest mb-1">弱項 Weakness</p>
-                                            <p className="text-sm font-bold text-slate-700 truncate">{s.weakness || "未設定"}</p>
-                                        </div>
-                                        <div 
-                                          onClick={() => handleUpdateAbility(s, 'accessCode', s.accessCode)}
-                                          className="p-4 bg-white rounded-2xl border border-indigo-100 cursor-pointer hover:border-indigo-400 transition-all flex items-center justify-between"
-                                        >
-                                            <div>
-                                                <p className="text-[10px] text-indigo-500 uppercase tracking-widest mb-1">專屬密碼 Password</p>
-                                                <p className="text-sm font-bold text-slate-700 font-mono">{s.accessCode || "未設定"}</p>
-                                            </div>
-                                            <Key size={16} className="text-indigo-300"/>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                         </div>
-                     </div>
-                 ) : (
-                 /* 模式 B: 學生查看模式 (需密碼) */
-                     <div className="max-w-2xl mx-auto">
-                        {!unlockedAbility ? (
-                            <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-xl text-center">
-                                <div className="w-24 h-24 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-8">
-                                    <Lock size={48}/>
-                                </div>
-                                <h3 className="text-3xl font-black text-slate-800 mb-2">能力分析報告</h3>
-                                <p className="text-slate-400 mb-10">請輸入教練分配給你的專屬密碼以查看報告</p>
-                                
-                                <div className="relative max-w-xs mx-auto mb-6">
-                                    <input 
-                                        type="password" 
-                                        className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-blue-500 focus:bg-white rounded-2xl outline-none text-center text-xl font-black tracking-widest transition-all"
-                                        placeholder="輸入密碼"
-                                        value={abilityAccessInput}
-                                        onChange={(e) => setAbilityAccessInput(e.target.value)}
-                                    />
-                                </div>
-                                <button 
-                                    onClick={handleVerifyAbilityAccess}
-                                    className="w-full max-w-xs bg-blue-600 text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all"
-                                >
-                                    解鎖報告
-                                </button>
-                            </div>
-                        ) : (
-                            /* 解鎖後顯示內容 */
-                            <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-xl relative overflow-hidden animate-in zoom-in-95 duration-500">
-                                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 via-blue-500 to-rose-500"></div>
-                                
-                                <div className="text-center mb-10">
-                                    <div className="inline-block p-4 bg-blue-50 text-blue-600 rounded-3xl mb-4">
-                                        <Zap size={40}/>
-                                    </div>
-                                    <h3 className="text-3xl font-black text-slate-800">{currentUserInfo?.name} 的能力分析</h3>
-                                    <p className="text-slate-400 font-bold mt-2">最後更新: {new Date().toLocaleDateString()}</p>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-                                    <div className="bg-emerald-50 p-8 rounded-[3rem] border border-emerald-100">
-                                        <div className="flex items-center gap-4 mb-4 text-emerald-600">
-                                            <TrendingUp size={24}/>
-                                            <span className="font-black text-lg uppercase tracking-widest">強項 Strength</span>
-                                        </div>
-                                        <p className="text-emerald-800 font-bold leading-relaxed text-lg">
-                                            {currentUserInfo?.strength || "尚無資料，請繼續努力訓練！"}
-                                        </p>
-                                    </div>
-
-                                    <div className="bg-rose-50 p-8 rounded-[3rem] border border-rose-100">
-                                        <div className="flex items-center gap-4 mb-4 text-rose-600">
-                                            <Target size={24}/>
-                                            <span className="font-black text-lg uppercase tracking-widest">弱項 Weakness</span>
-                                        </div>
-                                        <p className="text-rose-800 font-bold leading-relaxed text-lg">
-                                            {currentUserInfo?.weakness || "尚無資料，保持進步！"}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* 視覺化雷達圖 (模擬) */}
-                                <div className="bg-slate-900 p-8 rounded-[3rem] text-white">
-                                    <h4 className="font-black text-center mb-6 uppercase tracking-widest text-slate-500">綜合能力雷達</h4>
-                                    <div className="space-y-4">
-                                        {['技術 Technical', '體能 Physical', '戰術 Tactical', '心理 Mental', '速度 Speed'].map((skill, i) => (
-                                            <div key={skill} className="flex items-center gap-4">
-                                                <span className="text-xs font-bold w-24 text-right text-slate-400">{skill}</span>
-                                                <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
-                                                    <div 
-                                                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full" 
-                                                        style={{width: `${Math.random() * 40 + 50}%`}} // 這裡目前是隨機展示效果，未來可連結數據
-                                                    ></div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <p className="text-center text-[10px] text-slate-600 mt-6">*雷達圖數據由教練綜合評估生成</p>
-                                </div>
-
-                                <div className="mt-8 text-center">
-                                    <button onClick={() => setUnlockedAbility(false)} className="text-slate-400 font-bold hover:text-blue-600 transition-all flex items-center justify-center gap-2 w-full">
-                                        <Lock size={14}/> 鎖定報告
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                     </div>
-                 )}
-             </div>
-           )}
-
-          {/* ... (Other Tabs: Rankings, League, Gallery, Awards, Schedules, Students, Attendance, Financial, Settings) ... */}
           {/* 1. 積分排行 */}
           {activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -1492,7 +1314,7 @@ export default function App() {
                           <div className={`absolute inset-0 rounded-[3rem] border-4 ${gradientClass} ${shadowClass} overflow-hidden`}>
                                <div className="absolute -right-4 -top-4 opacity-10 rotate-12">
                                   <TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/>
-                                </div>
+                               </div>
                                <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none">
                                   <span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span>
                                </div>
@@ -1905,15 +1727,15 @@ export default function App() {
 
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
                         <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
-                           {/* [Fix 4.9] 新增「能力設定」按鈕 */}
+                           {/* [Fix 5.2] 保留教練設定密碼功能 (Key Button) */}
                            <button 
-                             onClick={() => handleUpdateAbility(s, 'strength', s.strength)}
+                             onClick={() => handleUpdateStudentData(s, 'accessCode')}
                              className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all"
-                             title="設定能力與密碼"
+                             title="設定專屬密碼"
                            >
-                              <Zap size={18}/>
+                              <Key size={18}/>
                            </button>
-                           {/* [Fix 4.7] 修改設定按鈕為生日錄入 */}
+                           {/* [Fix 4.7] 生日錄入按鈕 */}
                            <button 
                              onClick={() => handleUpdateDOB(s)}
                              className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all"
@@ -2043,7 +1865,7 @@ export default function App() {
             </div>
           )}
 
-          {/* 3. 快速點名 (過濾多班別學員不重複) */}
+          {/* [Restore] 3. 快速點名 (過濾多班別學員不重複) */}
           {activeTab === 'attendance' && role === 'admin' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
                <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}>
@@ -2182,6 +2004,232 @@ export default function App() {
             </div>
           )}
 
+          {/* [Fix 2.6] 精彩花絮頁面 */}
+           {activeTab === 'gallery' && (
+            <div className="space-y-10 animate-in fade-in duration-500 font-bold">
+               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                  <div className="flex items-center gap-6">
+                    {currentAlbum ? (
+                        <button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all">
+                            <ArrowLeft size={24}/>
+                        </button>
+                    ) : (
+                        <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>
+                    )}
+                    
+                    <div>
+                      <h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                          {currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {role === 'admin' && (
+                     <div className="flex items-center gap-3">
+                         {isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}
+                         <button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50">
+                           <PlusCircle size={18}/> 新增相片/影片
+                         </button>
+                     </div>
+                  )}
+               </div>
+
+               {galleryItems.length === 0 ? (
+                 <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
+                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div>
+                    <p className="text-xl font-black text-slate-400">目前暫無花絮內容</p>
+                    <p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p>
+                 </div>
+               ) : (
+                 <>
+                    {!currentAlbum && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                             {galleryAlbums.map((album) => (
+                                 <div 
+                                    key={album.title} 
+                                    onClick={() => setCurrentAlbum(album.title)}
+                                    className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"
+                                 >
+                                     <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">
+                                         {album.cover ? (
+                                             album.type === 'video' ? (
+                                                <div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300">
+                                                    <Video size={48}/>
+                                                </div>
+                                             ) : (
+                                                <img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>
+                                             )
+                                         ) : (
+                                             <div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300">
+                                                 <Folder size={48}/>
+                                             </div>
+                                         )}
+                                         <div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">
+                                             {album.count} 項目
+                                         </div>
+                                     </div>
+                                     
+                                     <div className="px-2 pb-2">
+                                         <h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4>
+                                         <p className="text-xs text-slate-400 mt-1">
+                                             點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/>
+                                         </p>
+                                     </div>
+                                 </div>
+                             ))}
+                        </div>
+                    )}
+
+                    {currentAlbum && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {galleryItems
+                                .filter(item => (item.title || "未分類") === currentAlbum)
+                                .sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0))
+                                .map(item => (
+                                <div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
+                                    <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">
+                                        {item.type === 'video' ? (
+                                        getYouTubeEmbedUrl(item.url) ? (
+                                            <iframe 
+                                                src={getYouTubeEmbedUrl(item.url)} 
+                                                className="w-full h-full" 
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                                allowFullScreen
+                                                title={item.title}
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                                <Video size={48}/>
+                                                <span className="ml-2 text-xs">影片連結無效</span>
+                                            </div>
+                                        )
+                                        ) : (
+                                        <img 
+                                            src={item.url} 
+                                            alt={item.title} 
+                                            onClick={() => setViewingImage(item)} 
+                                            className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"
+                                        />
+                                        )}
+                                        
+                                        <div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">
+                                        {item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}
+                                        {item.type === 'video' ? 'Video' : 'Photo'}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="px-2">
+                                        <p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p>
+                                    </div>
+
+                                    {role === 'admin' && (
+                                        <div className="mt-6 pt-4 border-t border-slate-50 flex justify-end">
+                                            <button 
+                                            onClick={() => {
+                                                if(confirm('確定要刪除此項目嗎？')) deleteItem('gallery', item.id);
+                                            }}
+                                            className="text-slate-300 hover:text-red-500 p-2"
+                                            >
+                                            <Trash2 size={18}/>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                 </>
+               )}
+            </div>
+           )}
+
+           {/* [Fix 5.1] 獎項成就 (Awards) - 新增照片與班別顯示 */}
+           {activeTab === 'awards' && (
+             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
+                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                   <div className="flex items-center gap-6">
+                     <div className="p-4 bg-yellow-100 text-yellow-600 rounded-2xl"><Award/></div>
+                     <div>
+                       <h3 className="text-xl font-black">獎項成就 (Hall of Fame)</h3>
+                       <p className="text-xs text-slate-400 mt-1">紀錄校隊輝煌戰績</p>
+                     </div>
+                   </div>
+                   
+                   {role === 'admin' && (
+                      <button onClick={handleAddAward} className="bg-yellow-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black text-sm">
+                        <PlusCircle size={18}/> 新增獎項
+                      </button>
+                   )}
+                </div>
+ 
+                {awards.length === 0 ? (
+                  <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
+                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><Trophy size={40}/></div>
+                     <p className="text-xl font-black text-slate-400">目前暫無獎項紀錄</p>
+                     <p className="text-sm text-slate-300 mt-2">請教練新增比賽獲獎紀錄</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                     {awards.sort((a,b) => b.date.localeCompare(a.date)).map((award) => {
+                        // [Fix 5.1] 自動比對學生班別
+                        const student = students.find(s => s.name === award.studentName);
+                        return (
+                          <div key={award.id} className="relative group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:scale-105 transition-all flex flex-col gap-4">
+                             {/* [Fix 5.1] 顯示獎項照片或預設圖 */}
+                             <div className="w-full aspect-[4/3] rounded-2xl bg-slate-50 overflow-hidden relative border border-slate-100">
+                                 {award.photoUrl ? (
+                                     <img src={award.photoUrl} alt="Award" className="w-full h-full object-cover" />
+                                 ) : (
+                                     <div className="w-full h-full flex items-center justify-center text-yellow-200/50">
+                                         <Trophy size={64}/>
+                                     </div>
+                                 )}
+                                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black text-slate-500 shadow-sm">
+                                     {award.date}
+                                 </div>
+                                 <div className="absolute bottom-3 right-3 bg-yellow-400 text-white px-4 py-1 rounded-full text-xs font-black shadow-lg shadow-yellow-100">
+                                     {award.rank}
+                                 </div>
+                             </div>
+
+                             <div className="px-1">
+                                 <h4 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight mb-2">{award.title}</h4>
+                                 <div className="flex items-center gap-2 text-slate-500 text-sm">
+                                    <User size={14} className="text-blue-500"/>
+                                    <span className="font-bold">{award.studentName}</span>
+                                    {/* [Fix 5.1] 顯示班別 */}
+                                    {student && (
+                                       <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-lg text-xs">
+                                         {student.class}
+                                       </span>
+                                    )}
+                                 </div>
+                                 {award.description && (
+                                   <p className="text-xs text-slate-400 mt-3 font-medium bg-slate-50 p-2 rounded-lg line-clamp-2">
+                                      {award.description}
+                                   </p>
+                                 )}
+                             </div>
+                             
+                             {role === 'admin' && (
+                                <button 
+                                  onClick={() => {
+                                     if(confirm(`確定要刪除 "${award.title}" 嗎？`)) deleteItem('awards', award.id);
+                                  }}
+                                  className="absolute top-4 right-4 p-2 bg-white/50 backdrop-blur text-slate-400 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100"
+                                >
+                                  <Trash2 size={16}/>
+                                </button>
+                             )}
+                          </div>
+                        );
+                     })}
+                  </div>
+                )}
+             </div>
+            )}
+
           {activeTab === 'financial' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
                 <div className="flex justify-end">
@@ -2307,7 +2355,6 @@ export default function App() {
                         </select>
                       </div>
 
-                      {/* [Fix 2.7] 新增：校徽圖片上傳區域 */}
                       <div className="space-y-3">
                         <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">學校校徽 (School Logo)</label>
                         <div className="flex flex-col items-center gap-4 p-8 border-2 border-dashed border-slate-200 rounded-[2rem] bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer relative" onClick={() => document.getElementById('logoInput').click()}>
@@ -2352,20 +2399,7 @@ export default function App() {
                         <p className="text-[10px] text-slate-400 font-bold px-2">建議使用背景透明的 PNG 圖片，檔案大小請小於 1MB 以確保讀取速度。</p>
                       </div>
 
-                      {/* [Fix 4.9] 新增：匯入能力與密碼 CSV */}
-                      <div className="space-y-3 pt-4 border-t border-slate-100">
-                        <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">批量更新資料 (CSV)</label>
-                        <label className="bg-indigo-500 text-white px-8 py-4 rounded-2xl flex items-center justify-center gap-3 cursor-pointer hover:bg-indigo-600 shadow-xl shadow-indigo-100 transition-all font-black text-sm active:scale-95">
-                           <Upload size={18}/> 匯入能力與密碼 (CSV)
-                           <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportAbilities}/>
-                        </label>
-                        <div className="flex gap-2 justify-center">
-                            <button onClick={() => downloadTemplate('abilities')} className="text-[10px] text-indigo-500 font-bold hover:underline">下載範本 (姓名,班別,班號,強項,弱項,密碼)</button>
-                        </div>
-                      </div>
-
                       <div className="pt-8 border-t border-slate-100 space-y-4">
-                        {/* [Fix 3.9] 賽季重置按鈕 */}
                         <div className="p-6 bg-orange-50 rounded-[2.5rem] border border-orange-100 mb-6">
                            <h4 className="text-orange-600 font-black mb-2 flex items-center gap-2"><History/> 新賽季重置</h4>
                            <p className="text-xs text-slate-400 mb-4">將所有學員積分重置為該章別的起步底分 (金:200, 銀:100...)。</p>
