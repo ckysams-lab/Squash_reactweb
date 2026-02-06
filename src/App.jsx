@@ -19,8 +19,8 @@ import {
   signInWithCustomToken, 
   signInAnonymously, 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, // V5.4 新增
-  sendPasswordResetEmail, // V5.4 新增
+  createUserWithEmailAndPassword, // V5.4 Added
+  sendPasswordResetEmail, // V5.4 Added
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
@@ -56,8 +56,8 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 ---
-// Version 5.3: Firebase Auth 登入
-// Version 5.4: [Current] 新增教練直接幫學生設定 Auth 帳號密碼的功能
+// Version 5.3: Firebase Auth Login Base
+// Version 5.4: [Current] Add Admin functionality to create/manage student auth accounts
 const CURRENT_VERSION = "5.4";
 
 export default function App() {
@@ -248,7 +248,7 @@ export default function App() {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-          // V5.3: 初始狀態下，如果不登入，保持未登入狀態
+          // V5.3: 初始狀態下，如果不登入，保持未登入狀態 (不強制匿名)
         }
       } catch (err) { 
         console.error("Auth Error:", err);
@@ -270,6 +270,7 @@ export default function App() {
 
   // --- Firestore 資料即時監聽 ---
   useEffect(() => {
+    // V5.3: 必須登入後才監聽數據
     if (!user) return;
     
     try {
@@ -339,7 +340,7 @@ export default function App() {
     }
   }, [user]);
 
-  // --- 登入邏輯 ---
+  // --- 登入邏輯 (V5.3 Auth) ---
   const handleLogin = async () => {
     if (!loginEmail || !loginPassword) {
       alert('請輸入電郵和密碼');
@@ -432,7 +433,7 @@ export default function App() {
     });
   }, [students]);
 
-  // 統計各出生年份的人數 (Ladder Stats)
+  // 統計各出生年份的人數
   const birthYearStats = useMemo(() => {
     const stats = {};
     if (Array.isArray(rankedStudents)) {
@@ -508,53 +509,50 @@ export default function App() {
     }
   };
 
-  // [Fix 5.4] 帳號管理精靈 (綁定 Email / 建立帳號 / 重置密碼)
+  // [New in V5.4] 帳號管理精靈
   const handleManageStudentAuth = async (student) => {
     // 1. 確認/更新 Email
     const currentEmail = student.email || "";
-    const emailInput = prompt(`步驟 1/2: 請輸入 ${student.name} 的登入 Email:`, currentEmail);
+    const emailInput = prompt(`步驟 1/2: 請輸入 ${student.name} 的登入 Email (將更新至資料庫):`, currentEmail);
     
-    if (emailInput === null) return; // 取消
+    if (emailInput === null) return; 
     const email = emailInput.trim();
     if (!email) { alert("Email 不能為空"); return; }
 
-    // 更新資料庫中的 Email
+    // 更新資料庫
     if (email !== currentEmail) {
         try {
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
                 email: email,
                 lastUpdated: serverTimestamp()
             });
-        } catch(e) { console.error("Update email failed", e); alert("Email 更新失敗"); return; }
+        } catch(e) { console.error("Update email failed", e); alert("資料庫 Email 更新失敗"); return; }
     }
 
     // 2. 選擇操作
     const action = prompt(
-        `步驟 2/2: 為 ${email} 選擇操作 (輸入數字):\n\n` +
-        `1. 🆕 建立新帳號 (設定密碼)\n` +
+        `管理帳號: ${email}\n請選擇操作 (輸入數字):\n\n` +
+        `1. 🆕 建立新帳號 (設定初始密碼)\n` +
         `2. 📧 發送密碼重置信 (忘記密碼)\n` +
-        `3. ✅ 僅更新資料 (無其他操作)`
+        `3. ✅ 僅更新資料庫 (無其他操作)`
     );
 
     if (action === '1') {
-        const password = prompt("請設定初始密碼 (至少6位):");
+        const password = prompt("請設定初始密碼 (最少6位):");
         if (!password) return;
         
         try {
-            // 使用 Secondary App 技巧來建立使用者，避免登出當前教練
-            const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp"); // Unique name
+            // 使用 Secondary App 技巧，避免登出教練
+            const secondaryApp = initializeApp(firebaseConfig, "Secondary");
             const secondaryAuth = getAuth(secondaryApp);
-            
             await createUserWithEmailAndPassword(secondaryAuth, email, password);
-            await signOut(secondaryAuth); // 登出 secondary
-            // 這裡不需 deleteApp，讓它自然回收或保留無妨
-            
-            alert(`✅ 帳號建立成功！\n\nEmail: ${email}\n密碼: ${password}`);
+            await signOut(secondaryAuth); // 清理
+            alert("✅ 帳號建立成功！\n學生現在可以使用此 Email 和密碼登入。");
         } catch (e) {
             if (e.code === 'auth/email-already-in-use') {
                 alert("❌ 建立失敗：此 Email 已被註冊。\n請使用選項 2 重置密碼。");
             } else {
-                alert("❌ 建立失敗：" + e.message);
+                alert("❌ 建立失敗: " + e.message);
             }
         }
     } else if (action === '2') {
@@ -562,10 +560,10 @@ export default function App() {
             await sendPasswordResetEmail(auth, email);
             alert(`📧 重置信已發送至 ${email}`);
         } catch (e) {
-            alert("❌ 發送失敗：" + e.message);
+            alert("❌ 發送失敗: " + e.message);
         }
     } else if (action === '3') {
-        alert("✅ 資料已更新");
+        alert("✅ 資料庫 Email 已更新");
     }
   };
 
@@ -760,48 +758,6 @@ export default function App() {
     link.href = url;
     link.download = `${targetClass === 'ALL' ? '全部班級' : targetClass}_出席紀錄_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
-  };
-
-  // [New in V4.9] 批量匯入能力與密碼 CSV (保留供教練使用)
-  const handleCSVImportAbilities = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setIsUpdating(true);
-    try {
-      const text = await readCSVFile(file, importEncoding);
-      const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-      const batch = writeBatch(db);
-      
-      let updateCount = 0;
-      rows.forEach(row => {
-        const cols = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
-        const [name, cls, no, strength, weakness, accessCode] = cols;
-        
-        const targetStudent = students.find(s => 
-            s.name === name && 
-            s.class === (cls || '').toUpperCase() && 
-            s.classNo === no
-        );
-
-        if (targetStudent) {
-             const ref = doc(db, 'artifacts', appId, 'public', 'data', 'students', targetStudent.id);
-             batch.update(ref, { 
-                 strength: strength || targetStudent.strength || "",
-                 weakness: weakness || targetStudent.weakness || "",
-                 accessCode: accessCode || targetStudent.accessCode || "",
-                 lastUpdated: serverTimestamp()
-             });
-             updateCount++;
-        }
-      });
-      await batch.commit();
-      alert(`成功更新 ${updateCount} 位學生的資料！`);
-    } catch (err) { 
-        console.error(err);
-        alert('匯入失敗，請檢查 CSV 格式'); 
-    }
-    setIsUpdating(false);
-    e.target.value = null;
   };
 
   // --- 智能壓縮圖片 Helper Function ---
@@ -1044,9 +1000,6 @@ export default function App() {
     } else if (type === 'students') {
       csv = "姓名,班別,班號,章別(無/銅章/銀章/金章/白金章),初始積分,壁球班別\n陳小明,6A,01,銅章,120,校隊訓練班\n張小華,5C,12,無,100,壁球中級訓練班";
       filename = "學員匯入範本.csv";
-    } else if (type === 'abilities') {
-        csv = "姓名,班別,班號,強項,弱項,密碼\n陳小明,6A,01,正手擊球,反手截擊,123456\n張小華,5C,12,體能耐力,發球,password";
-        filename = "能力與密碼匯入範本.csv";
     }
     const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement("a");
@@ -1087,7 +1040,7 @@ export default function App() {
     if (!studentName) return;
     const date = prompt("獲獎日期 (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
     const rank = prompt("名次 (例如：冠軍, 亞軍, 季軍, 優異):");
-    const photoUrl = prompt("得獎照片網址 (可選，空白則使用預設圖):"); // [Fix 5.0]
+    const photoUrl = prompt("得獎照片網址 (可選，空白則使用預設圖):"); 
     const desc = prompt("備註 (可選):") || "";
 
     try {
@@ -1096,7 +1049,7 @@ export default function App() {
             studentName,
             date,
             rank,
-            photoUrl: photoUrl || "", // [Fix 5.0]
+            photoUrl: photoUrl || "", 
             description: desc,
             timestamp: serverTimestamp()
         });
@@ -1161,7 +1114,7 @@ export default function App() {
             <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
             <div className="space-y-6">
               
-              {/* 登入 Tab 切換 */}
+              {/* [Fix 5.3] 登入 Tab 切換 */}
               <div className="bg-slate-50 p-1 rounded-[2rem] flex mb-4 relative">
                  <div className={`absolute top-1 bottom-1 w-1/2 bg-white rounded-[1.8rem] shadow-sm transition-all duration-300 ease-out ${loginTab === 'admin' ? 'left-1/2' : 'left-1'}`}></div>
                  <button onClick={() => setLoginTab('student')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'student' ? 'text-blue-600' : 'text-slate-400'}`}>學員入口</button>
@@ -1169,7 +1122,7 @@ export default function App() {
               </div>
 
               {loginTab === 'student' ? (
-                  // 學員登入表單
+                  // [Fix 5.3] 學員登入表單
                   <div className="space-y-3 font-bold animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="relative">
                       <span className="absolute left-5 top-5 text-slate-300"><Mail size={18}/></span>
@@ -1196,7 +1149,7 @@ export default function App() {
                     </button>
                   </div>
               ) : (
-                  // 教練登入表單
+                  // [Fix 5.3] 教練登入表單
                   <div className="space-y-3 font-bold animate-in fade-in slide-in-from-left-4 duration-300">
                     <div className="relative">
                       <span className="absolute left-5 top-5 text-slate-300"><Mail size={18}/></span>
@@ -1426,99 +1379,34 @@ export default function App() {
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
-                   let orderClass = "";
-                   let sizeClass = "";
-                   let gradientClass = "";
-                   let iconColor = "";
-                   let shadowClass = "";
-                   let label = "";
-                   let labelBg = "";
-
-                   if (i === 0) { // 1st Place
-                      orderClass = "order-1 md:order-2";
-                      sizeClass = "w-full md:w-1/3 md:-mt-12 scale-105 md:scale-110 z-20"; 
-                      gradientClass = "bg-gradient-to-b from-yellow-100 via-yellow-50 to-white border-yellow-300";
-                      iconColor = "text-yellow-500";
-                      shadowClass = "shadow-2xl shadow-yellow-200/50";
-                      label = "CHAMPION";
-                      labelBg = "bg-yellow-500";
-                   } else if (i === 1) { // 2nd Place
-                      orderClass = "order-2 md:order-1";
-                      sizeClass = "w-full md:w-1/4 z-10"; 
-                      gradientClass = "bg-gradient-to-b from-slate-200 via-slate-50 to-white border-slate-300";
-                      iconColor = "text-slate-500";
-                      shadowClass = "shadow-xl shadow-slate-300/50";
-                      label = "RUNNER-UP";
-                      labelBg = "bg-slate-500";
-                   } else { // 3rd Place
-                      orderClass = "order-3 md:order-3";
-                      sizeClass = "w-full md:w-1/4 z-10"; 
-                      gradientClass = "bg-gradient-to-b from-orange-100 via-orange-50 to-white border-orange-300";
-                      iconColor = "text-orange-500";
-                      shadowClass = "shadow-xl shadow-orange-200/50";
-                      label = "3RD PLACE";
-                      labelBg = "bg-orange-500";
-                   }
+                   let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
+                   if (i === 0) { orderClass = "order-1 md:order-2"; sizeClass = "w-full md:w-1/3 md:-mt-12 scale-105 md:scale-110 z-20"; gradientClass = "bg-gradient-to-b from-yellow-100 via-yellow-50 to-white border-yellow-300"; iconColor = "text-yellow-500"; shadowClass = "shadow-2xl shadow-yellow-200/50"; label = "CHAMPION"; labelBg = "bg-yellow-500"; } 
+                   else if (i === 1) { orderClass = "order-2 md:order-1"; sizeClass = "w-full md:w-1/4 z-10"; gradientClass = "bg-gradient-to-b from-slate-200 via-slate-50 to-white border-slate-300"; iconColor = "text-slate-500"; shadowClass = "shadow-xl shadow-slate-300/50"; label = "RUNNER-UP"; labelBg = "bg-slate-500"; } 
+                   else { orderClass = "order-3 md:order-3"; sizeClass = "w-full md:w-1/4 z-10"; gradientClass = "bg-gradient-to-b from-orange-100 via-orange-50 to-white border-orange-300"; iconColor = "text-orange-500"; shadowClass = "shadow-xl shadow-orange-200/50"; label = "3RD PLACE"; labelBg = "bg-orange-500"; }
 
                    return (
                       <div key={s.id} className={`relative flex-shrink-0 flex flex-col items-center text-center ${orderClass} ${sizeClass} transition-all duration-500 hover:-translate-y-2`}>
                           <div className={`absolute inset-0 rounded-[3rem] border-4 ${gradientClass} ${shadowClass} overflow-hidden`}>
-                               <div className="absolute -right-4 -top-4 opacity-10 rotate-12">
-                                  <TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/>
-                               </div>
-                               <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none">
-                                  <span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span>
-                               </div>
+                               <div className="absolute -right-4 -top-4 opacity-10 rotate-12"><TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/></div>
+                               <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none"><span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span></div>
                           </div>
-
                           <div className="relative z-10 p-8 w-full h-full flex flex-col items-center">
-                              {i === 0 && (
-                                <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg">
-                                  <Crown size={64} fill="currentColor" strokeWidth={1.5} />
-                                </div>
-                              )}
-                              <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>
-                                  {s.name[0]}
-                                  <div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>
-                                     {label}
-                                  </div>
-                              </div>
-                              <div className="mt-4 w-full">
-                                   <h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3>
-                                   <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p>
-                                   <div className="my-6">
-                                     <div className={`text-5xl font-black font-mono tracking-tight ${iconColor}`}>
-                                        {s.totalPoints}
-                                     </div>
-                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Points</p>
-                                   </div>
-                                   <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 border border-white/50 backdrop-blur-sm`}>
-                                     <span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span>
-                                     <span className="text-xs font-black text-slate-500">{s.badge}</span>
-                                   </div>
-                              </div>
+                              {i === 0 && (<div className="absolute -top-14 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg"><Crown size={64} fill="currentColor" strokeWidth={1.5} /></div>)}
+                              <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>{s.name[0]}<div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>{label}</div></div>
+                              <div className="mt-4 w-full"><h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3><p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p><div className="my-6"><div className={`text-5xl font-black font-mono tracking-tight ${iconColor}`}>{s.totalPoints}</div><p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Points</p></div><div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 border border-white/50 backdrop-blur-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black text-slate-500">{s.badge}</span></div></div>
                           </div>
                       </div>
                    )
                 })}
               </div>
 
-              {/* [Fix 4.6] 更新「積分機制說明」卡片 */}
               <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 mb-8 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
-                  <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
-                      <Info size={24} />
-                  </div>
+                  <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Info size={24} /></div>
                   <div className="flex-1">
                       <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分機制說明</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
-                          <ul className="list-disc pl-4 space-y-1">
-                              <li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li>
-                              <li><span className="text-blue-600">內部聯賽</span>：勝方 +10 / 巨人殺手 +20</li>
-                          </ul>
-                          <ul className="list-disc pl-4 space-y-1">
-                              <li><span className="text-indigo-500">校外賽參與</span>：+20 / 勝場 +20</li>
-                              <li><span className="text-yellow-600">校外賽獎項</span>：冠軍+100 / 亞軍+50 / 季殿+30</li>
-                          </ul>
+                          <ul className="list-disc pl-4 space-y-1"><li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li><li><span className="text-blue-600">內部聯賽</span>：勝方 +10 / 巨人殺手 +20</li></ul>
+                          <ul className="list-disc pl-4 space-y-1"><li><span className="text-indigo-500">校外賽參與</span>：+20 / 勝場 +20</li><li><span className="text-yellow-600">校外賽獎項</span>：冠軍+100 / 亞軍+50 / 季殿+30</li></ul>
                       </div>
                   </div>
               </div>
@@ -1526,88 +1414,22 @@ export default function App() {
               <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden font-bold">
                 <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
-                  {role === 'admin' && (
-                     <div className="flex gap-2">
-                        <span className="text-[10px] text-slate-400 self-center">*請在下方列表為個別學生加分</span>
-                     </div>
-                  )}
-                  <div className="relative w-full md:w-80">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
-                    <input 
-                      value={searchTerm}
-                      onChange={(e)=>setSearchTerm(e.target.value)}
-                      placeholder="搜尋姓名或班別..." 
-                      className="w-full bg-white border rounded-2xl py-3 pl-12 pr-4 outline-none focus:border-blue-600 transition-all shadow-sm"
-                    />
-                  </div>
+                  {role === 'admin' && <div className="flex gap-2"><span className="text-[10px] text-slate-400 self-center">*請在下方列表為個別學生加分</span></div>}
+                  <div className="relative w-full md:w-80"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/><input value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} placeholder="搜尋姓名或班別..." className="w-full bg-white border rounded-2xl py-3 pl-12 pr-4 outline-none focus:border-blue-600 transition-all shadow-sm"/></div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
-                    <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] bg-slate-50 border-b font-black">
-                      <tr>
-                        <th className="px-8 py-6 text-center">排名</th>
-                        <th className="px-8 py-6">隊員資料</th>
-                        <th className="px-8 py-6">目前章別</th>
-                        <th className="px-8 py-6 text-right">基礎分</th>
-                        <th className="px-8 py-6 text-right">總分</th>
-                        {role === 'admin' && <th className="px-8 py-6 text-center">教練操作</th>}
-                      </tr>
-                    </thead>
+                    <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] bg-slate-50 border-b font-black"><tr><th className="px-8 py-6 text-center">排名</th><th className="px-8 py-6">隊員資料</th><th className="px-8 py-6">目前章別</th><th className="px-8 py-6 text-right">基礎分</th><th className="px-8 py-6 text-right">總分</th>{role === 'admin' && <th className="px-8 py-6 text-center">教練操作</th>}</tr></thead>
                     <tbody className="divide-y divide-slate-50">
                       {filteredStudents.map((s, i) => (
                         <tr key={s.id} className="group hover:bg-blue-50/30 transition-all">
-                          <td className="px-8 py-8 text-center">
-                            <span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${
-                              i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
-                            }`}>
-                              {i+1}
-                            </span>
-                          </td>
-                          <td className="px-8 py-8">
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">
-                                {s.name[0]}
-                              </div>
-                              <div>
-                                <div className="font-black text-lg text-slate-800">{s.name}</div>
-                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-8 py-8">
-                            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}>
-                              <span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span>
-                              <span className="text-xs font-black">{s.badge}</span>
-                            </div>
-                          </td>
+                          <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
+                          <td className="px-8 py-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.name[0]}</div><div><div className="font-black text-lg text-slate-800">{s.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div></div></div></td>
+                          <td className="px-8 py-8"><div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black">{s.badge}</span></div></td>
                           <td className="px-8 py-8 text-right font-mono text-slate-400">{s.points}</td>
                           <td className="px-8 py-8 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
                           {role === 'admin' && (
-                            <td className="px-8 py-8">
-                              <div className="flex justify-center gap-2">
-                                <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button>
-                                <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button>
-                                {/* [Fix 4.5] 新增外賽詳細獎勵按鈕 */}
-                                <button 
-                                  onClick={()=> handleExternalComp(s)} 
-                                  className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" 
-                                  title="校外賽成績錄入"
-                                >
-                                    <Globe size={18}/>
-                                </button>
-                                <button 
-                                  onClick={() => {
-                                    if(confirm(`確定要永久刪除 ${s.name} (${s.class} ${s.classNo}) 嗎？`)) {
-                                      deleteItem('students', s.id);
-                                    }
-                                  }} 
-                                  className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
-                                  title="永久刪除"
-                                >
-                                  <Trash2 size={18}/>
-                                </button>
-                              </div>
-                            </td>
+                            <td className="px-8 py-8"><div className="flex justify-center gap-2"><button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button><button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button><button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" title="校外賽成績錄入"><Globe size={18}/></button><button onClick={() => {if(confirm(`確定要永久刪除 ${s.name} (${s.class} ${s.classNo}) 嗎？`)) {deleteItem('students', s.id);}}} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="永久刪除"><Trash2 size={18}/></button></div></td>
                           )}
                         </tr>
                       ))}
@@ -1623,55 +1445,13 @@ export default function App() {
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                  <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
                     <div className="absolute -right-10 -bottom-10 opacity-5 rotate-12"><Swords size={200}/></div>
-                    
-                    <div className="relative z-10 text-center mb-12">
-                       <h3 className="text-4xl font-black mb-2">⚔️ 內部聯賽對戰錄入</h3>
-                       <p className="text-slate-400">系統將自動判定排名與章別，計算積分獎勵</p>
-                    </div>
-
+                    <div className="relative z-10 text-center mb-12"><h3 className="text-4xl font-black mb-2">⚔️ 內部聯賽對戰錄入</h3><p className="text-slate-400">系統將自動判定排名與章別，計算積分獎勵</p></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-10 relative z-10">
-                       <div className="bg-emerald-50 p-8 rounded-[3rem] border-2 border-emerald-100 text-center">
-                          <h4 className="text-2xl font-black text-emerald-600 mb-6">🏆 勝方 (Winner)</h4>
-                          <select 
-                             className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm"
-                             value={matchWinner}
-                             onChange={(e) => setMatchWinner(e.target.value)}
-                          >
-                             <option value="">選擇勝方隊員</option>
-                             {rankedStudents.map(s => (
-                                <option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>
-                             ))}
-                          </select>
-                       </div>
-
-                       <div className="bg-rose-50 p-8 rounded-[3rem] border-2 border-rose-100 text-center">
-                          <h4 className="text-2xl font-black text-rose-600 mb-6">💀 負方 (Loser)</h4>
-                          <select 
-                             className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm"
-                             value={matchLoser}
-                             onChange={(e) => setMatchLoser(e.target.value)}
-                          >
-                             <option value="">選擇負方隊員</option>
-                             {rankedStudents.map(s => (
-                                <option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>
-                             ))}
-                          </select>
-                       </div>
+                       <div className="bg-emerald-50 p-8 rounded-[3rem] border-2 border-emerald-100 text-center"><h4 className="text-2xl font-black text-emerald-600 mb-6">🏆 勝方 (Winner)</h4><select className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm" value={matchWinner} onChange={(e) => setMatchWinner(e.target.value)}><option value="">選擇勝方隊員</option>{rankedStudents.map(s => (<option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>))}</select></div>
+                       <div className="bg-rose-50 p-8 rounded-[3rem] border-2 border-rose-100 text-center"><h4 className="text-2xl font-black text-rose-600 mb-6">💀 負方 (Loser)</h4><select className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm" value={matchLoser} onChange={(e) => setMatchLoser(e.target.value)}><option value="">選擇負方隊員</option>{rankedStudents.map(s => (<option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>))}</select></div>
                     </div>
-
-                    <div className="mt-12 flex justify-center relative z-10">
-                        <button 
-                           onClick={handleMatchSubmit}
-                           className="bg-slate-900 text-white px-12 py-5 rounded-[2.5rem] text-xl font-black shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-4"
-                        >
-                           <Swords size={28}/> 提交對戰結果
-                        </button>
-                    </div>
-
-                    <div className="mt-8 text-center text-xs text-slate-400 font-bold">
-                       <p>✨ 規則：基礎勝利 +10 分</p>
-                       <p className="mt-1">🔥 巨人殺手：低章贏高章 或 贏高於自己 5 名以上對手 -&gt; <span className="text-orange-500">+20 分</span></p>
-                    </div>
+                    <div className="mt-12 flex justify-center relative z-10"><button onClick={handleMatchSubmit} className="bg-slate-900 text-white px-12 py-5 rounded-[2.5rem] text-xl font-black shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-4"><Swords size={28}/> 提交對戰結果</button></div>
+                    <div className="mt-8 text-center text-xs text-slate-400 font-bold"><p>✨ 規則：基礎勝利 +10 分</p><p className="mt-1">🔥 巨人殺手：低章贏高章 或 贏高於自己 5 名以上對手 -&gt; <span className="text-orange-500">+20 分</span></p></div>
                  </div>
               </div>
            )}
@@ -1679,239 +1459,46 @@ export default function App() {
           {/* 6. 管理概況 (Dashboard) */}
           {activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
-                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10">
-                   <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
-                     <History className="text-blue-600"/> 最近更新活動
-                   </h3>
-                   <div className="space-y-6">
-                      {competitions.slice(0, 4).map(c => (
-                        <div key={c.id} className="flex gap-6 items-start">
-                           <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div>
-                           <div>
-                             <p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p>
-                             <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p>
-                           </div>
-                        </div>
-                      ))}
-                      {schedules.slice(0, 2).map(s => (
-                        <div key={s.id} className="flex gap-6 items-start">
-                           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div>
-                           <div>
-                             <p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p>
-                             <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p>
-                           </div>
-                        </div>
-                      ))}
-                   </div>
-                </div>
-
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><History className="text-blue-600"/> 最近更新活動</h3><div className="space-y-6">{competitions.slice(0, 4).map(c => (<div key={c.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div><div><p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p></div></div>))}{schedules.slice(0, 2).map(s => (<div key={s.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div><div><p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p></div></div>))}</div></div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                   {/* 方格 1: 活躍隊員 */}
-                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
-                      <div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div>
-                      <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">活躍隊員</p>
-                      <p className="text-6xl font-black mt-2 font-mono">{students.length}</p>
-                      <div className="mt-6 flex items-center gap-2 text-xs text-blue-200 font-bold">
-                        <TrendingUp size={14}/> 成長茁壯中
-                      </div>
-                   </div>
-
-                   {/* 方格 2: 本月訓練 */}
-                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-                      <div className="absolute -right-5 -bottom-5 opacity-5"><CalendarIcon size={120}/></div>
-                      <p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">本月訓練</p>
-                      <p className="text-6xl font-black mt-2 text-slate-800 font-mono">{dashboardStats.thisMonthTrainings}</p>
-                      <div className="mt-6 flex items-center gap-2 text-xs text-slate-400 font-bold">
-                        <Clock size={14}/> 訓練不間斷
-                      </div>
-                   </div>
-
-                   {/* 方格 3: 距離下一場比賽倒數 */}
-                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
-                       <div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div>
-                      <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p>
-                      <div className="flex items-baseline gap-2 mt-2">
-                        <p className="text-6xl font-black font-mono">
-                          {dashboardStats.daysToNextMatch}
-                        </p>
-                        {dashboardStats.daysToNextMatch !== '-' && dashboardStats.daysToNextMatch !== 'Today!' && (
-                           <span className="text-xl font-bold text-slate-500">Days</span>
-                        )}
-                      </div>
-                      <div className="mt-6 flex items-center gap-2 text-xs text-emerald-400 font-bold">
-                         <Target size={14}/> 全力備戰中
-                      </div>
-                   </div>
-
-                   {/* 方格 4: 年度獎項 */}
-                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden">
-                       <div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div>
-                      <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200">
-                        <TrophyIcon size={32}/>
-                      </div>
-                      <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1 z-10">本年度獎項</p>
-                      <p className="text-4xl font-black mt-1 text-slate-800 z-10">{dashboardStats.awardsThisYear}</p>
-                   </div>
+                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div><p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">活躍隊員</p><p className="text-6xl font-black mt-2 font-mono">{students.length}</p><div className="mt-6 flex items-center gap-2 text-xs text-blue-200 font-bold"><TrendingUp size={14}/> 成長茁壯中</div></div>
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-5"><CalendarIcon size={120}/></div><p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">本月訓練</p><p className="text-6xl font-black mt-2 text-slate-800 font-mono">{dashboardStats.thisMonthTrainings}</p><div className="mt-6 flex items-center gap-2 text-xs text-slate-400 font-bold"><Clock size={14}/> 訓練不間斷</div></div>
+                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div><p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p><div className="flex items-baseline gap-2 mt-2"><p className="text-6xl font-black font-mono">{dashboardStats.daysToNextMatch}</p>{dashboardStats.daysToNextMatch !== '-' && dashboardStats.daysToNextMatch !== 'Today!' && (<span className="text-xl font-bold text-slate-500">Days</span>)}</div><div className="mt-6 flex items-center gap-2 text-xs text-emerald-400 font-bold"><Target size={14}/> 全力備戰中</div></div>
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div><div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200"><TrophyIcon size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1 z-10">本年度獎項</p><p className="text-4xl font-black mt-1 text-slate-800 z-10">{dashboardStats.awardsThisYear}</p></div>
                 </div>
-                
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                      <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
-                        <Target className="text-blue-600"/> 章別分佈概況
-                      </h3>
-                      <div className="space-y-6">
-                        {Object.keys(BADGE_DATA).filter(k => k !== '無').map(badge => {
-                          const count = students.filter(s => s.badge === badge).length;
-                          const percent = students.length ? Math.round((count/students.length)*100) : 0;
-                          return (
-                            <div key={badge} className="space-y-2">
-                              <div className="flex justify-between items-center px-2">
-                                <span className={`text-xs font-black ${BADGE_DATA[badge].color}`}>{badge}</span>
-                                <span className="text-xs text-slate-400 font-mono">{count} 人 ({percent}%)</span>
-                              </div>
-                              <div className="h-4 w-full bg-slate-50 rounded-full overflow-hidden border">
-                                <div className={`h-full transition-all duration-1000 ${BADGE_DATA[badge].bg.replace('bg-', 'bg-')}`} style={{width: `${percent}%`, backgroundColor: 'currentColor'}}></div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                   </div>
-                   
-                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col h-full">
-                      <h3 className="text-2xl font-black mb-6 flex items-center gap-4">
-                        <BookOpen className="text-blue-600"/> 章別獎勵計劃
-                      </h3>
-                      <div className="flex-1 w-full bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 relative group">
-                          {/* [Fix 3.8] 使用 jsDelivr CDN 連結確保 PDF 預覽正常 */}
-                          <iframe 
-                            src="https://docs.google.com/gview?embedded=true&url=https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" 
-                            className="w-full h-full min-h-[300px]" 
-                            frameBorder="0"
-                            title="Award Scheme Booklet"
-                          ></iframe>
-                          <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                             <a 
-                                href="https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="bg-blue-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"
-                             >
-                                <Download size={14}/> 下載 PDF
-                             </a>
-                          </div>
-                      </div>
-                   </div>
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><Target className="text-blue-600"/> 章別分佈概況</h3><div className="space-y-6">{Object.keys(BADGE_DATA).filter(k => k !== '無').map(badge => {const count = students.filter(s => s.badge === badge).length;const percent = students.length ? Math.round((count/students.length)*100) : 0;return (<div key={badge} className="space-y-2"><div className="flex justify-between items-center px-2"><span className={`text-xs font-black ${BADGE_DATA[badge].color}`}>{badge}</span><span className="text-xs text-slate-400 font-mono">{count} 人 ({percent}%)</span></div><div className="h-4 w-full bg-slate-50 rounded-full overflow-hidden border"><div className={`h-full transition-all duration-1000 ${BADGE_DATA[badge].bg.replace('bg-', 'bg-')}`} style={{width: `${percent}%`, backgroundColor: 'currentColor'}}></div></div></div>);})}</div></div>
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col h-full"><h3 className="text-2xl font-black mb-6 flex items-center gap-4"><BookOpen className="text-blue-600"/> 章別獎勵計劃</h3><div className="flex-1 w-full bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 relative group"><iframe src="https://docs.google.com/gview?embedded=true&url=https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" className="w-full h-full min-h-[300px]" frameBorder="0" title="Award Scheme Booklet"></iframe><div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"><a href="https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"><Download size={14}/> 下載 PDF</a></div></div></div>
                 </div>
              </div>
           )}
 
-           {/* [Fix 4.1] 5. 隊員管理 (教練專用) - [Fix 4.7] 新增梯隊功能 - [Fix 5.4] 新增帳號設定按鈕 */}
+           {/* 5. 隊員管理 (教練專用) - [Fix 4.7] */}
            {activeTab === 'students' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
-                {/* [Fix 4.7] 梯隊統計 Bar (出生年份) */}
-                <div className="flex overflow-x-auto gap-4 pb-4">
-                    <div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0">
-                        <span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span>
-                        <span className="text-xl font-black">{students.length}</span>
-                    </div>
-                    {Object.entries(birthYearStats).sort().map(([year, count]) => (
-                        <div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0">
-                            <span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span>
-                            <span className="text-xl font-black text-slate-800">{count} 人</span>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden">
-                   <div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div>
-                   <div className="relative z-10">
-                     <h3 className="text-3xl font-black">隊員檔案管理</h3>
-                     <p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p>
-                   </div>
-                   <div className="flex gap-4 relative z-10 flex-wrap justify-center">
-                     {/* [Fix 4.7] 年份篩選器 */}
-                     <div className="relative">
-                        <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
-                        <select 
-                            value={selectedYearFilter}
-                            onChange={(e) => setSelectedYearFilter(e.target.value)}
-                            className="pl-10 pr-10 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 outline-none shadow-sm"
-                        >
-                            <option value="ALL">全部年份</option>
-                            {Object.keys(birthYearStats).sort().map(year => (
-                                <option key={year} value={year}>{year} 年出生 ({birthYearStats[year]}人)</option>
-                            ))}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/>
-                     </div>
-
-                     <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
-                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
-                        <Upload size={20}/> 批量匯入 CSV 名單
-                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
-                     </label>
-                   </div>
-                </div>
-                
+                <div className="flex overflow-x-auto gap-4 pb-4"><div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span><span className="text-xl font-black">{students.length}</span></div>{Object.entries(birthYearStats).sort().map(([year, count]) => (<div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span><span className="text-xl font-black text-slate-800">{count} 人</span></div>))}</div>
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden"><div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div><div className="relative z-10"><h3 className="text-3xl font-black">隊員檔案管理</h3><p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p></div><div className="flex gap-4 relative z-10 flex-wrap justify-center"><div className="relative"><Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><select value={selectedYearFilter} onChange={(e) => setSelectedYearFilter(e.target.value)} className="pl-10 pr-10 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 outline-none shadow-sm"><option value="ALL">全部年份</option>{Object.keys(birthYearStats).sort().map(year => (<option key={year} value={year}>{year} 年出生 ({birthYearStats[year]}人)</option>))}</select><ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/></div><button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button><label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]"><Upload size={20}/> 批量匯入 CSV 名單<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/></label></div></div>
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                    {filteredStudents.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
                      <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
-                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
-                          {s.badge}
-                        </div>
-                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
-                          {s.name[0]}
-                        </div>
+                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>{s.badge}</div>
+                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">{s.name[0]}</div>
                         <p className="text-xl font-black text-slate-800">{s.name}</p>
                         <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
-                        
-                        {/* [Fix 4.7] 顯示出生日期標籤 */}
-                        {s.dob ? (
-                            <div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100">
-                                <Cake size={10}/> {s.dob}
-                            </div>
-                        ) : (
-                            <div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>
-                        )}
-
+                        {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
                         {/* [Fix 5.3] 顯示 Email 標籤 */}
-                        {s.email && (
-                            <div className="mt-1 text-[8px] text-slate-400 font-mono tracking-tighter truncate max-w-full">
-                                {s.email}
-                            </div>
-                        )}
-
+                        {s.email && (<div className="mt-1 text-[8px] text-slate-400 font-mono tracking-tighter truncate max-w-full">{s.email}</div>)}
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
                         <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
                            {/* [Fix 5.4] 帳號管理按鈕 (Key) */}
-                           <button 
-                             onClick={() => handleManageStudentAuth(s)}
-                             className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all"
-                             title="設定帳號密碼 / 重置"
-                           >
-                              <Key size={18}/>
-                           </button>
-                           {/* [Fix 4.7] 生日錄入按鈕 */}
-                           <button 
-                             onClick={() => handleUpdateDOB(s)}
-                             className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all"
-                             title="設定出生日期"
-                           >
-                              <Cake size={18}/>
-                           </button>
+                           <button onClick={() => handleManageStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定帳號密碼 / 重置"><Key size={18}/></button>
+                           {/* [Fix 4.7] 修改設定按鈕為生日錄入 */}
+                           <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={18}/></button>
                            <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={18}/></button>
                         </div>
                      </div>
                    ))}
-                   <button onClick={()=>{
-                     const name = prompt('隊員姓名');
-                     const cls = prompt('班別 (如: 6A)');
-                     if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });
-                   }} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
-                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
-                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
-                   </button>
+                   <button onClick={()=>{const name = prompt('隊員姓名');const cls = prompt('班別 (如: 6A)');if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });}} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group"><Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/><span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span></button>
                 </div>
              </div>
           )}
@@ -1920,246 +1507,132 @@ export default function App() {
           {activeTab === 'schedules' && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-6">
-                    <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div>
-                    <div>
-                      <h3 className="text-xl font-black">訓練班日程表</h3>
-                      <p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-4 w-full md:w-auto">
-                    <div className="relative flex-1 md:flex-none">
-                      <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={18}/>
-                      <select 
-                        value={selectedClassFilter} 
-                        onChange={(e)=>setSelectedClassFilter(e.target.value)}
-                        className="w-full md:w-60 bg-slate-50 border-none outline-none pl-12 pr-6 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner"
-                      >
-                        {uniqueTrainingClasses.map(c => (
-                          <option key={c} value={c}>{c === 'ALL' ? '🌍 全部訓練班' : `🏸 ${c}`}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {role === 'admin' && (
-                      <div className="flex gap-2">
-                         <button onClick={()=>downloadTemplate('schedule')} className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border transition-all" title="下載日程範本"><Download size={20}/></button>
-                         <label className="bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm">
-                           <Upload size={18}/> 匯入 CSV 日程
-                           <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportSchedules}/>
-                         </label>
-                      </div>
-                    )}
-                  </div>
+                  <div className="flex items-center gap-6"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div><div><h3 className="text-xl font-black">訓練班日程表</h3><p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p></div></div>
+                  <div className="flex flex-wrap gap-4 w-full md:w-auto"><div className="relative flex-1 md:flex-none"><Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={18}/><select value={selectedClassFilter} onChange={(e)=>setSelectedClassFilter(e.target.value)} className="w-full md:w-60 bg-slate-50 border-none outline-none pl-12 pr-6 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner">{uniqueTrainingClasses.map(c => (<option key={c} value={c}>{c === 'ALL' ? '🌍 全部訓練班' : `🏸 ${c}`}</option>))}</select></div>{role === 'admin' && (<div className="flex gap-2"><button onClick={()=>downloadTemplate('schedule')} className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border transition-all" title="下載日程範本"><Download size={20}/></button><label className="bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm"><Upload size={18}/> 匯入 CSV 日程<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportSchedules}/></label></div>)}</div>
                </div>
-
-               {filteredSchedules.length === 0 ? (
-                 <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
-                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><CalendarIcon size={40}/></div>
-                    <p className="text-xl font-black text-slate-400">目前暫無訓練日程紀錄</p>
-                    <p className="text-sm text-slate-300 mt-2">請點擊上方匯入按鈕上傳 CSV 檔案</p>
-                 </div>
-               ) : (
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {filteredSchedules.map(sc => {
-                      const isToday = new Date().toISOString().split('T')[0] === sc.date;
-                      return (
-                        <div key={sc.id} className={`bg-white p-10 rounded-[3.5rem] border-2 shadow-sm hover:scale-[1.02] transition-all relative overflow-hidden group ${isToday ? 'border-blue-500 shadow-xl shadow-blue-50' : 'border-slate-100'}`}>
-                           {isToday && (
-                             <div className="absolute top-0 right-0 bg-blue-600 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest animate-pulse">
-                               Today • 今日訓練
-                             </div>
-                           )}
-                           <div className="mb-8">
-                              <span className="text-[10px] bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                {sc.trainingClass}
-                              </span>
-                              <h4 className="text-3xl font-black text-slate-800 mt-6">{sc.date}</h4>
-                              <p className="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-[0.3em]">Training Session</p>
-                           </div>
-                           
-                           <div className="space-y-5">
-                              <div className="flex items-center gap-4 text-sm text-slate-600">
-                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><MapPin size={18}/></div>
-                                <span className="font-bold">{sc.location}</span>
-                              </div>
-                              <div className="flex items-center gap-4 text-sm text-slate-600">
-                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div>
-                                <span className="font-bold">{sc.coach} 教練</span>
-                              </div>
-                              {/* 新增：手動刪除按鈕 */}
-                              {role === 'admin' && (
-                                <button 
-                                  onClick={() => {
-                                    if(window.confirm(`確定要刪除 ${sc.date} 的這堂訓練課嗎？`)) {
-                                      deleteItem('schedules', sc.id);
-                                    }
-                                  }}
-                                  className="absolute top-8 right-8 w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm z-10"
-                                  title="刪除課堂"
-                                >
-                                  <Trash2 size={20}/>
-                                </button>
-                              )}
-                              {sc.notes && (
-                                <div className="p-6 bg-slate-50 rounded-[2rem] text-xs text-slate-400 leading-relaxed italic border border-slate-100">
-                                  "{sc.notes}"
-                                </div>
-                              )}
-                           </div>
-                           
-                           {role === 'admin' && (
-                             <div className="mt-10 pt-8 border-t border-dashed border-slate-100 opacity-0 group-hover:opacity-100 transition-all flex justify-end">
-                               <button onClick={()=>deleteItem('schedules', sc.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button>
-                             </div>
-                           )}
-                        </div>
-                      );
-                    })}
-                 </div>
-               )}
+               {filteredSchedules.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><CalendarIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無訓練日程紀錄</p><p className="text-sm text-slate-300 mt-2">請點擊上方匯入按鈕上傳 CSV 檔案</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{filteredSchedules.map(sc => {const isToday = new Date().toISOString().split('T')[0] === sc.date;return (<div key={sc.id} className={`bg-white p-10 rounded-[3.5rem] border-2 shadow-sm hover:scale-[1.02] transition-all relative overflow-hidden group ${isToday ? 'border-blue-500 shadow-xl shadow-blue-50' : 'border-slate-100'}`}>{isToday && (<div className="absolute top-0 right-0 bg-blue-600 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest animate-pulse">Today • 今日訓練</div>)}<div className="mb-8"><span className="text-[10px] bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all">{sc.trainingClass}</span><h4 className="text-3xl font-black text-slate-800 mt-6">{sc.date}</h4><p className="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-[0.3em]">Training Session</p></div><div className="space-y-5"><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><MapPin size={18}/></div><span className="font-bold">{sc.location}</span></div><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div><span className="font-bold">{sc.coach} 教練</span></div>{role === 'admin' && (<button onClick={() => {if(window.confirm(`確定要刪除 ${sc.date} 的這堂訓練課嗎？`)) {deleteItem('schedules', sc.id);}}} className="absolute top-8 right-8 w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm z-10" title="刪除課堂"><Trash2 size={20}/></button>)}{sc.notes && (<div className="p-6 bg-slate-50 rounded-[2rem] text-xs text-slate-400 leading-relaxed italic border border-slate-100">"{sc.notes}"</div>)}</div>{role === 'admin' && (<div className="mt-10 pt-8 border-t border-dashed border-slate-100 opacity-0 group-hover:opacity-100 transition-all flex justify-end"><button onClick={()=>deleteItem('schedules', sc.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>);})}</div>)}
             </div>
           )}
 
-          {/* 3. 快速點名 (過濾多班別學員不重複) */}
+          {/* 3. 快速點名 */}
           {activeTab === 'attendance' && role === 'admin' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
-               <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}>
-                  <div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div>
-                  <div className="relative z-10">
-                    <h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3>
-                    <div className="flex flex-wrap gap-4">
-                      {todaySchedule ? (
-                        <>
-                          <div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2">
-                            <Star size={14} className="text-yellow-300 fill-yellow-300"/>
-                            <span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span>
-                          </div>
-                          <div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2">
-                            <MapPin size={14}/>
-                            <span className="text-sm font-black">{todaySchedule.location}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2">
-                          <Info size={14}/>
-                          <span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner">
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p>
-                    <p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p>
-                  </div>
-               </div>
-
-               {/* [Fix 2.2] 新增：報表匯出中心 */}
-               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8">
-                 <div className="flex items-center gap-4">
-                   <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div>
-                   <div>
-                     <h4 className="font-black text-slate-800">出席率報表中心</h4>
-                     <p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p>
-                   </div>
-                 </div>
-                 <div className="flex gap-2">
-                   <button 
-                     onClick={() => exportAttendanceCSV('ALL')}
-                     className="px-6 py-3 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded-2xl text-xs font-black transition-all"
-                   >
-                     匯出全部紀錄
-                   </button>
-                   {/* 這裡可以根據 selectedClassFilter 匯出特定班別 */}
-                   {attendanceClassFilter !== 'ALL' && (
-                     <button 
-                       onClick={() => exportAttendanceCSV(attendanceClassFilter)}
-                       className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"
-                     >
-                       <Download size={16}/> 匯出 {attendanceClassFilter} 報表
-                     </button>
-                   )}
-                 </div>
-               </div>
-
-               {/* 壁球班別篩選選單 */}
-               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6">
-                 <div className="flex items-center gap-3 text-slate-400 min-w-max">
-                   <Filter size={20} />
-                   <span>選擇點名班別：</span>
-                 </div>
-                 <div className="flex flex-wrap gap-2">
-                   {uniqueTrainingClasses.map(cls => (
-                     <button
-                       key={cls}
-                       onClick={() => setAttendanceClassFilter(cls)}
-                       className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${
-                         attendanceClassFilter === cls 
-                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' 
-                         : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'
-                       }`}
-                     >
-                       {cls === 'ALL' ? '🌍 全部學員' : cls}
-                     </button>
-                   ))}
-                 </div>
-               </div>
-
+               <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}><div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div><div className="relative z-10"><h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3><div className="flex flex-wrap gap-4">{todaySchedule ? (<><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><Star size={14} className="text-yellow-300 fill-yellow-300"/><span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span></div><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><MapPin size={14}/><span className="text-sm font-black">{todaySchedule.location}</span></div></>) : (<div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2"><Info size={14}/><span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span></div>)}</div></div><div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner"><p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p><p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p></div></div>
+               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8"><div className="flex items-center gap-4"><div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div><div><h4 className="font-black text-slate-800">出席率報表中心</h4><p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p></div></div><div className="flex gap-2"><button onClick={() => exportAttendanceCSV('ALL')} className="px-6 py-3 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded-2xl text-xs font-black transition-all">匯出全部紀錄</button>{attendanceClassFilter !== 'ALL' && (<button onClick={() => exportAttendanceCSV(attendanceClassFilter)} className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"><Download size={16}/> 匯出 {attendanceClassFilter} 報表</button>)}</div></div>
+               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6"><div className="flex items-center gap-3 text-slate-400 min-w-max"><Filter size={20} /><span>選擇點名班別：</span></div><div className="flex flex-wrap gap-2">{uniqueTrainingClasses.map(cls => (<button key={cls} onClick={() => setAttendanceClassFilter(cls)} className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${attendanceClassFilter === cls ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'}`}>{cls === 'ALL' ? '🌍 全部學員' : cls}</button>))}</div></div>
                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                   {studentsInSelectedAttendanceClass.length > 0 ? (
                     studentsInSelectedAttendanceClass.map(s => {
-                      // [Fix 2.2] 檢查是否已出席 (比對 DB 紀錄)
-                      const isAttended = todaySchedule && attendanceLogs.some(log => 
-                        log.studentId === s.id && 
-                        log.date === todaySchedule.date && 
-                        log.trainingClass === todaySchedule.trainingClass
-                      );
-
-                      return (
-                        <button 
-                          key={s.id} 
-                          onClick={() => markAttendance(s)} // [Fix 2.2] 改為呼叫寫入資料庫的函數
-                          className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden ${
-                            isAttended 
-                            ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-default' 
-                            : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-xl hover:shadow-blue-50'
-                          }`}
-                        >
-                           <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase ${
-                             isAttended
-                             ? 'bg-emerald-200 text-white rotate-12'
-                             : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:rotate-6'
-                           }`}>
-                              {s.name[0]}
-                           </div>
-                           <p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : 'text-slate-800 group-hover:text-blue-600'}`}>{s.name}</p>
-                           <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
-                           <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>
-                             {s.squashClass}
-                           </div>
-                           
-                           {/* [Fix 2.2] 狀態圖示 */}
-                           <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
-                              <CheckCircle2 size={24}/>
-                           </div>
-                           
-                           {isAttended && (
-                             <div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">
-                               已出席
-                             </div>
-                           )}
-                        </button>
-                      );
+                      const isAttended = todaySchedule && attendanceLogs.some(log => log.studentId === s.id && log.date === todaySchedule.date && log.trainingClass === todaySchedule.trainingClass);
+                      return (<button key={s.id} onClick={() => markAttendance(s)} className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden ${isAttended ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-default' : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-xl hover:shadow-blue-50'}`}><div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase ${isAttended ? 'bg-emerald-200 text-white rotate-12' : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:rotate-6'}`}>{s.name[0]}</div><p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : 'text-slate-800 group-hover:text-blue-600'}`}>{s.name}</p><p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p><div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>{s.squashClass}</div><div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : 'text-slate-100 group-hover:text-blue-100'}`}><CheckCircle2 size={24}/></div>{isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">已出席</div>)}</button>);
                     })
-                  ) : (
-                    <div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">
-                      此班別暫無學員資料
-                    </div>
-                  )}
+                  ) : (<div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">此班別暫無學員資料</div>)}
                </div>
             </div>
           )}
+
+          {/* 4. 比賽資訊與公告 */}
+          {/* ... (Merged above) ... */}
+
+          {/* [Fix 2.6] 精彩花絮頁面 */}
+          {activeTab === 'gallery' && (
+            <div className="space-y-10 animate-in fade-in duration-500 font-bold">
+               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                  <div className="flex items-center gap-6">
+                    {currentAlbum ? (<button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all"><ArrowLeft size={24}/></button>) : (<div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>)}
+                    <div><h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3><p className="text-xs text-slate-400 mt-1">{currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}</p></div>
+                  </div>
+                  {role === 'admin' && (<div className="flex items-center gap-3">{isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}<button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50"><PlusCircle size={18}/> 新增相片/影片</button></div>)}
+               </div>
+               {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => {if(confirm('確定要刪除此項目嗎？')) deleteItem('gallery', item.id);}} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
+            </div>
+           )}
+
+           {/* 獎項成就 (Awards) */}
+           {activeTab === 'awards' && (
+             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
+                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                   <div className="flex items-center gap-6">
+                     <div className="p-4 bg-yellow-100 text-yellow-600 rounded-2xl"><Award/></div>
+                     <div>
+                       <h3 className="text-xl font-black">獎項成就 (Hall of Fame)</h3>
+                       <p className="text-xs text-slate-400 mt-1">紀錄校隊輝煌戰績</p>
+                     </div>
+                   </div>
+                   
+                   {role === 'admin' && (
+                      <button onClick={handleAddAward} className="bg-yellow-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black text-sm">
+                        <PlusCircle size={18}/> 新增獎項
+                      </button>
+                   )}
+                </div>
+ 
+                {awards.length === 0 ? (
+                  <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
+                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><Trophy size={40}/></div>
+                     <p className="text-xl font-black text-slate-400">目前暫無獎項紀錄</p>
+                     <p className="text-sm text-slate-300 mt-2">請教練新增比賽獲獎紀錄</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                     {awards.sort((a,b) => b.date.localeCompare(a.date)).map((award) => {
+                        // [Fix 5.1] 自動比對學生班別
+                        const student = students.find(s => s.name === award.studentName);
+                        return (
+                          <div key={award.id} className="relative group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:scale-105 transition-all flex flex-col gap-4">
+                             {/* [Fix 5.0] 顯示獎項照片或預設圖 */}
+                             <div className="w-full aspect-[4/3] rounded-2xl bg-slate-50 overflow-hidden relative border border-slate-100">
+                                 {award.photoUrl ? (
+                                     <img src={award.photoUrl} alt="Award" className="w-full h-full object-cover" />
+                                 ) : (
+                                     <div className="w-full h-full flex items-center justify-center text-yellow-200/50">
+                                         <Trophy size={64}/>
+                                     </div>
+                                 )}
+                                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black text-slate-500 shadow-sm">
+                                     {award.date}
+                                 </div>
+                                 <div className="absolute bottom-3 right-3 bg-yellow-400 text-white px-4 py-1 rounded-full text-xs font-black shadow-lg shadow-yellow-100">
+                                     {award.rank}
+                                 </div>
+                             </div>
+
+                             <div className="px-1">
+                                 <h4 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight mb-2">{award.title}</h4>
+                                 <div className="flex items-center gap-2 text-slate-500 text-sm">
+                                    <User size={14} className="text-blue-500"/>
+                                    <span className="font-bold">{award.studentName}</span>
+                                    {/* [Fix 5.1] 顯示班別 */}
+                                    {student && (
+                                       <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-lg text-xs">
+                                         {student.class}
+                                       </span>
+                                    )}
+                                 </div>
+                                 {award.description && (
+                                   <p className="text-xs text-slate-400 mt-3 font-medium bg-slate-50 p-2 rounded-lg line-clamp-2">
+                                      {award.description}
+                                   </p>
+                                 )}
+                             </div>
+                             
+                             {role === 'admin' && (
+                                <button 
+                                  onClick={() => {
+                                     if(confirm(`確定要刪除 "${award.title}" 嗎？`)) deleteItem('awards', award.id);
+                                  }}
+                                  className="absolute top-4 right-4 p-2 bg-white/50 backdrop-blur text-slate-400 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100"
+                                >
+                                  <Trash2 size={16}/>
+                                </button>
+                             )}
+                          </div>
+                        );
+                     })}
+                  </div>
+                )}
+             </div>
+            )}
 
           {activeTab === 'financial' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
