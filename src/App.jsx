@@ -56,8 +56,8 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 ---
-// Version 5.3: Firebase Auth Login Base
-// Version 5.4: [Current] Add Admin Student Auth Management
+// Version 5.3: Base Stable Version (Email Auth)
+// Version 5.4: [Current] Add Admin Student Auth Management (Create/Reset Password) & Fix duplicate variable bug
 const CURRENT_VERSION = "5.4";
 
 export default function App() {
@@ -388,7 +388,7 @@ export default function App() {
       setLoginPassword('');
     } catch (error) {
       console.error("Login failed", error);
-      alert('登入失敗：' + error.message + '\n(請確認帳號密碼是否正確，或是否已建立帳號)');
+      alert('登入失敗：' + error.message + '\n(請確認帳號密碼是否正確)');
     }
   };
 
@@ -452,7 +452,7 @@ export default function App() {
     return stats;
   }, [rankedStudents]);
 
-  // 隊員過濾邏輯
+  // 隊員過濾邏輯 - [Fixed Duplicate Variable Bug]
   const filteredStudents = useMemo(() => {
     return rankedStudents.filter(s => {
       const matchSearch = s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
@@ -672,7 +672,7 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  // 自動化點名 (不加分)
+  // 自動化點名
   const markAttendance = async (student) => {
     if (!todaySchedule) { 
       alert('⚠️ 今日沒有設定訓練日程，請先到「訓練日程」新增今天的課堂。'); 
@@ -956,31 +956,6 @@ export default function App() {
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
   };
 
-  const todaySchedule = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    return schedules.find(s => s.date === today);
-  }, [schedules]);
-
-  const uniqueTrainingClasses = useMemo(() => {
-    const classes = schedules.map(s => s.trainingClass).filter(Boolean);
-    return ['ALL', ...new Set(classes)];
-  }, [schedules]);
-
-  const filteredSchedules = useMemo(() => {
-    const filtered = selectedClassFilter === 'ALL' 
-      ? schedules 
-      : schedules.filter(s => s.trainingClass === selectedClassFilter);
-    return filtered.sort((a,b) => a.date.localeCompare(b.date));
-  }, [schedules, selectedClassFilter]);
-
-  const filteredStudents = useMemo(() => {
-    return rankedStudents.filter(s => {
-      const matchSearch = s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
-      const matchYear = selectedYearFilter === 'ALL' || (s.dob && s.dob.startsWith(selectedYearFilter)) || (selectedYearFilter === '未知' && !s.dob);
-      return matchSearch && matchYear;
-    });
-  }, [rankedStudents, searchTerm, selectedYearFilter]);
-
   const studentsInSelectedAttendanceClass = useMemo(() => {
     const sorted = [...students].sort((a,b) => a.class.localeCompare(b.class));
     if (attendanceClassFilter === 'ALL') return sorted;
@@ -1004,71 +979,6 @@ export default function App() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   };
-
-  // --- 校徽 Logo 組件 ---
-  const SchoolLogo = ({ size = 48, className = "" }) => {
-    const [error, setError] = useState(false);
-    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
-
-    if (error) {
-      return <ShieldCheck className={`${className}`} size={size} />;
-    }
-
-    return (
-      <img 
-        src={logoUrl} 
-        alt="BCKLAS Logo" 
-        className={`object-contain ${className}`}
-        style={{ width: size * 2, height: size * 2 }}
-        loading="eager"
-        crossOrigin="anonymous" 
-        onError={(e) => {
-          console.error("Logo load failed", e);
-          setError(true);
-        }}
-      />
-    );
-  };
-
-  // [Fix 5.0] 新增獎項功能 - 包含圖片連結
-  const handleAddAward = async () => {
-    const title = prompt("獎項名稱 (例如：全港學界壁球賽 冠軍):");
-    if (!title) return;
-    const studentName = prompt("獲獎學生姓名:");
-    if (!studentName) return;
-    const date = prompt("獲獎日期 (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
-    const rank = prompt("名次 (例如：冠軍, 亞軍, 季軍, 優異):");
-    const photoUrl = prompt("得獎照片網址 (可選，空白則使用預設圖):"); 
-    const desc = prompt("備註 (可選):") || "";
-
-    try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'awards'), {
-            title,
-            studentName,
-            date,
-            rank,
-            photoUrl: photoUrl || "", 
-            description: desc,
-            timestamp: serverTimestamp()
-        });
-        alert('🏆 獎項新增成功！');
-    } catch (e) {
-        console.error(e);
-        alert('新增失敗');
-    }
-  };
-
-  if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
-      <div className="mb-8 animate-pulse">
-        <SchoolLogo size={96} />
-      </div>
-      <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
-      <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
-      <p className="text-xs text-slate-300 mt-2 font-mono">v{CURRENT_VERSION}</p>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
@@ -1143,7 +1053,7 @@ export default function App() {
                         placeholder="學生密碼" 
                       />
                     </div>
-                    <button onClick={() => handleLogin('student')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">
+                    <button onClick={() => handleLogin()} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">
                       進入系統
                     </button>
                   </div>
@@ -1826,235 +1736,6 @@ export default function App() {
                </div>
             </div>
           )}
-
-          {/* 4. 比賽資訊與公告 */}
-          {/* ... (Merged above) ... */}
-
-          {/* [Fix 2.6] 精彩花絮頁面 */}
-          {activeTab === 'gallery' && (
-            <div className="space-y-10 animate-in fade-in duration-500 font-bold">
-               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-6">
-                    {currentAlbum ? (
-                        <button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all">
-                            <ArrowLeft size={24}/>
-                        </button>
-                    ) : (
-                        <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>
-                    )}
-                    
-                    <div>
-                      <h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3>
-                      <p className="text-xs text-slate-400 mt-1">
-                          {currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {role === 'admin' && (
-                     <div className="flex items-center gap-3">
-                         {isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}
-                         <button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50">
-                           <PlusCircle size={18}/> 新增相片/影片
-                         </button>
-                     </div>
-                  )}
-               </div>
-
-               {galleryItems.length === 0 ? (
-                 <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
-                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div>
-                    <p className="text-xl font-black text-slate-400">目前暫無花絮內容</p>
-                    <p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p>
-                 </div>
-               ) : (
-                 <>
-                    {!currentAlbum && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                             {galleryAlbums.map((album) => (
-                                 <div 
-                                    key={album.title} 
-                                    onClick={() => setCurrentAlbum(album.title)}
-                                    className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"
-                                 >
-                                     <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">
-                                         {album.cover ? (
-                                             album.type === 'video' ? (
-                                                <div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300">
-                                                    <Video size={48}/>
-                                                </div>
-                                             ) : (
-                                                <img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>
-                                             )
-                                         ) : (
-                                             <div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300">
-                                                 <Folder size={48}/>
-                                             </div>
-                                         )}
-                                         <div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">
-                                             {album.count} 項目
-                                         </div>
-                                     </div>
-                                     
-                                     <div className="px-2 pb-2">
-                                         <h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4>
-                                         <p className="text-xs text-slate-400 mt-1">
-                                             點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/>
-                                         </p>
-                                     </div>
-                                 </div>
-                             ))}
-                        </div>
-                    )}
-
-                    {currentAlbum && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {galleryItems
-                                .filter(item => (item.title || "未分類") === currentAlbum)
-                                .sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0))
-                                .map(item => (
-                                <div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
-                                    <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">
-                                        {item.type === 'video' ? (
-                                        getYouTubeEmbedUrl(item.url) ? (
-                                            <iframe 
-                                                src={getYouTubeEmbedUrl(item.url)} 
-                                                className="w-full h-full" 
-                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                                allowFullScreen
-                                                title={item.title}
-                                            />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-slate-400">
-                                                <Video size={48}/>
-                                                <span className="ml-2 text-xs">影片連結無效</span>
-                                            </div>
-                                        )
-                                        ) : (
-                                        <img 
-                                            src={item.url} 
-                                            alt={item.title} 
-                                            onClick={() => setViewingImage(item)} 
-                                            className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"
-                                        />
-                                        )}
-                                        
-                                        <div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">
-                                        {item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}
-                                        {item.type === 'video' ? 'Video' : 'Photo'}
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="px-2">
-                                        <p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p>
-                                    </div>
-
-                                    {role === 'admin' && (
-                                        <div className="mt-6 pt-4 border-t border-slate-50 flex justify-end">
-                                            <button 
-                                            onClick={() => {
-                                                if(confirm('確定要刪除此項目嗎？')) deleteItem('gallery', item.id);
-                                            }}
-                                            className="text-slate-300 hover:text-red-500 p-2"
-                                            >
-                                            <Trash2 size={18}/>
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                 </>
-               )}
-            </div>
-           )}
-
-           {/* [Fix 5.1] 獎項成就 (Awards) - 新增照片與班別顯示 */}
-           {activeTab === 'awards' && (
-             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
-                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                   <div className="flex items-center gap-6">
-                     <div className="p-4 bg-yellow-100 text-yellow-600 rounded-2xl"><Award/></div>
-                     <div>
-                       <h3 className="text-xl font-black">獎項成就 (Hall of Fame)</h3>
-                       <p className="text-xs text-slate-400 mt-1">紀錄校隊輝煌戰績</p>
-                     </div>
-                   </div>
-                   
-                   {role === 'admin' && (
-                      <button onClick={handleAddAward} className="bg-yellow-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black text-sm">
-                        <PlusCircle size={18}/> 新增獎項
-                      </button>
-                   )}
-                </div>
- 
-                {awards.length === 0 ? (
-                  <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
-                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><Trophy size={40}/></div>
-                     <p className="text-xl font-black text-slate-400">目前暫無獎項紀錄</p>
-                     <p className="text-sm text-slate-300 mt-2">請教練新增比賽獲獎紀錄</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                     {awards.sort((a,b) => b.date.localeCompare(a.date)).map((award) => {
-                        // [Fix 5.1] 自動比對學生班別
-                        const student = students.find(s => s.name === award.studentName);
-                        return (
-                          <div key={award.id} className="relative group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:scale-105 transition-all flex flex-col gap-4">
-                             {/* [Fix 5.1] 顯示獎項照片或預設圖 */}
-                             <div className="w-full aspect-[4/3] rounded-2xl bg-slate-50 overflow-hidden relative border border-slate-100">
-                                 {award.photoUrl ? (
-                                     <img src={award.photoUrl} alt="Award" className="w-full h-full object-cover" />
-                                 ) : (
-                                     <div className="w-full h-full flex items-center justify-center text-yellow-200/50">
-                                         <Trophy size={64}/>
-                                     </div>
-                                 )}
-                                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black text-slate-500 shadow-sm">
-                                     {award.date}
-                                 </div>
-                                 <div className="absolute bottom-3 right-3 bg-yellow-400 text-white px-4 py-1 rounded-full text-xs font-black shadow-lg shadow-yellow-100">
-                                     {award.rank}
-                                 </div>
-                             </div>
-
-                             <div className="px-1">
-                                 <h4 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight mb-2">{award.title}</h4>
-                                 <div className="flex items-center gap-2 text-slate-500 text-sm">
-                                    <User size={14} className="text-blue-500"/>
-                                    <span className="font-bold">{award.studentName}</span>
-                                    {/* [Fix 5.1] 顯示班別 */}
-                                    {student && (
-                                       <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-lg text-xs">
-                                         {student.class}
-                                       </span>
-                                    )}
-                                 </div>
-                                 {award.description && (
-                                   <p className="text-xs text-slate-400 mt-3 font-medium bg-slate-50 p-2 rounded-lg line-clamp-2">
-                                      {award.description}
-                                   </p>
-                                 )}
-                             </div>
-                             
-                             {role === 'admin' && (
-                                <button 
-                                  onClick={() => {
-                                     if(confirm(`確定要刪除 "${award.title}" 嗎？`)) deleteItem('awards', award.id);
-                                  }}
-                                  className="absolute top-4 right-4 p-2 bg-white/50 backdrop-blur text-slate-400 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100"
-                                >
-                                  <Trash2 size={16}/>
-                                </button>
-                             )}
-                          </div>
-                        );
-                     })}
-                  </div>
-                )}
-             </div>
-            )}
 
           {activeTab === 'financial' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
