@@ -2,10 +2,9 @@
 
 import React from 'react';
 import { Mail, Lock } from 'lucide-react';
-import SchoolLogo from './SchoolLogo'; // 引入我們剛剛建立的 SchoolLogo 組件
+import SchoolLogo from './SchoolLogo';
 
 const LoginModal = ({
-  // --- Props (從 App.js 傳入的資料和函數) ---
   show,
   handleLogin,
   loginTab,
@@ -14,28 +13,24 @@ const LoginModal = ({
   setLoginEmail,
   loginPassword,
   setLoginPassword,
-  systemConfig, // SchoolLogo 需要 systemConfig
+  systemConfig,
   version
 }) => {
 
-  // 如果 show 是 false，就不渲染任何東西
   if (!show) {
     return null;
   }
 
-  // --- JSX (從 App.js 搬移過來的畫面) ---
   return (
     <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
       <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
         <div className="flex justify-center mb-10">
-          {/* 使用獨立的 SchoolLogo 組件 */}
           <SchoolLogo systemConfig={systemConfig} className="text-white" size={80} />
         </div>
         <h2 className="text-4xl font-black text-center text-slate-800 mb-2">正覺壁球</h2>
         <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
         <div className="space-y-6">
           
-          {/* 登入 Tab 切換 */}
           <div className="bg-slate-50 p-1 rounded-[2rem] flex mb-4 relative">
              <div className={`absolute top-1 bottom-1 w-1/2 bg-white rounded-[1.8rem] shadow-sm transition-all duration-300 ease-out ${loginTab === 'admin' ? 'left-1/2' : 'left-1'}`}></div>
              <button onClick={() => setLoginTab('student')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'student' ? 'text-blue-600' : 'text-slate-400'}`}>學員入口</button>
@@ -43,7 +38,6 @@ const LoginModal = ({
           </div>
 
           {loginTab === 'student' ? (
-              // 學員登入表單
               <div className="space-y-3 font-bold animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="relative">
                   <span className="absolute left-5 top-5 text-slate-300"><Mail size={18}/></span>
@@ -70,7 +64,6 @@ const LoginModal = ({
                 </button>
               </div>
           ) : (
-              // 教練登入表單
               <div className="space-y-3 font-bold animate-in fade-in slide-in-from-left-4 duration-300">
                 <div className="relative">
                   <span className="absolute left-5 top-5 text-slate-300"><Mail size={18}/></span>
