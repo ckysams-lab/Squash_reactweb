@@ -19,8 +19,8 @@ import {
   signInWithCustomToken, 
   signInAnonymously, 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, // V5.4 新增：建立帳號
-  sendPasswordResetEmail, // V5.4 新增：重置密碼
+  createUserWithEmailAndPassword, // V5.4 Added
+  sendPasswordResetEmail, // V5.4 Added
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
@@ -56,8 +56,8 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 ---
-// Version 5.3: Email/Pass Auth Base
-// Version 5.4: [Current] + Admin Student Auth Management (Create/Reset Password)
+// Version 5.3: Firebase Auth Login Base
+// Version 5.4: [Current] Add Admin Student Auth Management
 const CURRENT_VERSION = "5.4";
 
 export default function App() {
@@ -248,7 +248,7 @@ export default function App() {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-          // 初始不強制匿名，等待用戶手動登入
+          // V5.3: 初始狀態下，如果不登入，保持未登入狀態
         }
       } catch (err) { 
         console.error("Auth Error:", err);
@@ -432,7 +432,7 @@ export default function App() {
     });
   }, [students]);
 
-  // 統計各出生年份的人數
+  // 統計各出生年份的人數 (Ladder Stats)
   const birthYearStats = useMemo(() => {
     const stats = {};
     if (Array.isArray(rankedStudents)) {
@@ -672,7 +672,7 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  // 自動化點名
+  // 自動化點名 (不加分)
   const markAttendance = async (student) => {
     if (!todaySchedule) { 
       alert('⚠️ 今日沒有設定訓練日程，請先到「訓練日程」新增今天的課堂。'); 
@@ -1031,7 +1031,7 @@ export default function App() {
     );
   };
 
-  // [Fix 5.1] 新增獎項功能 - 包含圖片連結
+  // [Fix 5.0] 新增獎項功能 - 包含圖片連結
   const handleAddAward = async () => {
     const title = prompt("獎項名稱 (例如：全港學界壁球賽 冠軍):");
     if (!title) return;
@@ -1143,7 +1143,7 @@ export default function App() {
                         placeholder="學生密碼" 
                       />
                     </div>
-                    <button onClick={() => handleLogin()} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">
+                    <button onClick={() => handleLogin('student')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">
                       進入系統
                     </button>
                   </div>
@@ -1378,99 +1378,34 @@ export default function App() {
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
-                   let orderClass = "";
-                   let sizeClass = "";
-                   let gradientClass = "";
-                   let iconColor = "";
-                   let shadowClass = "";
-                   let label = "";
-                   let labelBg = "";
-
-                   if (i === 0) { // 1st Place
-                      orderClass = "order-1 md:order-2";
-                      sizeClass = "w-full md:w-1/3 md:-mt-12 scale-105 md:scale-110 z-20"; 
-                      gradientClass = "bg-gradient-to-b from-yellow-100 via-yellow-50 to-white border-yellow-300";
-                      iconColor = "text-yellow-500";
-                      shadowClass = "shadow-2xl shadow-yellow-200/50";
-                      label = "CHAMPION";
-                      labelBg = "bg-yellow-500";
-                   } else if (i === 1) { // 2nd Place
-                      orderClass = "order-2 md:order-1";
-                      sizeClass = "w-full md:w-1/4 z-10"; 
-                      gradientClass = "bg-gradient-to-b from-slate-200 via-slate-50 to-white border-slate-300";
-                      iconColor = "text-slate-500";
-                      shadowClass = "shadow-xl shadow-slate-300/50";
-                      label = "RUNNER-UP";
-                      labelBg = "bg-slate-500";
-                   } else { // 3rd Place
-                      orderClass = "order-3 md:order-3";
-                      sizeClass = "w-full md:w-1/4 z-10"; 
-                      gradientClass = "bg-gradient-to-b from-orange-100 via-orange-50 to-white border-orange-300";
-                      iconColor = "text-orange-500";
-                      shadowClass = "shadow-xl shadow-orange-200/50";
-                      label = "3RD PLACE";
-                      labelBg = "bg-orange-500";
-                   }
+                   let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
+                   if (i === 0) { orderClass = "order-1 md:order-2"; sizeClass = "w-full md:w-1/3 md:-mt-12 scale-105 md:scale-110 z-20"; gradientClass = "bg-gradient-to-b from-yellow-100 via-yellow-50 to-white border-yellow-300"; iconColor = "text-yellow-500"; shadowClass = "shadow-2xl shadow-yellow-200/50"; label = "CHAMPION"; labelBg = "bg-yellow-500"; } 
+                   else if (i === 1) { orderClass = "order-2 md:order-1"; sizeClass = "w-full md:w-1/4 z-10"; gradientClass = "bg-gradient-to-b from-slate-200 via-slate-50 to-white border-slate-300"; iconColor = "text-slate-500"; shadowClass = "shadow-xl shadow-slate-300/50"; label = "RUNNER-UP"; labelBg = "bg-slate-500"; } 
+                   else { orderClass = "order-3 md:order-3"; sizeClass = "w-full md:w-1/4 z-10"; gradientClass = "bg-gradient-to-b from-orange-100 via-orange-50 to-white border-orange-300"; iconColor = "text-orange-500"; shadowClass = "shadow-xl shadow-orange-200/50"; label = "3RD PLACE"; labelBg = "bg-orange-500"; }
 
                    return (
                       <div key={s.id} className={`relative flex-shrink-0 flex flex-col items-center text-center ${orderClass} ${sizeClass} transition-all duration-500 hover:-translate-y-2`}>
                           <div className={`absolute inset-0 rounded-[3rem] border-4 ${gradientClass} ${shadowClass} overflow-hidden`}>
-                               <div className="absolute -right-4 -top-4 opacity-10 rotate-12">
-                                  <TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/>
-                               </div>
-                               <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none">
-                                  <span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span>
-                               </div>
+                               <div className="absolute -right-4 -top-4 opacity-10 rotate-12"><TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/></div>
+                               <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none"><span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span></div>
                           </div>
-
                           <div className="relative z-10 p-8 w-full h-full flex flex-col items-center">
-                              {i === 0 && (
-                                <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg">
-                                  <Crown size={64} fill="currentColor" strokeWidth={1.5} />
-                                </div>
-                              )}
-                              <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>
-                                  {s.name[0]}
-                                  <div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>
-                                     {label}
-                                  </div>
-                              </div>
-                              <div className="mt-4 w-full">
-                                   <h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3>
-                                   <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p>
-                                   <div className="my-6">
-                                     <div className={`text-5xl font-black font-mono tracking-tight ${iconColor}`}>
-                                        {s.totalPoints}
-                                     </div>
-                                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Points</p>
-                                   </div>
-                                   <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 border border-white/50 backdrop-blur-sm`}>
-                                     <span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span>
-                                     <span className="text-xs font-black text-slate-500">{s.badge}</span>
-                                   </div>
-                              </div>
+                              {i === 0 && (<div className="absolute -top-14 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg"><Crown size={64} fill="currentColor" strokeWidth={1.5} /></div>)}
+                              <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>{s.name[0]}<div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>{label}</div></div>
+                              <div className="mt-4 w-full"><h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3><p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p><div className="my-6"><div className={`text-5xl font-black font-mono tracking-tight ${iconColor}`}>{s.totalPoints}</div><p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Points</p></div><div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 border border-white/50 backdrop-blur-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black text-slate-500">{s.badge}</span></div></div>
                           </div>
                       </div>
                    )
                 })}
               </div>
 
-              {/* [Fix 4.6] 更新「積分機制說明」卡片 */}
               <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 mb-8 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
-                  <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl">
-                      <Info size={24} />
-                  </div>
+                  <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Info size={24} /></div>
                   <div className="flex-1">
                       <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分機制說明</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
-                          <ul className="list-disc pl-4 space-y-1">
-                              <li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li>
-                              <li><span className="text-blue-600">內部聯賽</span>：勝方 +10 / 巨人殺手 +20</li>
-                          </ul>
-                          <ul className="list-disc pl-4 space-y-1">
-                              <li><span className="text-indigo-500">校外賽參與</span>：+20 / 勝場 +20</li>
-                              <li><span className="text-yellow-600">校外賽獎項</span>：冠軍+100 / 亞軍+50 / 季殿+30</li>
-                          </ul>
+                          <ul className="list-disc pl-4 space-y-1"><li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li><li><span className="text-blue-600">內部聯賽</span>：勝方 +10 / 巨人殺手 +20</li></ul>
+                          <ul className="list-disc pl-4 space-y-1"><li><span className="text-indigo-500">校外賽參與</span>：+20 / 勝場 +20</li><li><span className="text-yellow-600">校外賽獎項</span>：冠軍+100 / 亞軍+50 / 季殿+30</li></ul>
                       </div>
                   </div>
               </div>
@@ -1478,88 +1413,22 @@ export default function App() {
               <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden font-bold">
                 <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
-                  {role === 'admin' && (
-                     <div className="flex gap-2">
-                        <span className="text-[10px] text-slate-400 self-center">*請在下方列表為個別學生加分</span>
-                     </div>
-                  )}
-                  <div className="relative w-full md:w-80">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
-                    <input 
-                      value={searchTerm}
-                      onChange={(e)=>setSearchTerm(e.target.value)}
-                      placeholder="搜尋姓名或班別..." 
-                      className="w-full bg-white border rounded-2xl py-3 pl-12 pr-4 outline-none focus:border-blue-600 transition-all shadow-sm"
-                    />
-                  </div>
+                  {role === 'admin' && <div className="flex gap-2"><span className="text-[10px] text-slate-400 self-center">*請在下方列表為個別學生加分</span></div>}
+                  <div className="relative w-full md:w-80"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/><input value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} placeholder="搜尋姓名或班別..." className="w-full bg-white border rounded-2xl py-3 pl-12 pr-4 outline-none focus:border-blue-600 transition-all shadow-sm"/></div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
-                    <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] bg-slate-50 border-b font-black">
-                      <tr>
-                        <th className="px-8 py-6 text-center">排名</th>
-                        <th className="px-8 py-6">隊員資料</th>
-                        <th className="px-8 py-6">目前章別</th>
-                        <th className="px-8 py-6 text-right">基礎分</th>
-                        <th className="px-8 py-6 text-right">總分</th>
-                        {role === 'admin' && <th className="px-8 py-6 text-center">教練操作</th>}
-                      </tr>
-                    </thead>
+                    <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] bg-slate-50 border-b font-black"><tr><th className="px-8 py-6 text-center">排名</th><th className="px-8 py-6">隊員資料</th><th className="px-8 py-6">目前章別</th><th className="px-8 py-6 text-right">基礎分</th><th className="px-8 py-6 text-right">總分</th>{role === 'admin' && <th className="px-8 py-6 text-center">教練操作</th>}</tr></thead>
                     <tbody className="divide-y divide-slate-50">
                       {filteredStudents.map((s, i) => (
                         <tr key={s.id} className="group hover:bg-blue-50/30 transition-all">
-                          <td className="px-8 py-8 text-center">
-                            <span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${
-                              i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'
-                            }`}>
-                              {i+1}
-                            </span>
-                          </td>
-                          <td className="px-8 py-8">
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">
-                                {s.name[0]}
-                              </div>
-                              <div>
-                                <div className="font-black text-lg text-slate-800">{s.name}</div>
-                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-8 py-8">
-                            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}>
-                              <span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span>
-                              <span className="text-xs font-black">{s.badge}</span>
-                            </div>
-                          </td>
+                          <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
+                          <td className="px-8 py-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.name[0]}</div><div><div className="font-black text-lg text-slate-800">{s.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div></div></div></td>
+                          <td className="px-8 py-8"><div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black">{s.badge}</span></div></td>
                           <td className="px-8 py-8 text-right font-mono text-slate-400">{s.points}</td>
                           <td className="px-8 py-8 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
                           {role === 'admin' && (
-                            <td className="px-8 py-8">
-                              <div className="flex justify-center gap-2">
-                                <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button>
-                                <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button>
-                                {/* [Fix 4.5] 新增外賽詳細獎勵按鈕 */}
-                                <button 
-                                  onClick={()=> handleExternalComp(s)} 
-                                  className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" 
-                                  title="校外賽成績錄入"
-                                >
-                                    <Globe size={18}/>
-                                </button>
-                                <button 
-                                  onClick={() => {
-                                    if(confirm(`確定要永久刪除 ${s.name} (${s.class} ${s.classNo}) 嗎？`)) {
-                                      deleteItem('students', s.id);
-                                    }
-                                  }} 
-                                  className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
-                                  title="永久刪除"
-                                >
-                                  <Trash2 size={18}/>
-                                </button>
-                              </div>
-                            </td>
+                            <td className="px-8 py-8"><div className="flex justify-center gap-2"><button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button><button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button><button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" title="校外賽成績錄入"><Globe size={18}/></button><button onClick={() => {if(confirm(`確定要永久刪除 ${s.name} (${s.class} ${s.classNo}) 嗎？`)) {deleteItem('students', s.id);}}} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="永久刪除"><Trash2 size={18}/></button></div></td>
                           )}
                         </tr>
                       ))}
@@ -1575,55 +1444,13 @@ export default function App() {
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                  <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
                     <div className="absolute -right-10 -bottom-10 opacity-5 rotate-12"><Swords size={200}/></div>
-                    
-                    <div className="relative z-10 text-center mb-12">
-                       <h3 className="text-4xl font-black mb-2">⚔️ 內部聯賽對戰錄入</h3>
-                       <p className="text-slate-400">系統將自動判定排名與章別，計算積分獎勵</p>
-                    </div>
-
+                    <div className="relative z-10 text-center mb-12"><h3 className="text-4xl font-black mb-2">⚔️ 內部聯賽對戰錄入</h3><p className="text-slate-400">系統將自動判定排名與章別，計算積分獎勵</p></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-10 relative z-10">
-                       <div className="bg-emerald-50 p-8 rounded-[3rem] border-2 border-emerald-100 text-center">
-                          <h4 className="text-2xl font-black text-emerald-600 mb-6">🏆 勝方 (Winner)</h4>
-                          <select 
-                             className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm"
-                             value={matchWinner}
-                             onChange={(e) => setMatchWinner(e.target.value)}
-                          >
-                             <option value="">選擇勝方隊員</option>
-                             {rankedStudents.map(s => (
-                                <option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>
-                             ))}
-                          </select>
-                       </div>
-
-                       <div className="bg-rose-50 p-8 rounded-[3rem] border-2 border-rose-100 text-center">
-                          <h4 className="text-2xl font-black text-rose-600 mb-6">💀 負方 (Loser)</h4>
-                          <select 
-                             className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm"
-                             value={matchLoser}
-                             onChange={(e) => setMatchLoser(e.target.value)}
-                          >
-                             <option value="">選擇負方隊員</option>
-                             {rankedStudents.map(s => (
-                                <option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>
-                             ))}
-                          </select>
-                       </div>
+                       <div className="bg-emerald-50 p-8 rounded-[3rem] border-2 border-emerald-100 text-center"><h4 className="text-2xl font-black text-emerald-600 mb-6">🏆 勝方 (Winner)</h4><select className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm" value={matchWinner} onChange={(e) => setMatchWinner(e.target.value)}><option value="">選擇勝方隊員</option>{rankedStudents.map(s => (<option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>))}</select></div>
+                       <div className="bg-rose-50 p-8 rounded-[3rem] border-2 border-rose-100 text-center"><h4 className="text-2xl font-black text-rose-600 mb-6">💀 負方 (Loser)</h4><select className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm" value={matchLoser} onChange={(e) => setMatchLoser(e.target.value)}><option value="">選擇負方隊員</option>{rankedStudents.map(s => (<option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>))}</select></div>
                     </div>
-
-                    <div className="mt-12 flex justify-center relative z-10">
-                        <button 
-                           onClick={handleMatchSubmit}
-                           className="bg-slate-900 text-white px-12 py-5 rounded-[2.5rem] text-xl font-black shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-4"
-                        >
-                           <Swords size={28}/> 提交對戰結果
-                        </button>
-                    </div>
-
-                    <div className="mt-8 text-center text-xs text-slate-400 font-bold">
-                       <p>✨ 規則：基礎勝利 +10 分</p>
-                       <p className="mt-1">🔥 巨人殺手：低章贏高章 或 贏高於自己 5 名以上對手 -&gt; <span className="text-orange-500">+20 分</span></p>
-                    </div>
+                    <div className="mt-12 flex justify-center relative z-10"><button onClick={handleMatchSubmit} className="bg-slate-900 text-white px-12 py-5 rounded-[2.5rem] text-xl font-black shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-4"><Swords size={28}/> 提交對戰結果</button></div>
+                    <div className="mt-8 text-center text-xs text-slate-400 font-bold"><p>✨ 規則：基礎勝利 +10 分</p><p className="mt-1">🔥 巨人殺手：低章贏高章 或 贏高於自己 5 名以上對手 -&gt; <span className="text-orange-500">+20 分</span></p></div>
                  </div>
               </div>
            )}
@@ -1631,129 +1458,16 @@ export default function App() {
           {/* 6. 管理概況 (Dashboard) */}
           {activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
-                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10">
-                   <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
-                     <History className="text-blue-600"/> 最近更新活動
-                   </h3>
-                   <div className="space-y-6">
-                      {competitions.slice(0, 4).map(c => (
-                        <div key={c.id} className="flex gap-6 items-start">
-                           <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div>
-                           <div>
-                             <p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p>
-                             <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p>
-                           </div>
-                        </div>
-                      ))}
-                      {schedules.slice(0, 2).map(s => (
-                        <div key={s.id} className="flex gap-6 items-start">
-                           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div>
-                           <div>
-                             <p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p>
-                             <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p>
-                           </div>
-                        </div>
-                      ))}
-                   </div>
-                </div>
-
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><History className="text-blue-600"/> 最近更新活動</h3><div className="space-y-6">{competitions.slice(0, 4).map(c => (<div key={c.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div><div><p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p></div></div>))}{schedules.slice(0, 2).map(s => (<div key={s.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div><div><p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p></div></div>))}</div></div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                   {/* 方格 1: 活躍隊員 */}
-                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden">
-                      <div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div>
-                      <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">活躍隊員</p>
-                      <p className="text-6xl font-black mt-2 font-mono">{students.length}</p>
-                      <div className="mt-6 flex items-center gap-2 text-xs text-blue-200 font-bold">
-                        <TrendingUp size={14}/> 成長茁壯中
-                      </div>
-                   </div>
-
-                   {/* 方格 2: 本月訓練 */}
-                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-                      <div className="absolute -right-5 -bottom-5 opacity-5"><CalendarIcon size={120}/></div>
-                      <p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">本月訓練</p>
-                      <p className="text-6xl font-black mt-2 text-slate-800 font-mono">{dashboardStats.thisMonthTrainings}</p>
-                      <div className="mt-6 flex items-center gap-2 text-xs text-slate-400 font-bold">
-                        <Clock size={14}/> 訓練不間斷
-                      </div>
-                   </div>
-
-                   {/* 方格 3: 距離下一場比賽倒數 */}
-                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
-                       <div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div>
-                      <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p>
-                      <div className="flex items-baseline gap-2 mt-2">
-                        <p className="text-6xl font-black font-mono">
-                          {dashboardStats.daysToNextMatch}
-                        </p>
-                        {dashboardStats.daysToNextMatch !== '-' && dashboardStats.daysToNextMatch !== 'Today!' && (
-                           <span className="text-xl font-bold text-slate-500">Days</span>
-                        )}
-                      </div>
-                      <div className="mt-6 flex items-center gap-2 text-xs text-emerald-400 font-bold">
-                         <Target size={14}/> 全力備戰中
-                      </div>
-                   </div>
-
-                   {/* 方格 4: 年度獎項 */}
-                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden">
-                       <div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div>
-                      <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200">
-                        <TrophyIcon size={32}/>
-                      </div>
-                      <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1 z-10">本年度獎項</p>
-                      <p className="text-4xl font-black mt-1 text-slate-800 z-10">{dashboardStats.awardsThisYear}</p>
-                   </div>
+                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div><p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">活躍隊員</p><p className="text-6xl font-black mt-2 font-mono">{students.length}</p><div className="mt-6 flex items-center gap-2 text-xs text-blue-200 font-bold"><TrendingUp size={14}/> 成長茁壯中</div></div>
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-5"><CalendarIcon size={120}/></div><p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">本月訓練</p><p className="text-6xl font-black mt-2 text-slate-800 font-mono">{dashboardStats.thisMonthTrainings}</p><div className="mt-6 flex items-center gap-2 text-xs text-slate-400 font-bold"><Clock size={14}/> 訓練不間斷</div></div>
+                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div><p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p><div className="flex items-baseline gap-2 mt-2"><p className="text-6xl font-black font-mono">{dashboardStats.daysToNextMatch}</p>{dashboardStats.daysToNextMatch !== '-' && dashboardStats.daysToNextMatch !== 'Today!' && (<span className="text-xl font-bold text-slate-500">Days</span>)}</div><div className="mt-6 flex items-center gap-2 text-xs text-emerald-400 font-bold"><Target size={14}/> 全力備戰中</div></div>
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div><div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200"><TrophyIcon size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1 z-10">本年度獎項</p><p className="text-4xl font-black mt-1 text-slate-800 z-10">{dashboardStats.awardsThisYear}</p></div>
                 </div>
-                
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                      <h3 className="text-2xl font-black mb-10 flex items-center gap-4">
-                        <Target className="text-blue-600"/> 章別分佈概況
-                      </h3>
-                      <div className="space-y-6">
-                        {Object.keys(BADGE_DATA).filter(k => k !== '無').map(badge => {
-                          const count = students.filter(s => s.badge === badge).length;
-                          const percent = students.length ? Math.round((count/students.length)*100) : 0;
-                          return (
-                            <div key={badge} className="space-y-2">
-                              <div className="flex justify-between items-center px-2">
-                                <span className={`text-xs font-black ${BADGE_DATA[badge].color}`}>{badge}</span>
-                                <span className="text-xs text-slate-400 font-mono">{count} 人 ({percent}%)</span>
-                              </div>
-                              <div className="h-4 w-full bg-slate-50 rounded-full overflow-hidden border">
-                                <div className={`h-full transition-all duration-1000 ${BADGE_DATA[badge].bg.replace('bg-', 'bg-')}`} style={{width: `${percent}%`, backgroundColor: 'currentColor'}}></div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                   </div>
-                   
-                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col h-full">
-                      <h3 className="text-2xl font-black mb-6 flex items-center gap-4">
-                        <BookOpen className="text-blue-600"/> 章別獎勵計劃
-                      </h3>
-                      <div className="flex-1 w-full bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 relative group">
-                          {/* [Fix 3.8] 使用 jsDelivr CDN 連結確保 PDF 預覽正常 */}
-                          <iframe 
-                            src="https://docs.google.com/gview?embedded=true&url=https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" 
-                            className="w-full h-full min-h-[300px]" 
-                            frameBorder="0"
-                            title="Award Scheme Booklet"
-                          ></iframe>
-                          <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                             <a 
-                                href="https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="bg-blue-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"
-                             >
-                                <Download size={14}/> 下載 PDF
-                             </a>
-                          </div>
-                      </div>
-                   </div>
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><Target className="text-blue-600"/> 章別分佈概況</h3><div className="space-y-6">{Object.keys(BADGE_DATA).filter(k => k !== '無').map(badge => {const count = students.filter(s => s.badge === badge).length;const percent = students.length ? Math.round((count/students.length)*100) : 0;return (<div key={badge} className="space-y-2"><div className="flex justify-between items-center px-2"><span className={`text-xs font-black ${BADGE_DATA[badge].color}`}>{badge}</span><span className="text-xs text-slate-400 font-mono">{count} 人 ({percent}%)</span></div><div className="h-4 w-full bg-slate-50 rounded-full overflow-hidden border"><div className={`h-full transition-all duration-1000 ${BADGE_DATA[badge].bg.replace('bg-', 'bg-')}`} style={{width: `${percent}%`, backgroundColor: 'currentColor'}}></div></div></div>);})}</div></div>
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col h-full"><h3 className="text-2xl font-black mb-6 flex items-center gap-4"><BookOpen className="text-blue-600"/> 章別獎勵計劃</h3><div className="flex-1 w-full bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 relative group"><iframe src="https://docs.google.com/gview?embedded=true&url=https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" className="w-full h-full min-h-[300px]" frameBorder="0" title="Award Scheme Booklet"></iframe><div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"><a href="https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"><Download size={14}/> 下載 PDF</a></div></div></div>
                 </div>
              </div>
           )}
@@ -1801,7 +1515,8 @@ export default function App() {
                      <button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button>
                      <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
                         <Upload size={20}/> 批量匯入 CSV 名單
-                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/></label>
+                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
+                     </label>
                    </div>
                 </div>
                 
@@ -1835,7 +1550,7 @@ export default function App() {
 
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
                         <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
-                           {/* [Fix 5.4] 帳號管理按鈕 (Key) */}
+                           {/* [Fix 5.4] 帳號管理按鈕 (Key) - Admin Auth Manager */}
                            <button 
                              onClick={() => handleManageStudentAuth(s)}
                              className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all"
@@ -1843,7 +1558,7 @@ export default function App() {
                            >
                               <Key size={18}/>
                            </button>
-                           {/* [Fix 4.7] 生日錄入按鈕 */}
+                           {/* [Fix 4.7] 修改設定按鈕為生日錄入 */}
                            <button 
                              onClick={() => handleUpdateDOB(s)}
                              className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all"
