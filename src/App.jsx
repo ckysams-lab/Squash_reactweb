@@ -12,14 +12,13 @@ import {
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
-  addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where, getDocs
+  addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where
 } from 'firebase/firestore';
 import { 
   getAuth, 
   signInWithCustomToken, 
   signInAnonymously, 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
@@ -53,13 +52,9 @@ const db = getFirestore(app);
 
 // 強制鎖定 App ID
 const appId = 'bcklas-squash-core-v1'; 
-// 學生虛擬 Email 域名 (用於後台驗證，學生無需知道)
-const STUDENT_EMAIL_DOMAIN = "student.bcklas.com";
 
 // --- 版本控制 ---
-// Version 5.3: Base Best Version
-// Version 5.3.1: Student Login (Class/No/Pass) + Admin Set Password
-// Version 5.4: Added admin function to set student passwords in Firebase Auth.
+// Version 5.4: [Current] 學生登入改用「班別+班號+密碼」, 新增教練設定學生登入資料功能
 const CURRENT_VERSION = "5.4";
 
 export default function App() {
@@ -79,7 +74,6 @@ export default function App() {
   
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
-    adminEmail: 'coach@bcklas.com',
     announcements: [],
     seasonalTheme: 'default',
     schoolLogo: null 
@@ -91,12 +85,14 @@ export default function App() {
   const [viewingImage, setViewingImage] = useState(null);
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  // 登入狀態
-  const [loginEmail, setLoginEmail] = useState('');
+  
+  // 登入狀態 [V5.4]
+  const [loginEmail, setLoginEmail] = useState(''); // For Admin
+  const [loginClass, setLoginClass] = useState(''); // For Student
+  const [loginClassNo, setLoginClassNo] = useState(''); // For Student
   const [loginPassword, setLoginPassword] = useState('');
-  const [loginClass, setLoginClass] = useState(''); // 學生班別
-  const [loginClassNo, setLoginClassNo] = useState(''); // 學生班號
   const [loginTab, setLoginTab] = useState('student'); // 'student' | 'admin'
+
   // 對戰錄入狀態
   const [matchWinner, setMatchWinner] = useState('');
   const [matchLoser, setMatchLoser] = useState('');
@@ -109,6 +105,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const galleryInputRef = useRef(null);
+  
   // 財務參數
   const [financeConfig, setFinanceConfig] = useState({
     nTeam: 1, costTeam: 2750,
@@ -121,9 +118,11 @@ export default function App() {
   useEffect(() => {
     const storedVersion = localStorage.getItem('app_version');
     if (storedVersion !== CURRENT_VERSION) {
+      console.log(`[System] Detected new version: ${CURRENT_VERSION}. Cleaning cache...`);
       localStorage.clear();
       sessionStorage.clear();
       localStorage.setItem('app_version', CURRENT_VERSION);
+      window.location.reload();
     }
   }, []);
 
@@ -146,13 +145,11 @@ export default function App() {
     const safeSchedules = Array.isArray(schedules) ? schedules : [];
     const safeCompetitions = Array.isArray(competitions) ? competitions : [];
     const safeAwards = Array.isArray(awards) ? awards : [];
-
     const thisMonthTrainings = safeSchedules.filter(s => {
       if (!s.date) return false;
       const d = new Date(s.date);
       return !isNaN(d) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     }).length;
-
     const futureCompetitions = safeCompetitions
       .filter(c => c.date && new Date(c.date) >= todayZero)
       .sort((a,b) => new Date(a.date) - new Date(b.date));
@@ -166,14 +163,12 @@ export default function App() {
         daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
       }
     }
-
     const awardsThisYear = safeAwards.filter(a => {
       if (!a.date) return false;
       const d = new Date(a.date);
       const isThisYear = !isNaN(d) && d.getFullYear() === currentYear;
       return isThisYear;
     }).length;
-
     return {
       thisMonthTrainings,
       daysToNextMatch,
@@ -240,8 +235,6 @@ export default function App() {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          // V5.3: 初始狀態下，如果不登入，保持未登入狀態
         }
       } catch (err) { 
         console.error("Auth Error:", err);
@@ -279,13 +272,7 @@ export default function App() {
 
       const unsubSystemConfig = onSnapshot(systemConfigRef, (docSnap) => {
         if (docSnap.exists()) setSystemConfig(docSnap.data());
-        else setDoc(systemConfigRef, { 
-            adminPassword: 'admin', 
-            adminEmail: 'coach@bcklas.com', 
-            announcements: [], 
-            seasonalTheme: 'default', 
-            schoolLogo: null 
-        });
+        else setDoc(systemConfigRef, { adminPassword: 'admin', announcements: [], seasonalTheme: 'default', schoolLogo: null });
       }, (e) => console.error("Config err", e));
 
       const unsubFinanceConfig = onSnapshot(financeConfigRef, (docSnap) => {
@@ -326,73 +313,61 @@ export default function App() {
     }
   }, [user]);
 
-  // --- Helper: 產生學生虛擬 Email ---
-  const generateStudentEmail = (cls, no) => {
-      // e.g. 6a01@student.bcklas.com
-      return `${cls.toLowerCase().replace(/\s/g, '')}${no.toString().padStart(2, '0')}@${STUDENT_EMAIL_DOMAIN}`;
-  };
-
-  // --- 登入邏輯 ---
-  const handleLogin = async () => {
-    try {
-      let email = '';
-      let password = loginPassword;
-
-      if (loginTab === 'admin') {
-         // 教練登入
-         if (!loginEmail || !loginPassword) {
-             alert('請輸入電郵和密碼');
-             return;
-         }
-         email = loginEmail;
-      } else {
-         // 學生登入 (Class + No + Password)
-         if (!loginClass || !loginClassNo || !loginPassword) {
-             alert('請輸入班別、班號和密碼');
-             return;
-         }
-         // 學生無需知道 email，系統在後台自動組合
-         email = generateStudentEmail(loginClass, loginClassNo);
+  // --- [V5.4] 登入邏輯升級 ---
+  const handleLogin = async (type) => {
+    if (type === 'admin') {
+      if (!loginEmail || !loginPassword) {
+        alert('請輸入教練電郵和密碼');
+        return;
       }
-
-      // 執行 Firebase 登入
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      if (loginTab === 'admin') {
-         // 教練簡單驗證 (實際權限由 Firestore Rules 控制)
-         if (email.toLowerCase() === (systemConfig?.adminEmail || 'coach@bcklas.com').toLowerCase()) {
-             setRole('admin');
-             setShowLoginModal(false);
-             setActiveTab('dashboard');
-         } else {
-             // 容錯機制: 若登入的是教練 Email 但 systemConfig 還沒載入，先允許
-             setRole('admin');
-             setShowLoginModal(false);
-             setActiveTab('dashboard');
-         }
-      } else {
-         // 學生登入後，比對資料庫資料
-         const formattedClass = loginClass.toUpperCase();
-         
-         // 暫時先設定 Role，並讓 UI 顯示
-         setRole('student');
-         setCurrentUserInfo({ name: '同學', class: formattedClass, classNo: loginClassNo });
-         setShowLoginModal(false);
-         setActiveTab('competitions');
+      try {
+        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+        setRole('admin'); 
+        setShowLoginModal(false); 
+        setActiveTab('dashboard');
+      } catch (error) {
+        console.error("Admin Login failed", error);
+        alert('登入失敗：' + error.message + '\n(請確認教練帳號密碼是否正確)');
+        return;
+      }
+    } else { // Student Login
+      if (!loginClass || !loginClassNo || !loginPassword) {
+        alert('請輸入班別、班號和密碼');
+        return;
       }
       
-      // 清空
-      setLoginEmail('');
-      setLoginPassword('');
-      setLoginClass('');
-      setLoginClassNo('');
-      
-    } catch (error) {
-      console.error("Login failed", error);
-      alert('登入失敗：\n' + (error.code === 'auth/invalid-credential' ? '帳號或密碼錯誤 (若是學生，請確認教練已為您建立帳號)' : error.message));
+      // 組合內部登入電郵
+      const studentAuthEmail = `${loginClass.toLowerCase().trim()}${loginClassNo.trim()}@bcklas.squash`;
+
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, studentAuthEmail, loginPassword);
+        
+        // 登入成功後，根據組合的電郵尋找學生資料
+        const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
+        
+        if (matchedStudent) {
+            setCurrentUserInfo(matchedStudent);
+        } else {
+            // 如果在資料庫中找不到對應的 authEmail，提供一個基礎資訊
+            setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail });
+        }
+        setRole('student'); 
+        setShowLoginModal(false); 
+        setActiveTab('competitions');
+      } catch (error) {
+        console.error("Student Login failed", error);
+        alert('登入失敗：\n(請確認班別、班號和密碼是否正確)');
+        return;
+      }
     }
-  };
 
+    // 清空輸入
+    setLoginEmail('');
+    setLoginClass('');
+    setLoginClassNo('');
+    setLoginPassword('');
+  };
+    
   const handleLogout = async () => { 
     try {
       await signOut(auth);
@@ -404,42 +379,6 @@ export default function App() {
       console.error("Logout error", e);
     }
   };
-
-  // --- [New in V5.4] 教練替學生設定密碼 (建立 Auth 帳號) ---
-  const handleSetStudentPassword = async (student) => {
-      const newPassword = prompt(`請為 ${student.name} (${student.class} ${student.classNo}) 設定登入密碼 (最少6位):`);
-      if (!newPassword) return;
-      if (newPassword.length < 6) { alert("密碼長度需至少 6 位"); return; }
-      
-      const studentEmail = generateStudentEmail(student.class, student.classNo);
-      
-      setIsUpdating(true);
-      try {
-          // 使用 Secondary App 技巧，避免登出目前的教練帳號
-          const appName = "SecondaryApp" + new Date().getTime(); // Unique name
-          const secondaryApp = initializeApp(firebaseConfig, appName);
-          const secondaryAuth = getAuth(secondaryApp);
-          
-          await createUserWithEmailAndPassword(secondaryAuth, studentEmail, newPassword);
-          await signOut(secondaryAuth); // 完成後即登出，清理 session
-          
-          // 更新資料庫中的 Email 紀錄 (備用)
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
-              email: studentEmail,
-              lastUpdated: serverTimestamp()
-          });
-          
-          alert(`✅ 成功建立帳號！\n\n學員: ${student.name}\n登入班別: ${student.class}\n登入班號: ${student.classNo}\n登入密碼: ${newPassword}\n\n請將密碼告知學生。`);
-      } catch (error) {
-          if (error.code === 'auth/email-already-in-use') {
-              alert("⚠️ 帳號已存在。\n此學生 (或相同班別班號的舊生) 已註冊過。\n若需重置密碼，請聯絡系統管理員從 Firebase 後台操作。");
-          } else {
-              alert("❌ 設定失敗: " + error.message);
-          }
-      }
-      setIsUpdating(false);
-  };
-
 
   // --- 積分計算與排行邏輯 ---
   const rankedStudents = useMemo(() => {
@@ -467,7 +406,7 @@ export default function App() {
     });
   }, [students]);
 
-  // 統計各出生年份的人數
+  // 統計各出生年份的人數 (Ladder Stats)
   const birthYearStats = useMemo(() => {
     const stats = {};
     if (Array.isArray(rankedStudents)) {
@@ -542,6 +481,37 @@ export default function App() {
     }
   };
 
+  // --- [V5.4] 新增：設定學生登入資料 ---
+  const handleSetupStudentAuth = async (student) => {
+    if (!student.class || !student.classNo) {
+        alert(`錯誤：學生 ${student.name} 的班別或班號為空，無法設定登入資料。`);
+        return;
+    }
+
+    const authEmail = `${student.class.toLowerCase().trim()}${student.classNo.trim()}@bcklas.squash`;
+    const currentAuthEmail = student.authEmail || '尚未設定';
+
+    const confirmMsg = `即將為學生 ${student.name} (${student.class} ${student.classNo}) 設定或更新登入識別碼。\n\n` +
+                     `舊識別碼: ${currentAuthEmail}\n` +
+                     `新識別碼: ${authEmail}\n\n` +
+                     `確認後，請手動前往 Firebase 後台，使用「${authEmail}」為該學生建立帳戶並設定密碼。\n\n` +
+                     `確定要更新嗎？`;
+
+    if (confirm(confirmMsg)) {
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
+                authEmail: authEmail,
+                lastUpdated: serverTimestamp()
+            });
+            alert(`✅ 設定成功！\n\n學生 ${student.name} 的登入識別碼已更新為：\n${authEmail}\n\n下一步：請到 Firebase Authentication 後台使用此電郵建立用戶。`);
+        } catch (e) {
+            console.error("Setup Auth Email failed", e);
+            alert("更新失敗，請檢查網絡或聯絡管理員。");
+        }
+    }
+  };
+
+
   // 校外賽計分邏輯
   const handleExternalComp = (student) => {
     const option = prompt(
@@ -580,7 +550,6 @@ export default function App() {
     const winner = students.find(s => s.id === matchWinner);
     const loser = students.find(s => s.id === matchLoser);
     if (!winner || !loser) return;
-
     const winnerRank = rankedStudents.findIndex(s => s.id === winner.id) + 1;
     const loserRank = rankedStudents.findIndex(s => s.id === loser.id) + 1;
     
@@ -596,7 +565,6 @@ export default function App() {
                        `💀 負方: ${loser.name} (排名:${loserRank}, ${loser.badge})\n\n` +
                        `${isGiantKiller ? "🔥 觸發「巨人殺手」獎勵！\n" : ""}` + 
                        `勝方獲得: +${pointsToAdd} 分\n負方獲得: +0 分`;
-
     if (confirm(confirmMsg)) {
         setIsUpdating(true);
         try {
@@ -620,7 +588,6 @@ export default function App() {
   const handleSeasonReset = async () => {
     const confirmText = prompt("⚠️ 警告：這將重置所有學員的積分！\n\n系統將根據學員的「章別」重新賦予底分：\n金章: 200, 銀章: 100, 銅章: 30, 無章: 0\n\n請輸入 'RESET' 確認執行：");
     if (confirmText !== 'RESET') return;
-
     setIsUpdating(true);
     try {
         const batch = writeBatch(db);
@@ -641,7 +608,7 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  // 自動化點名
+  // 自動化點名 (不加分)
   const markAttendance = async (student) => {
     if (!todaySchedule) { 
       alert('⚠️ 今日沒有設定訓練日程，請先到「訓練日程」新增今天的課堂。'); 
@@ -654,12 +621,10 @@ export default function App() {
       log.date === todayStr && 
       log.trainingClass === todaySchedule.trainingClass
     );
-
     if (isAttended) {
       alert(`⚠️ ${student.name} 已經點過名了！`);
       return;
     }
-
     if (confirm(`確認為 ${student.name} 進行「${todaySchedule.trainingClass}」點名？\n\n(註：單純出席訓練不設加分)`)) {
       try {
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'), {
@@ -686,13 +651,11 @@ export default function App() {
       alert('目前沒有學員資料可生成名單。');
       return;
     }
-
     let rosterText = "🏆 BCKLAS 壁球校隊 - 推薦出賽名單 🏆\n\n";
     topStudents.forEach((s, i) => {
       rosterText += `${i+1}. ${s.name} (${s.class} ${s.classNo}) - 積分: ${s.totalPoints}\n`;
     });
     rosterText += "\n(由系統自動依據積分生成)";
-
     navigator.clipboard.writeText(rosterText).then(() => {
       alert('✅ 推薦名單已生成並複製到剪貼簿！\n\n你可以直接貼上到 Word 或 WhatsApp。');
     }).catch(err => {
@@ -913,10 +876,23 @@ export default function App() {
     if (role !== 'admin') return;
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
   };
-  const deleteItemFromCollection = async (collectionName, id) => {
-    if (role !== 'admin') return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
-  };
+  
+  const todaySchedule = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return schedules.find(s => s.date === today);
+  }, [schedules]);
+
+  const uniqueTrainingClasses = useMemo(() => {
+    const classes = schedules.map(s => s.trainingClass).filter(Boolean);
+    return ['ALL', ...new Set(classes)];
+  }, [schedules]);
+
+  const filteredSchedules = useMemo(() => {
+    const filtered = selectedClassFilter === 'ALL' 
+      ? schedules 
+      : schedules.filter(s => s.trainingClass === selectedClassFilter);
+    return filtered.sort((a,b) => a.date.localeCompare(b.date));
+  }, [schedules, selectedClassFilter]);
 
   const studentsInSelectedAttendanceClass = useMemo(() => {
     const sorted = [...students].sort((a,b) => a.class.localeCompare(b.class));
@@ -926,6 +902,71 @@ export default function App() {
       return s.squashClass.includes(attendanceClassFilter);
     });
   }, [students, attendanceClassFilter]);
+
+  const downloadTemplate = (type) => {
+    let csv = "";
+    let filename = "";
+    if(type === 'schedule') {
+      csv = "班別名稱,日期(YYYY-MM-DD),地點,教練,備註\n初級班A,2024-03-20,學校壁球場,王教練,第一課\n校隊訓練,2024-03-25,歌和老街,李教練,專項訓練";
+      filename = "訓練日程匯入範本.csv";
+    } else if (type === 'students') {
+      csv = "姓名,班別,班號,章別(無/銅章/銀章/金章/白金章),初始積分,壁球班別\n陳小明,6A,01,銅章,120,校隊訓練班\n張小華,5C,12,無,100,壁球中級訓練班";
+      filename = "學員匯入範本.csv";
+    }
+    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+  };
+
+  // --- 校徽 Logo 組件 ---
+  const SchoolLogo = ({ size = 48, className = "" }) => {
+    const [error, setError] = useState(false);
+    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
+    if (error) {
+      return <ShieldCheck className={`${className}`} size={size} />;
+    }
+    return (
+      <img 
+        src={logoUrl} 
+        alt="BCKLAS Logo" 
+        className={`object-contain ${className}`}
+        style={{ width: size * 2, height: size * 2 }}
+        loading="eager"
+        crossOrigin="anonymous" 
+        onError={(e) => {
+          console.error("Logo load failed", e);
+          setError(true);
+        }}
+      />
+    );
+  };
+
+  const handleAddAward = async () => {
+    const title = prompt("獎項名稱 (例如：全港學界壁球賽 冠軍):");
+    if (!title) return;
+    const studentName = prompt("獲獎學生姓名:");
+    if (!studentName) return;
+    const date = prompt("獲獎日期 (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+    const rank = prompt("名次 (例如：冠軍, 亞軍, 季軍, 優異):");
+    const photoUrl = prompt("得獎照片網址 (可選，空白則使用預設圖):"); 
+    const desc = prompt("備註 (可選):") || "";
+    try {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'awards'), {
+            title,
+            studentName,
+            date,
+            rank,
+            photoUrl: photoUrl || "", 
+            description: desc,
+            timestamp: serverTimestamp()
+        });
+        alert('🏆 獎項新增成功！');
+    } catch (e) {
+        console.error(e);
+        alert('新增失敗');
+    }
+  };
 
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -968,7 +1009,6 @@ export default function App() {
           </div>
         </div>
       )}
-
       {/* 登入視窗 */}
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
@@ -980,51 +1020,48 @@ export default function App() {
             <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
             <div className="space-y-6">
               
+              {/* 登入 Tab 切換 */}
               <div className="bg-slate-50 p-1 rounded-[2rem] flex mb-4 relative">
                  <div className={`absolute top-1 bottom-1 w-1/2 bg-white rounded-[1.8rem] shadow-sm transition-all duration-300 ease-out ${loginTab === 'admin' ? 'left-1/2' : 'left-1'}`}></div>
                  <button onClick={() => setLoginTab('student')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'student' ? 'text-blue-600' : 'text-slate-400'}`}>學員入口</button>
                  <button onClick={() => setLoginTab('admin')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'admin' ? 'text-blue-600' : 'text-slate-400'}`}>教練登入</button>
               </div>
-
+              
               {loginTab === 'student' ? (
-                  // 學員登入表單 (Class + No + Password)
+                  // [V5.4] 學員登入表單
                   <div className="space-y-3 font-bold animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="relative">
-                      <span className="absolute left-5 top-5 text-slate-300"><Layers size={18}/></span>
+                    <div className="flex gap-3">
                       <input 
                         type="text" 
                         value={loginClass}
                         onChange={(e) => setLoginClass(e.target.value)}
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" 
-                        placeholder="班別 (如: 6A)" 
+                        className="w-1/2 bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" 
+                        placeholder="班別 (如 6A)" 
                       />
-                    </div>
-                    <div className="relative">
-                      <span className="absolute left-5 top-5 text-slate-300"><UserCheck size={18}/></span>
                       <input 
                         type="text" 
                         value={loginClassNo}
                         onChange={(e) => setLoginClassNo(e.target.value)}
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" 
-                        placeholder="班號 (如: 01)" 
+                        className="w-1/2 bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" 
+                        placeholder="班號 (如 01)" 
                       />
                     </div>
-                     <div className="relative">
+                    <div className="relative">
                       <span className="absolute left-5 top-5 text-slate-300"><Lock size={18}/></span>
                       <input 
                         type="password"
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
                         className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" 
-                        placeholder="密碼" 
+                        placeholder="學生密碼" 
                       />
                     </div>
-                    <button onClick={() => handleLogin()} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">
+                    <button onClick={() => handleLogin('student')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">
                       進入系統
                     </button>
                   </div>
               ) : (
-                  // 教練登入表單 (Email + Password)
+                  // 教練登入表單
                   <div className="space-y-3 font-bold animate-in fade-in slide-in-from-left-4 duration-300">
                     <div className="relative">
                       <span className="absolute left-5 top-5 text-slate-300"><Mail size={18}/></span>
@@ -1058,7 +1095,6 @@ export default function App() {
       )}
       
       {/* 側邊欄 */}
-      {!showLoginModal && (
       <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-white border-r transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
@@ -1135,11 +1171,9 @@ export default function App() {
           </div>
         </div>
       </aside>
-      )}
-
       {/* 主內容區 */}
-      {!showLoginModal && (
       <main className="flex-1 h-screen overflow-y-auto relative bg-[#F8FAFC]">
+        {/* 頂部標題 */}
         <header className="px-10 py-8 sticky top-0 bg-white/80 backdrop-blur-xl z-40 border-b flex justify-between items-center">
           <div className="flex items-center gap-6">
             <button onClick={()=>setSidebarOpen(true)} className="md:hidden p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-blue-600 transition-all">
@@ -1178,9 +1212,9 @@ export default function App() {
             </div>
           </div>
         </header>
-
         <div className="p-10 max-w-7xl mx-auto pb-40">
           
+          {/* 4. 比賽資訊與公告 (Competitions) */}
           {activeTab === 'competitions' && (
              <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
@@ -1244,7 +1278,7 @@ export default function App() {
                 </div>
              </div>
           )}
-          
+          {/* 1. 積分排行 */}
           {activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
@@ -1306,7 +1340,7 @@ export default function App() {
               </div>
             </div>
           )}
-          
+           {/* 內部聯賽 (League) */}
            {activeTab === 'league' && role === 'admin' && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                  <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
@@ -1317,11 +1351,11 @@ export default function App() {
                        <div className="bg-rose-50 p-8 rounded-[3rem] border-2 border-rose-100 text-center"><h4 className="text-2xl font-black text-rose-600 mb-6">💀 負方 (Loser)</h4><select className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm" value={matchLoser} onChange={(e) => setMatchLoser(e.target.value)}><option value="">選擇負方隊員</option>{rankedStudents.map(s => (<option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>))}</select></div>
                     </div>
                     <div className="mt-12 flex justify-center relative z-10"><button onClick={handleMatchSubmit} className="bg-slate-900 text-white px-12 py-5 rounded-[2.5rem] text-xl font-black shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-4"><Swords size={28}/> 提交對戰結果</button></div>
-                    <div className="mt-8 text-center text-xs text-slate-400 font-bold"><p>✨ 規則：基礎勝利 +10 分</p><p className="mt-1">🔥 巨人殺手：低章贏高章 或 贏高於自己 5 名以上對手 -> <span className="text-orange-500">+20 分</span></p></div>
+                    <div className="mt-8 text-center text-xs text-slate-400 font-bold"><p>✨ 規則：基礎勝利 +10 分</p><p className="mt-1">🔥 巨人殺手：低章贏高章 或 贏高於自己 5 名以上對手 -&gt; <span className="text-orange-500">+20 分</span></p></div>
                  </div>
               </div>
            )}
-          
+          {/* 6. 管理概況 (Dashboard) */}
           {activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
                 <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><History className="text-blue-600"/> 最近更新活動</h3><div className="space-y-6">{competitions.slice(0, 4).map(c => (<div key={c.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div><div><p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p></div></div>))}{schedules.slice(0, 2).map(s => (<div key={s.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div><div><p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p></div></div>))}</div></div>
@@ -1337,8 +1371,7 @@ export default function App() {
                 </div>
              </div>
           )}
-           
-           {/* [Modified in V5.4] 隊員管理 (教練專用) - 新增帳號設定按鈕 */}
+           {/* 5. 隊員管理 (教練專用) */}
            {activeTab === 'students' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
                 <div className="flex overflow-x-auto gap-4 pb-4"><div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span><span className="text-xl font-black">{students.length}</span></div>{Object.entries(birthYearStats).sort().map(([year, count]) => (<div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span><span className="text-xl font-black text-slate-800">{count} 人</span></div>))}</div>
@@ -1353,10 +1386,12 @@ export default function App() {
                         {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
                         <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
-                           {/* [New in V5.4] 帳號管理按鈕 */}
-                           <button onClick={() => handleSetStudentPassword(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定帳號密碼"><Key size={18}/></button>
+                           
+                           {/* [V5.4] 修改：設定學生登入資料 */}
+                           <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={18}/></button>
+                           
                            <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={18}/></button>
-                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all" title="永久刪除"><Trash2 size={18}/></button>
+                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={18}/></button>
                         </div>
                      </div>
                    ))}
@@ -1365,6 +1400,7 @@ export default function App() {
              </div>
           )}
           
+          {/* 2. 訓練班日程 */}
           {activeTab === 'schedules' && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1374,7 +1410,7 @@ export default function App() {
                {filteredSchedules.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><CalendarIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無訓練日程紀錄</p><p className="text-sm text-slate-300 mt-2">請點擊上方匯入按鈕上傳 CSV 檔案</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{filteredSchedules.map(sc => {const isToday = new Date().toISOString().split('T')[0] === sc.date;return (<div key={sc.id} className={`bg-white p-10 rounded-[3.5rem] border-2 shadow-sm hover:scale-[1.02] transition-all relative overflow-hidden group ${isToday ? 'border-blue-500 shadow-xl shadow-blue-50' : 'border-slate-100'}`}>{isToday && (<div className="absolute top-0 right-0 bg-blue-600 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest animate-pulse">Today • 今日訓練</div>)}<div className="mb-8"><span className="text-[10px] bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all">{sc.trainingClass}</span><h4 className="text-3xl font-black text-slate-800 mt-6">{sc.date}</h4><p className="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-[0.3em]">Training Session</p></div><div className="space-y-5"><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><MapPin size={18}/></div><span className="font-bold">{sc.location}</span></div><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div><span className="font-bold">{sc.coach} 教練</span></div>{role === 'admin' && (<button onClick={() => {if(window.confirm(`確定要刪除 ${sc.date} 的這堂訓練課嗎？`)) {deleteItem('schedules', sc.id);}}} className="absolute top-8 right-8 w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm z-10" title="刪除課堂"><Trash2 size={20}/></button>)}{sc.notes && (<div className="p-6 bg-slate-50 rounded-[2rem] text-xs text-slate-400 leading-relaxed italic border border-slate-100">"{sc.notes}"</div>)}</div>{role === 'admin' && (<div className="mt-10 pt-8 border-t border-dashed border-slate-100 opacity-0 group-hover:opacity-100 transition-all flex justify-end"><button onClick={()=>deleteItem('schedules', sc.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>);})}</div>)}
             </div>
           )}
-          
+          {/* 3. 快速點名 */}
           {activeTab === 'attendance' && role === 'admin' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
                <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}><div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div><div className="relative z-10"><h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3><div className="flex flex-wrap gap-4">{todaySchedule ? (<><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><Star size={14} className="text-yellow-300 fill-yellow-300"/><span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span></div><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><MapPin size={14}/><span className="text-sm font-black">{todaySchedule.location}</span></div></>) : (<div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2"><Info size={14}/><span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span></div>)}</div></div><div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner"><p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p><p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p></div></div>
@@ -1390,7 +1426,7 @@ export default function App() {
                </div>
             </div>
           )}
-          
+          {/* 精彩花絮頁面 */}
           {activeTab === 'gallery' && (
             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1403,7 +1439,7 @@ export default function App() {
                {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => {if(confirm('確定要刪除此項目嗎？')) deleteItem('gallery', item.id);}} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
             </div>
            )}
-           
+           {/* 獎項成就 (Awards) */}
            {activeTab === 'awards' && (
              <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1579,18 +1615,16 @@ export default function App() {
                    <h3 className="text-3xl font-black mb-10 text-center">系統偏好設定</h3>
                    <div className="space-y-8">
                       <div className="space-y-3">
-                        <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">設定教練登入 Email</label>
+                        <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">管理員存取密碼</label>
                         <div className="relative">
-                           <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
+                           <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
                            <input 
-                              type="email" 
-                              value={systemConfig.adminEmail || ''}
-                              onChange={(e)=>setSystemConfig({...systemConfig, adminEmail: e.target.value})}
+                              type="password" 
+                              value={systemConfig.adminPassword}
+                              onChange={(e)=>setSystemConfig({...systemConfig, adminPassword: e.target.value})}
                               className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white p-5 pl-14 rounded-2xl outline-none transition-all"
-                              placeholder="coach@example.com"
                            />
                         </div>
-                        <p className="text-[10px] text-slate-400 px-2">此 Email 必須與 Firebase Authentication 中建立的帳號一致。</p>
                       </div>
                       
                       <div className="space-y-3">
@@ -1673,7 +1707,7 @@ export default function App() {
                         <div className="p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex items-center gap-4">
                           <Info className="text-blue-500 shrink-0" size={20}/>
                           <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
-                            修改教練 Email 後請記得保存設定，下次登入將以此 Email 驗證管理員身份。
+                            修改密碼後請妥善保存，否則將無法進入教練後台。系統預設密碼為 "admin"。
                           </p>
                         </div>
                       </div>
@@ -1690,4 +1724,3 @@ export default function App() {
     </div>
   );
 }
-
