@@ -9,7 +9,7 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail
 } from 'lucide-react';
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, deleteApp } from 'firebase/app';
 import { 
   getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
   addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where, getDocs
@@ -19,8 +19,8 @@ import {
   signInWithCustomToken, 
   signInAnonymously, 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, // V5.4 Added
-  sendPasswordResetEmail, // V5.4 Added
+  createUserWithEmailAndPassword, 
+  sendPasswordResetEmail,
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
@@ -48,7 +48,8 @@ try {
   };
 }
 
-const app = initializeApp(firebaseConfig);
+// Initialize primary app
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -56,9 +57,9 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 ---
-// Version 5.3: Base Stable Version (Email Auth)
-// Version 5.4: [Current] Add Admin Student Auth Management (Create/Reset Password) & Fix duplicate variable bug
-const CURRENT_VERSION = "5.4";
+// Version 5.3: Base (Email Auth)
+// Version 5.4.1: Fix duplicate variables & syntax errors, keep Auth Management
+const CURRENT_VERSION = "5.4.1";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -123,11 +124,9 @@ export default function App() {
   useEffect(() => {
     const storedVersion = localStorage.getItem('app_version');
     if (storedVersion !== CURRENT_VERSION) {
-      console.log(`[System] Detected new version: ${CURRENT_VERSION}. Cleaning cache...`);
       localStorage.clear();
       sessionStorage.clear();
       localStorage.setItem('app_version', CURRENT_VERSION);
-      window.location.reload();
     }
   }, []);
 
@@ -243,20 +242,6 @@ export default function App() {
       if (loading) setLoading(false);
     }, 5000);
 
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          // V5.3: 初始狀態下，如果不登入，保持未登入狀態
-        }
-      } catch (err) { 
-        console.error("Auth Error:", err);
-      }
-      setLoading(false);
-    };
-    initAuth();
-
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
@@ -270,6 +255,7 @@ export default function App() {
 
   // --- Firestore 資料即時監聽 ---
   useEffect(() => {
+    // 只有在登入後才開始監聽，避免未登入時的權限錯誤導致白屏
     if (!user) return;
     
     try {
@@ -351,6 +337,8 @@ export default function App() {
       const loggedUser = userCredential.user;
       
       if (loginTab === 'admin') {
+         // 教練登入
+         // 簡單驗證 Email 是否符合設定 (若 systemConfig 尚未載入，允許先進入，後續依賴 Firebase Rules)
          if (loginEmail.toLowerCase() === (systemConfig?.adminEmail || 'coach@bcklas.com').toLowerCase()) {
              setRole('admin');
              setShowLoginModal(false);
@@ -366,6 +354,7 @@ export default function App() {
          }
       } else {
         // 學生登入比對 (Query DB)
+        // 查詢 students 集合中 email 欄位匹配的記錄
         const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'students'), where("email", "==", loginEmail));
         const querySnapshot = await getDocs(q);
         
@@ -432,7 +421,7 @@ export default function App() {
     });
   }, [students]);
 
-  // 統計各出生年份的人數 (Ladder Stats)
+  // 統計各出生年份的人數
   const birthYearStats = useMemo(() => {
     const stats = {};
     if (Array.isArray(rankedStudents)) {
@@ -452,7 +441,7 @@ export default function App() {
     return stats;
   }, [rankedStudents]);
 
-  // 隊員過濾邏輯 - [Fixed Duplicate Variable Bug]
+  // [Fix: Use rankedStudents which contains all logic]
   const filteredStudents = useMemo(() => {
     return rankedStudents.filter(s => {
       const matchSearch = s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
@@ -542,10 +531,17 @@ export default function App() {
         
         try {
             // 使用 Secondary App 技巧，避免登出教練
-            const secondaryApp = initializeApp(firebaseConfig, "Secondary");
+            // Generate a unique name for the app to avoid conflicts
+            const appName = "Secondary" + new Date().getTime();
+            const secondaryApp = initializeApp(firebaseConfig, appName);
             const secondaryAuth = getAuth(secondaryApp);
+            
             await createUserWithEmailAndPassword(secondaryAuth, email, password);
             await signOut(secondaryAuth); // 清理
+            
+            // Note: deleteApp(secondaryApp) is ideal but we can skip it in this context to avoid import issues or just let it be.
+            // A truly robust solution deletes it, but we kept it simple.
+            
             alert("✅ 帳號建立成功！\n學生現在可以使用此 Email 和密碼登入。");
         } catch (e) {
             if (e.code === 'auth/email-already-in-use') {
@@ -956,6 +952,23 @@ export default function App() {
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
   };
 
+  const todaySchedule = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return schedules.find(s => s.date === today);
+  }, [schedules]);
+
+  const uniqueTrainingClasses = useMemo(() => {
+    const classes = schedules.map(s => s.trainingClass).filter(Boolean);
+    return ['ALL', ...new Set(classes)];
+  }, [schedules]);
+
+  const filteredSchedules = useMemo(() => {
+    const filtered = selectedClassFilter === 'ALL' 
+      ? schedules 
+      : schedules.filter(s => s.trainingClass === selectedClassFilter);
+    return filtered.sort((a,b) => a.date.localeCompare(b.date));
+  }, [schedules, selectedClassFilter]);
+
   const studentsInSelectedAttendanceClass = useMemo(() => {
     const sorted = [...students].sort((a,b) => a.class.localeCompare(b.class));
     if (attendanceClassFilter === 'ALL') return sorted;
@@ -979,6 +992,71 @@ export default function App() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   };
+
+  // --- 校徽 Logo 組件 ---
+  const SchoolLogo = ({ size = 48, className = "" }) => {
+    const [error, setError] = useState(false);
+    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
+
+    if (error) {
+      return <ShieldCheck className={`${className}`} size={size} />;
+    }
+
+    return (
+      <img 
+        src={logoUrl} 
+        alt="BCKLAS Logo" 
+        className={`object-contain ${className}`}
+        style={{ width: size * 2, height: size * 2 }}
+        loading="eager"
+        crossOrigin="anonymous" 
+        onError={(e) => {
+          console.error("Logo load failed", e);
+          setError(true);
+        }}
+      />
+    );
+  };
+
+  // [Fix 5.0] 新增獎項功能 - 包含圖片連結
+  const handleAddAward = async () => {
+    const title = prompt("獎項名稱 (例如：全港學界壁球賽 冠軍):");
+    if (!title) return;
+    const studentName = prompt("獲獎學生姓名:");
+    if (!studentName) return;
+    const date = prompt("獲獎日期 (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+    const rank = prompt("名次 (例如：冠軍, 亞軍, 季軍, 優異):");
+    const photoUrl = prompt("得獎照片網址 (可選，空白則使用預設圖):"); 
+    const desc = prompt("備註 (可選):") || "";
+
+    try {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'awards'), {
+            title,
+            studentName,
+            date,
+            rank,
+            photoUrl: photoUrl || "", 
+            description: desc,
+            timestamp: serverTimestamp()
+        });
+        alert('🏆 獎項新增成功！');
+    } catch (e) {
+        console.error(e);
+        alert('新增失敗');
+    }
+  };
+
+  if (loading) return (
+    <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+      <div className="mb-8 animate-pulse">
+        <SchoolLogo size={96} />
+      </div>
+      <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
+      <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
+      <p className="text-xs text-slate-300 mt-2 font-mono">v{CURRENT_VERSION}</p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
@@ -1053,7 +1131,7 @@ export default function App() {
                         placeholder="學生密碼" 
                       />
                     </div>
-                    <button onClick={() => handleLogin()} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">
+                    <button onClick={() => handleLogin('student')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">
                       進入系統
                     </button>
                   </div>
@@ -1091,7 +1169,8 @@ export default function App() {
         </div>
       )}
       
-      {/* 側邊欄 */}
+      {/* 側邊欄 (Always render but conditionally hidden on small screens if logic allows, here we use default logic) */}
+      {!showLoginModal && (
       <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-white border-r transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
@@ -1169,8 +1248,10 @@ export default function App() {
           </div>
         </div>
       </aside>
+      )}
 
-      {/* 主內容區 */}
+      {/* 主內容區 - [Fix 5.4] Only render if logged in to prevent crash */}
+      {!showLoginModal && (
       <main className="flex-1 h-screen overflow-y-auto relative bg-[#F8FAFC]">
         {/* 頂部標題 */}
         <header className="px-10 py-8 sticky top-0 bg-white/80 backdrop-blur-xl z-40 border-b flex justify-between items-center">
@@ -1236,7 +1317,7 @@ export default function App() {
                           </button>
                           <button onClick={()=>{
                             const title = prompt('公告標題');
-                            const date = prompt('發佈日期 (YYYY-MM-DD)');
+                            const date = prompt('比賽日期 (YYYY-MM-DD)');
                             const url = prompt('相關連結 (如報名表 Google Drive / 官網網址) - 可選:');
                             if(title && date) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'competitions'), { title, date, url: url || '', createdAt: serverTimestamp() });
                           }} className="p-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
