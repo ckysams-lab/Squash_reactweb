@@ -356,6 +356,7 @@ const handleManualAward = (student) => {
       const unsubStudents = onSnapshot(studentsRef, (snap) => {
         setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
+
       const unsubAttendanceLogs = onSnapshot(attendanceLogsRef, (snap) => {
         setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
@@ -1092,18 +1093,19 @@ const handleManualAward = (student) => {
           {achievements.filter(ach => ach.studentId === viewingStudent.id).length === 0 ? (
             <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章，繼續努力！</p>
           ) : (
-            achievements.filter(ach => ach.studentId === viewingStudent.id).map(ach => {
-              const badge = ACHIEVEMENT_DATA[ach.badgeId];
-              if (!badge) return null;
-              return (
-                <div key={ach.id} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
-                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
-                    {badge.icon}
-                  </div>
-                  <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{badge.name}</p>
-                </div>
-              )
-            })
+            achievements.filter(ach => viewingStudent && ach.studentId === viewingStudent.id).map(ach => {
+    const badge = ACHIEVEMENT_DATA[ach.badgeId];
+      if (!badge) return null;
+      return (
+      <div key={ach.id} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
+      <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
+        {badge.icon}
+      </div>
+      <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{badge.name}</p>
+    </div>
+    )
+      })
+        })
           )}
         </div>
       </div>
