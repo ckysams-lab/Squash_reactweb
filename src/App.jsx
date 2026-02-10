@@ -1087,22 +1087,18 @@ const handleManualAward = (student) => {
         </div>
       </div>
 
-      // --- 請使用這個正確的區塊來替換 ---
     <div className="bg-slate-50/80 p-6 rounded-3xl border">
       <h4 className="text-sm font-black text-slate-500 mb-4 text-center tracking-widest uppercase">我的成就</h4>
       <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
         {(() => {
           // 安全檢查，確保 viewingStudent 存在
           if (!viewingStudent) return null;
-      
           // 步驟 1: 只過濾一次，取得該學生的所有徽章
           const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
-
           // 步驟 2: 檢查過濾後的結果是否為空
           if (studentAchievements.length === 0) {
             return <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章，繼續努力！</p>;
           }
-
           // 步驟 3: 如果不為空，則遍歷過濾後的結果並顯示
           return studentAchievements.map(ach => {
             const badge = ACHIEVEMENT_DATA[ach.badgeId];
