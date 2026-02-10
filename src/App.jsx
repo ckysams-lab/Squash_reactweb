@@ -54,9 +54,8 @@ const db = getFirestore(app);
 const appId = 'bcklas-squash-core-v1'; 
 
 // --- 版本控制 ---
-// Version 5.2: 獎項優化 (照片/Grid) + 功能修復
-// Version 5.3: [Current] 改用 Firebase Auth (Email/Pass) 登入
-const CURRENT_VERSION = "5.3";
+// Version 5.4: [Current] 學生登入改用「班別+班號+密碼」, 新增教練設定學生登入資料功能
+const CURRENT_VERSION = "5.4";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -86,28 +85,27 @@ export default function App() {
   const [viewingImage, setViewingImage] = useState(null);
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-
-  // 登入狀態 [New in V5.3]
-  const [loginEmail, setLoginEmail] = useState('');
+  
+  // 登入狀態 [V5.4]
+  const [loginEmail, setLoginEmail] = useState(''); // For Admin
+  const [loginClass, setLoginClass] = useState(''); // For Student
+  const [loginClassNo, setLoginClassNo] = useState(''); // For Student
   const [loginPassword, setLoginPassword] = useState('');
   const [loginTab, setLoginTab] = useState('student'); // 'student' | 'admin'
 
   // 對戰錄入狀態
   const [matchWinner, setMatchWinner] = useState('');
   const [matchLoser, setMatchLoser] = useState('');
-
   const [importEncoding, setImportEncoding] = useState('AUTO');
   const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
   const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL');
   
   // 年份篩選狀態
   const [selectedYearFilter, setSelectedYearFilter] = useState('ALL');
-
   const [searchTerm, setSearchTerm] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
-
   const galleryInputRef = useRef(null);
-
+  
   // 財務參數
   const [financeConfig, setFinanceConfig] = useState({
     nTeam: 1, costTeam: 2750,
@@ -144,17 +142,14 @@ export default function App() {
     const todayZero = new Date(now.setHours(0,0,0,0));
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
-
     const safeSchedules = Array.isArray(schedules) ? schedules : [];
     const safeCompetitions = Array.isArray(competitions) ? competitions : [];
     const safeAwards = Array.isArray(awards) ? awards : [];
-
     const thisMonthTrainings = safeSchedules.filter(s => {
       if (!s.date) return false;
       const d = new Date(s.date);
       return !isNaN(d) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     }).length;
-
     const futureCompetitions = safeCompetitions
       .filter(c => c.date && new Date(c.date) >= todayZero)
       .sort((a,b) => new Date(a.date) - new Date(b.date));
@@ -168,14 +163,12 @@ export default function App() {
         daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
       }
     }
-
     const awardsThisYear = safeAwards.filter(a => {
       if (!a.date) return false;
       const d = new Date(a.date);
       const isThisYear = !isNaN(d) && d.getFullYear() === currentYear;
       return isThisYear;
     }).length;
-
     return {
       thisMonthTrainings,
       daysToNextMatch,
@@ -187,7 +180,6 @@ export default function App() {
   const galleryAlbums = useMemo(() => {
     const albums = {};
     const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
-
     safeGallery.forEach(item => {
       const title = item.title || "未分類";
       if (!albums[title]) {
@@ -223,7 +215,6 @@ export default function App() {
   useEffect(() => {
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
     const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
-
     try {
       const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
       link.type = 'image/png';
@@ -244,17 +235,14 @@ export default function App() {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          // [Fix 5.3] 初始狀態下，如果不登入，保持未登入狀態 (不強制匿名)
-          // 這樣才能顯示登入 Modal
         }
       } catch (err) { 
         console.error("Auth Error:", err);
       }
       setLoading(false);
     };
-    initAuth();
 
+    initAuth();
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
@@ -268,7 +256,6 @@ export default function App() {
 
   // --- Firestore 資料即時監聽 ---
   useEffect(() => {
-    // [Fix 5.3] 即使未登入，也可能需要讀取某些公開配置(如 Logo)，但為了安全，我們在 Auth 後才監聽數據
     if (!user) return;
     
     try {
@@ -299,27 +286,21 @@ export default function App() {
       const unsubStudents = onSnapshot(studentsRef, (snap) => {
         setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
-
       const unsubAttendanceLogs = onSnapshot(attendanceLogsRef, (snap) => {
         setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
-
       const unsubCompetitions = onSnapshot(competitionsRef, (snap) => {
         setCompetitions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
-
       const unsubSchedules = onSnapshot(schedulesRef, (snap) => {
         setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
-
       const unsubFiles = onSnapshot(filesRef, (snap) => {
         setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
-
       const unsubGallery = onSnapshot(galleryRef, (snap) => {
         setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
-
       const unsubAwards = onSnapshot(awardsRef, (snap) => {
         setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
@@ -332,49 +313,61 @@ export default function App() {
     }
   }, [user]);
 
-  // --- [Fix 5.3] 登入邏輯升級 ---
+  // --- [V5.4] 登入邏輯升級 ---
   const handleLogin = async (type) => {
-    if (!loginEmail || !loginPassword) {
-      alert('請輸入電郵和密碼');
-      return;
-    }
-
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-      const loggedUser = userCredential.user;
-
-      if (type === 'admin') {
-        // 教練登入
+    if (type === 'admin') {
+      if (!loginEmail || !loginPassword) {
+        alert('請輸入教練電郵和密碼');
+        return;
+      }
+      try {
+        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
         setRole('admin'); 
         setShowLoginModal(false); 
         setActiveTab('dashboard');
-      } else {
-        // 學生登入
-        // 嘗試在學生資料中找到對應 Email 的學生
-        // 注意：這裡假設 students 已經透過 snapshot 載入，但在第一次登入瞬間可能還沒有
-        // 為了確保體驗，我們先讓其進入，後續 useEffect 會更新 students 並能找到對應資訊
-        // 實際生產環境應使用 Firebase Custom Claims 或 DB Query
+      } catch (error) {
+        console.error("Admin Login failed", error);
+        alert('登入失敗：' + error.message + '\n(請確認教練帳號密碼是否正確)');
+        return;
+      }
+    } else { // Student Login
+      if (!loginClass || !loginClassNo || !loginPassword) {
+        alert('請輸入班別、班號和密碼');
+        return;
+      }
+      
+      // 組合內部登入電郵
+      const studentAuthEmail = `${loginClass.toLowerCase().trim()}${loginClassNo.trim()}@bcklas.squash`;
+
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, studentAuthEmail, loginPassword);
         
-        // 暫時以 Email 作為識別
-        const matchedStudent = students.find(s => s.email === loginEmail);
+        // 登入成功後，根據組合的電郵尋找學生資料
+        const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
+        
         if (matchedStudent) {
             setCurrentUserInfo(matchedStudent);
         } else {
-            setCurrentUserInfo({ name: '同學', email: loginEmail });
+            // 如果在資料庫中找不到對應的 authEmail，提供一個基礎資訊
+            setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail });
         }
         setRole('student'); 
         setShowLoginModal(false); 
         setActiveTab('competitions');
+      } catch (error) {
+        console.error("Student Login failed", error);
+        alert('登入失敗：\n(請確認班別、班號和密碼是否正確)');
+        return;
       }
-      // 清空輸入
-      setLoginEmail('');
-      setLoginPassword('');
-    } catch (error) {
-      console.error("Login failed", error);
-      alert('登入失敗：' + error.message + '\n(請確認帳號密碼是否正確)');
     }
-  };
 
+    // 清空輸入
+    setLoginEmail('');
+    setLoginClass('');
+    setLoginClassNo('');
+    setLoginPassword('');
+  };
+    
   const handleLogout = async () => { 
     try {
       await signOut(auth);
@@ -390,7 +383,6 @@ export default function App() {
   // --- 積分計算與排行邏輯 ---
   const rankedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
-
     const uniqueMap = new Map();
     students.forEach(s => {
       const key = `${s.class}-${s.classNo}`;
@@ -403,7 +395,6 @@ export default function App() {
         if (currentPoints > existingPoints) uniqueMap.set(key, s);
       }
     });
-
     return Array.from(uniqueMap.values()).map(s => ({ 
       ...s, 
       totalPoints: Number(s.points) || 0 
@@ -481,7 +472,6 @@ export default function App() {
             alert("格式錯誤！請使用 YYYY-MM-DD 格式 (例如: 2012-05-20)");
             return;
         }
-
         try {
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
                 dob: newDob,
@@ -491,24 +481,36 @@ export default function App() {
     }
   };
 
-  // [Fix 5.2] 教練設定學生資料 (包含密碼)
-  const handleUpdateStudentData = async (student, field) => {
-    let promptMsg = "";
-    let currentVal = "";
-    
-    if (field === 'accessCode') { promptMsg = `請設定 ${student.name} 的「專屬查閱密碼」:`; currentVal = student.accessCode || ""; }
-    
-    const newVal = prompt(promptMsg, currentVal);
-    if (newVal !== null) {
-      try {
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
-            [field]: newVal,
-            lastUpdated: serverTimestamp()
-        });
-        alert("設定成功！");
-      } catch (e) { console.error(e); alert("更新失敗"); }
+  // --- [V5.4] 新增：設定學生登入資料 ---
+  const handleSetupStudentAuth = async (student) => {
+    if (!student.class || !student.classNo) {
+        alert(`錯誤：學生 ${student.name} 的班別或班號為空，無法設定登入資料。`);
+        return;
+    }
+
+    const authEmail = `${student.class.toLowerCase().trim()}${student.classNo.trim()}@bcklas.squash`;
+    const currentAuthEmail = student.authEmail || '尚未設定';
+
+    const confirmMsg = `即將為學生 ${student.name} (${student.class} ${student.classNo}) 設定或更新登入識別碼。\n\n` +
+                     `舊識別碼: ${currentAuthEmail}\n` +
+                     `新識別碼: ${authEmail}\n\n` +
+                     `確認後，請手動前往 Firebase 後台，使用「${authEmail}」為該學生建立帳戶並設定密碼。\n\n` +
+                     `確定要更新嗎？`;
+
+    if (confirm(confirmMsg)) {
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
+                authEmail: authEmail,
+                lastUpdated: serverTimestamp()
+            });
+            alert(`✅ 設定成功！\n\n學生 ${student.name} 的登入識別碼已更新為：\n${authEmail}\n\n下一步：請到 Firebase Authentication 後台使用此電郵建立用戶。`);
+        } catch (e) {
+            console.error("Setup Auth Email failed", e);
+            alert("更新失敗，請檢查網絡或聯絡管理員。");
+        }
     }
   };
+
 
   // 校外賽計分邏輯
   const handleExternalComp = (student) => {
@@ -520,10 +522,8 @@ export default function App() {
         `4. 🥈 亞軍 (+50)\n` +
         `5. 🥉 季軍/殿軍 (+30)`
     );
-
     let points = 0;
     let reason = "";
-
     switch(option) {
         case '1': points = 20; reason = "校外賽參與"; break;
         case '2': points = 20; reason = "校外賽勝場"; break;
@@ -532,7 +532,6 @@ export default function App() {
         case '5': points = 30; reason = "校外賽季殿軍"; break;
         default: return; 
     }
-
     if(confirm(`確認給予 ${student.name} 「${reason}」獎勵 (總分 +${points})?`)) {
         adjustPoints(student.id, points);
     }
@@ -548,21 +547,16 @@ export default function App() {
       alert("勝負雙方不能是同一人");
       return;
     }
-
     const winner = students.find(s => s.id === matchWinner);
     const loser = students.find(s => s.id === matchLoser);
-
     if (!winner || !loser) return;
-
     const winnerRank = rankedStudents.findIndex(s => s.id === winner.id) + 1;
     const loserRank = rankedStudents.findIndex(s => s.id === loser.id) + 1;
     
     const winnerBadgeLevel = BADGE_DATA[winner.badge]?.level || 0;
     const loserBadgeLevel = BADGE_DATA[loser.badge]?.level || 0;
-
     const isRankGiantKiller = (winnerRank - loserRank) >= 5;
     const isBadgeGiantKiller = winnerBadgeLevel < loserBadgeLevel;
-
     const isGiantKiller = isRankGiantKiller || isBadgeGiantKiller;
     const pointsToAdd = isGiantKiller ? 20 : 10;
     
@@ -571,7 +565,6 @@ export default function App() {
                        `💀 負方: ${loser.name} (排名:${loserRank}, ${loser.badge})\n\n` +
                        `${isGiantKiller ? "🔥 觸發「巨人殺手」獎勵！\n" : ""}` + 
                        `勝方獲得: +${pointsToAdd} 分\n負方獲得: +0 分`;
-
     if (confirm(confirmMsg)) {
         setIsUpdating(true);
         try {
@@ -595,7 +588,6 @@ export default function App() {
   const handleSeasonReset = async () => {
     const confirmText = prompt("⚠️ 警告：這將重置所有學員的積分！\n\n系統將根據學員的「章別」重新賦予底分：\n金章: 200, 銀章: 100, 銅章: 30, 無章: 0\n\n請輸入 'RESET' 確認執行：");
     if (confirmText !== 'RESET') return;
-
     setIsUpdating(true);
     try {
         const batch = writeBatch(db);
@@ -629,12 +621,10 @@ export default function App() {
       log.date === todayStr && 
       log.trainingClass === todaySchedule.trainingClass
     );
-
     if (isAttended) {
       alert(`⚠️ ${student.name} 已經點過名了！`);
       return;
     }
-
     if (confirm(`確認為 ${student.name} 進行「${todaySchedule.trainingClass}」點名？\n\n(註：單純出席訓練不設加分)`)) {
       try {
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'), {
@@ -661,13 +651,11 @@ export default function App() {
       alert('目前沒有學員資料可生成名單。');
       return;
     }
-
     let rosterText = "🏆 BCKLAS 壁球校隊 - 推薦出賽名單 🏆\n\n";
     topStudents.forEach((s, i) => {
       rosterText += `${i+1}. ${s.name} (${s.class} ${s.classNo}) - 積分: ${s.totalPoints}\n`;
     });
     rosterText += "\n(由系統自動依據積分生成)";
-
     navigator.clipboard.writeText(rosterText).then(() => {
       alert('✅ 推薦名單已生成並複製到剪貼簿！\n\n你可以直接貼上到 Word 或 WhatsApp。');
     }).catch(err => {
@@ -684,7 +672,6 @@ export default function App() {
       alert('⚠️ 沒有找到相關的點名紀錄');
       return;
     }
-
     logs.sort((a,b) => a.date.localeCompare(b.date) || a.class.localeCompare(b.class) || a.name.localeCompare(b.name));
     
     let csvContent = "\uFEFF"; 
@@ -717,7 +704,6 @@ export default function App() {
           const MAX_HEIGHT = 1024;
           let width = img.width;
           let height = img.height;
-
           if (width > height) {
             if (width > MAX_WIDTH) {
               height *= MAX_WIDTH / width;
@@ -729,7 +715,6 @@ export default function App() {
               height = MAX_HEIGHT;
             }
           }
-
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
@@ -776,15 +761,12 @@ export default function App() {
   const handleGalleryImageUpload = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
     const title = prompt(`您選擇了 ${files.length} 張照片。\n請輸入這些照片的「相簿名稱」(例如：校際比賽花絮):`);
     if (!title) return;
-
     const desc = prompt("輸入統一描述 (可選):") || "";
     
     setIsUploading(true);
     let successCount = 0;
-
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         try {
@@ -894,12 +876,7 @@ export default function App() {
     if (role !== 'admin') return;
     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
   };
-
-  const deleteItemFromCollection = async (collectionName, id) => {
-    if (role !== 'admin') return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, id));
-  };
-
+  
   const todaySchedule = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return schedules.find(s => s.date === today);
@@ -946,11 +923,9 @@ export default function App() {
     const [error, setError] = useState(false);
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
     const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
-
     if (error) {
       return <ShieldCheck className={`${className}`} size={size} />;
     }
-
     return (
       <img 
         src={logoUrl} 
@@ -967,7 +942,6 @@ export default function App() {
     );
   };
 
-  // [Fix 5.0] 新增獎項功能 - 包含圖片連結
   const handleAddAward = async () => {
     const title = prompt("獎項名稱 (例如：全港學界壁球賽 冠軍):");
     if (!title) return;
@@ -977,7 +951,6 @@ export default function App() {
     const rank = prompt("名次 (例如：冠軍, 亞軍, 季軍, 優異):");
     const photoUrl = prompt("得獎照片網址 (可選，空白則使用預設圖):"); 
     const desc = prompt("備註 (可選):") || "";
-
     try {
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'awards'), {
             title,
@@ -1018,7 +991,6 @@ export default function App() {
         multiple 
         onChange={handleGalleryImageUpload}
       />
-
       {/* 燈箱 Modal */}
       {viewingImage && (
         <div 
@@ -1037,7 +1009,6 @@ export default function App() {
           </div>
         </div>
       )}
-
       {/* 登入視窗 */}
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
@@ -1055,18 +1026,24 @@ export default function App() {
                  <button onClick={() => setLoginTab('student')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'student' ? 'text-blue-600' : 'text-slate-400'}`}>學員入口</button>
                  <button onClick={() => setLoginTab('admin')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'admin' ? 'text-blue-600' : 'text-slate-400'}`}>教練登入</button>
               </div>
-
+              
               {loginTab === 'student' ? (
-                  // 學員登入表單
+                  // [V5.4] 學員登入表單
                   <div className="space-y-3 font-bold animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="relative">
-                      <span className="absolute left-5 top-5 text-slate-300"><Mail size={18}/></span>
+                    <div className="flex gap-3">
                       <input 
-                        type="email" 
-                        value={loginEmail}
-                        onChange={(e) => setLoginEmail(e.target.value)}
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" 
-                        placeholder="學生電郵" 
+                        type="text" 
+                        value={loginClass}
+                        onChange={(e) => setLoginClass(e.target.value)}
+                        className="w-1/2 bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" 
+                        placeholder="班別 (如 6A)" 
+                      />
+                      <input 
+                        type="text" 
+                        value={loginClassNo}
+                        onChange={(e) => setLoginClassNo(e.target.value)}
+                        className="w-1/2 bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" 
+                        placeholder="班號 (如 01)" 
                       />
                     </div>
                     <div className="relative">
@@ -1157,7 +1134,6 @@ export default function App() {
             <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
               <Megaphone size={20}/> 比賽與公告
             </button>
-
             {role === 'admin' && (
               <>
                 <div className="text-[10px] text-slate-300 uppercase tracking-widest my-6 px-6 pt-6 border-t">教練工具</div>
@@ -1195,7 +1171,6 @@ export default function App() {
           </div>
         </div>
       </aside>
-
       {/* 主內容區 */}
       <main className="flex-1 h-screen overflow-y-auto relative bg-[#F8FAFC]">
         {/* 頂部標題 */}
@@ -1212,16 +1187,12 @@ export default function App() {
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
-                {/* [Fix 2.6] 花絮標題 */}
                 {activeTab === 'gallery' && "📸 精彩花絮"}
-                {/* [Fix 3.4] 新增標題 */}
                 {activeTab === 'awards' && "🏆 獎項成就"}
-                {/* [Fix 3.9] 新增標題 */}
                 {activeTab === 'league' && "⚔️ 內部聯賽"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
-              {/* [Fix 1.1] 系統名修正 */}
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
@@ -1241,7 +1212,6 @@ export default function App() {
             </div>
           </div>
         </header>
-
         <div className="p-10 max-w-7xl mx-auto pb-40">
           
           {/* 4. 比賽資訊與公告 (Competitions) */}
@@ -1308,7 +1278,6 @@ export default function App() {
                 </div>
              </div>
           )}
-
           {/* 1. 積分排行 */}
           {activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -1318,7 +1287,6 @@ export default function App() {
                    if (i === 0) { orderClass = "order-1 md:order-2"; sizeClass = "w-full md:w-1/3 md:-mt-12 scale-105 md:scale-110 z-20"; gradientClass = "bg-gradient-to-b from-yellow-100 via-yellow-50 to-white border-yellow-300"; iconColor = "text-yellow-500"; shadowClass = "shadow-2xl shadow-yellow-200/50"; label = "CHAMPION"; labelBg = "bg-yellow-500"; } 
                    else if (i === 1) { orderClass = "order-2 md:order-1"; sizeClass = "w-full md:w-1/4 z-10"; gradientClass = "bg-gradient-to-b from-slate-200 via-slate-50 to-white border-slate-300"; iconColor = "text-slate-500"; shadowClass = "shadow-xl shadow-slate-300/50"; label = "RUNNER-UP"; labelBg = "bg-slate-500"; } 
                    else { orderClass = "order-3 md:order-3"; sizeClass = "w-full md:w-1/4 z-10"; gradientClass = "bg-gradient-to-b from-orange-100 via-orange-50 to-white border-orange-300"; iconColor = "text-orange-500"; shadowClass = "shadow-xl shadow-orange-200/50"; label = "3RD PLACE"; labelBg = "bg-orange-500"; }
-
                    return (
                       <div key={s.id} className={`relative flex-shrink-0 flex flex-col items-center text-center ${orderClass} ${sizeClass} transition-all duration-500 hover:-translate-y-2`}>
                           <div className={`absolute inset-0 rounded-[3rem] border-4 ${gradientClass} ${shadowClass} overflow-hidden`}>
@@ -1334,7 +1302,6 @@ export default function App() {
                    )
                 })}
               </div>
-
               <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 mb-8 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
                   <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Info size={24} /></div>
                   <div className="flex-1">
@@ -1345,7 +1312,6 @@ export default function App() {
                       </div>
                   </div>
               </div>
-
               <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden font-bold">
                 <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
@@ -1374,7 +1340,6 @@ export default function App() {
               </div>
             </div>
           )}
-
            {/* 內部聯賽 (League) */}
            {activeTab === 'league' && role === 'admin' && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
@@ -1390,7 +1355,6 @@ export default function App() {
                  </div>
               </div>
            )}
-
           {/* 6. 管理概況 (Dashboard) */}
           {activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
@@ -1407,8 +1371,7 @@ export default function App() {
                 </div>
              </div>
           )}
-
-           {/* 5. 隊員管理 (教練專用) - [Fix 4.7] */}
+           {/* 5. 隊員管理 (教練專用) */}
            {activeTab === 'students' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
                 <div className="flex overflow-x-auto gap-4 pb-4"><div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span><span className="text-xl font-black">{students.length}</span></div>{Object.entries(birthYearStats).sort().map(([year, count]) => (<div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span><span className="text-xl font-black text-slate-800">{count} 人</span></div>))}</div>
@@ -1423,9 +1386,10 @@ export default function App() {
                         {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
                         <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
-                           {/* [Fix 4.9] 新增「能力設定」按鈕 */}
-                           <button onClick={() => handleUpdateStudentData(s, 'accessCode')} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定專屬密碼"><Key size={18}/></button>
-                           {/* [Fix 4.7] 修改設定按鈕為生日錄入 */}
+                           
+                           {/* [V5.4] 修改：設定學生登入資料 */}
+                           <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={18}/></button>
+                           
                            <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={18}/></button>
                            <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={18}/></button>
                         </div>
@@ -1436,7 +1400,7 @@ export default function App() {
              </div>
           )}
           
-          {/* [Restore] 2. 訓練班日程 */}
+          {/* 2. 訓練班日程 */}
           {activeTab === 'schedules' && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1446,7 +1410,6 @@ export default function App() {
                {filteredSchedules.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><CalendarIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無訓練日程紀錄</p><p className="text-sm text-slate-300 mt-2">請點擊上方匯入按鈕上傳 CSV 檔案</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{filteredSchedules.map(sc => {const isToday = new Date().toISOString().split('T')[0] === sc.date;return (<div key={sc.id} className={`bg-white p-10 rounded-[3.5rem] border-2 shadow-sm hover:scale-[1.02] transition-all relative overflow-hidden group ${isToday ? 'border-blue-500 shadow-xl shadow-blue-50' : 'border-slate-100'}`}>{isToday && (<div className="absolute top-0 right-0 bg-blue-600 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest animate-pulse">Today • 今日訓練</div>)}<div className="mb-8"><span className="text-[10px] bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all">{sc.trainingClass}</span><h4 className="text-3xl font-black text-slate-800 mt-6">{sc.date}</h4><p className="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-[0.3em]">Training Session</p></div><div className="space-y-5"><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><MapPin size={18}/></div><span className="font-bold">{sc.location}</span></div><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div><span className="font-bold">{sc.coach} 教練</span></div>{role === 'admin' && (<button onClick={() => {if(window.confirm(`確定要刪除 ${sc.date} 的這堂訓練課嗎？`)) {deleteItem('schedules', sc.id);}}} className="absolute top-8 right-8 w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm z-10" title="刪除課堂"><Trash2 size={20}/></button>)}{sc.notes && (<div className="p-6 bg-slate-50 rounded-[2rem] text-xs text-slate-400 leading-relaxed italic border border-slate-100">"{sc.notes}"</div>)}</div>{role === 'admin' && (<div className="mt-10 pt-8 border-t border-dashed border-slate-100 opacity-0 group-hover:opacity-100 transition-all flex justify-end"><button onClick={()=>deleteItem('schedules', sc.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>);})}</div>)}
             </div>
           )}
-
           {/* 3. 快速點名 */}
           {activeTab === 'attendance' && role === 'admin' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
@@ -1463,11 +1426,7 @@ export default function App() {
                </div>
             </div>
           )}
-
-          {/* 4. 比賽資訊與公告 */}
-          {/* ... (Merged above) ... */}
-
-          {/* [Fix 2.6] 精彩花絮頁面 */}
+          {/* 精彩花絮頁面 */}
           {activeTab === 'gallery' && (
             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1480,8 +1439,7 @@ export default function App() {
                {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => {if(confirm('確定要刪除此項目嗎？')) deleteItem('gallery', item.id);}} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
             </div>
            )}
-
-           {/* [Fix 5.1] 獎項成就 (Awards) - 新增照片與班別顯示 */}
+           {/* 獎項成就 (Awards) */}
            {activeTab === 'awards' && (
              <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1509,11 +1467,9 @@ export default function App() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                      {awards.sort((a,b) => b.date.localeCompare(a.date)).map((award) => {
-                        // [Fix 5.1] 自動比對學生班別
                         const student = students.find(s => s.name === award.studentName);
                         return (
                           <div key={award.id} className="relative group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:scale-105 transition-all flex flex-col gap-4">
-                             {/* [Fix 5.1] 顯示獎項照片或預設圖 */}
                              <div className="w-full aspect-[4/3] rounded-2xl bg-slate-50 overflow-hidden relative border border-slate-100">
                                  {award.photoUrl ? (
                                      <img src={award.photoUrl} alt="Award" className="w-full h-full object-cover" />
@@ -1529,13 +1485,11 @@ export default function App() {
                                      {award.rank}
                                  </div>
                              </div>
-
                              <div className="px-1">
                                  <h4 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight mb-2">{award.title}</h4>
                                  <div className="flex items-center gap-2 text-slate-500 text-sm">
                                     <User size={14} className="text-blue-500"/>
                                     <span className="font-bold">{award.studentName}</span>
-                                    {/* [Fix 5.1] 顯示班別 */}
                                     {student && (
                                        <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-lg text-xs">
                                          {student.class}
@@ -1566,7 +1520,6 @@ export default function App() {
                 )}
              </div>
             )}
-
           {activeTab === 'financial' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
                 <div className="flex justify-end">
@@ -1586,7 +1539,6 @@ export default function App() {
                     <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總收入</p>
                     <h3 className="text-4xl font-black text-emerald-500">${financialSummary.revenue.toLocaleString()}</h3>
                   </div>
-
                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
                     <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6">
                       <Trash2 size={32}/>
@@ -1594,7 +1546,6 @@ export default function App() {
                     <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總支出</p>
                     <h3 className="text-4xl font-black text-rose-500">${financialSummary.expense.toLocaleString()}</h3>
                   </div>
-
                   <div className={`p-10 rounded-[3.5rem] border shadow-sm flex flex-col justify-center items-center text-center ${financialSummary.profit >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
                     <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${financialSummary.profit >= 0 ? 'bg-white text-blue-600 shadow-sm' : 'bg-white text-rose-600 shadow-sm'}`}>
                       <DollarSign size={32}/>
@@ -1605,7 +1556,6 @@ export default function App() {
                     </h3>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
                     <div className="flex items-center gap-4 mb-10">
@@ -1630,7 +1580,6 @@ export default function App() {
                       ))}
                     </div>
                   </div>
-
                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
                     <div className="flex items-center gap-4 mb-10">
                       <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm"><DollarSign size={24}/></div>
@@ -1660,7 +1609,6 @@ export default function App() {
                 </div>
              </div>
           )}
-
           {activeTab === 'settings' && role === 'admin' && (
              <div className="max-w-2xl mx-auto space-y-10 animate-in zoom-in-95 duration-500 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
@@ -1691,7 +1639,6 @@ export default function App() {
                           <option value="BIG5">繁體中文 (BIG5 - Excel 常用)</option>
                         </select>
                       </div>
-
                       <div className="space-y-3">
                         <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">學校校徽 (School Logo)</label>
                         <div className="flex flex-col items-center gap-4 p-8 border-2 border-dashed border-slate-200 rounded-[2rem] bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer relative" onClick={() => document.getElementById('logoInput').click()}>
@@ -1735,7 +1682,6 @@ export default function App() {
                         </div>
                         <p className="text-[10px] text-slate-400 font-bold px-2">建議使用背景透明的 PNG 圖片，檔案大小請小於 1MB 以確保讀取速度。</p>
                       </div>
-
                       <div className="pt-8 border-t border-slate-100 space-y-4">
                         <div className="p-6 bg-orange-50 rounded-[2.5rem] border border-orange-100 mb-6">
                            <h4 className="text-orange-600 font-black mb-2 flex items-center gap-2"><History/> 新賽季重置</h4>
@@ -1747,7 +1693,6 @@ export default function App() {
                              重置積分 (開啟新賽季)
                            </button>
                         </div>
-
                         <button 
                           onClick={async ()=>{
                             setIsUpdating(true);
@@ -1774,7 +1719,6 @@ export default function App() {
                 </div>
              </div>
           )}
-
         </div>
       </main>
     </div>
