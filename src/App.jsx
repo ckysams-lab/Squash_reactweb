@@ -8,6 +8,8 @@ import {
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail
+  // [V5.7] 新增徽章圖示
+Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -52,10 +54,27 @@ const db = getFirestore(app);
 
 // 強制鎖定 App ID
 const appId = 'bcklas-squash-core-v1'; 
+// [V5.7] 新增：成就徽章定義
+const ACHIEVEMENT_DATA = {
+  'ice-breaker': { name: '破蛋者', desc: '首次在內部聯賽中獲勝', icon: <Zap size={24} /> },
+  'giant-killer': { name: '巨人殺手', desc: '戰勝比自己排名高10位以上的對手', icon: <ShieldIcon size={24} /> },
+  'first-participation': { name: '賽場新星', desc: '首次代表學校參加校外賽', icon: <Star size={24} /> },
+  'first-win-ext': { name: '首戰告捷', desc: '首次在校外賽中勝出一場', icon: <Rocket size={24} /> },
+  'first-bronze': { name: '銅級榮譽', desc: '首次贏得校外賽季軍或殿軍', icon: <Medal size={24} className="text-orange-500" /> },
+  'first-silver': { name: '銀級榮譽', desc: '首次贏得校外賽亞軍', icon: <Medal size={24} className="text-slate-500" /> },
+  'first-gold': { name: '金級榮譽', desc: '首次贏得校外賽冠軍', icon: <Medal size={24} className="text-yellow-500" /> },
+  'perfect-attendance': { name: '全勤小蜜蜂', desc: '訓練全勤，風雨不改', icon: <Sun size={24} /> },
+  'diligent-practice': { name: '勤奮練習', desc: '訓練態度認真，值得嘉許', icon: <Coffee size={24} /> },
+  'team-spirit': { name: '團隊精神', desc: '具備體育精神，樂於助人', icon: <Heart size={24} /> },
+  'mvp': { name: '年度 MVP', desc: '賽季積分榜第一名', icon: <Crown size={24} /> },
+  'top-three': { name: '年度三甲', desc: '賽季積分榜前三名', icon: <TrophyIcon size={24} /> },
+  'elite-player': { name: '年度壁球精英', desc: '賽季積分榜前八名', icon: <Sparkles size={24} /> },
+};
+
 
 // --- 版本控制 ---
 // Version 5.4: [Current] 學生登入改用「班別+班號+密碼」, 新增教練設定學生登入資料功能
-const CURRENT_VERSION = "5.4";
+const CURRENT_VERSION = "5.7";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -71,6 +90,9 @@ export default function App() {
   const [galleryItems, setGalleryItems] = useState([]); 
   const [awards, setAwards] = useState([]); 
   const [downloadFiles, setDownloadFiles] = useState([]); 
+  const [achievements, setAchievements] = useState([]); // [V5.7] 新增 state
+  const [viewingStudent, setViewingStudent] = useState(null); // [V5.7] 新增 state
+
   
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
@@ -113,6 +135,54 @@ export default function App() {
     nHobby: 4, costHobby: 1200,
     totalStudents: 50, feePerStudent: 250
   });
+
+  // [V5.7] 核心功能：授予徽章
+const awardAchievement = async (badgeId, studentId) => {
+  if (!badgeId || !studentId) return;
+
+  const alreadyHasBadge = achievements.some(ach => ach.studentId === studentId && ach.badgeId === badgeId);
+  if (alreadyHasBadge) {
+    alert("該學員已擁有此徽章，無需重複授予。");
+    return;
+  }
+
+  try {
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'), {
+      studentId,
+      badgeId,
+      timestamp: serverTimestamp()
+    });
+    const student = students.find(s => s.id === studentId);
+    const badge = ACHIEVEMENT_DATA[badgeId];
+    alert(`✅ 成功授予 ${student?.name || '學員'} 「${badge.name}」 徽章！`);
+  } catch (e) {
+    console.error("Failed to award achievement:", e);
+    alert("授予失敗，請檢查網絡連線。");
+  }
+};
+
+// [V5.7] 新增：手動授予徽章功能
+const handleManualAward = (student) => {
+  const allBadges = Object.entries(ACHIEVEMENT_DATA);
+  
+  let promptMsg = `請為 ${student.name} 選擇要授予的徽章 (輸入代號):\n\n`;
+  allBadges.forEach(([id, data], index) => {
+      promptMsg += `${index + 1}. ${data.name}\n`;
+  });
+  
+  const choice = prompt(promptMsg);
+  if (choice && !isNaN(choice)) {
+      const selectedIndex = parseInt(choice, 10) - 1;
+      if (selectedIndex >= 0 && selectedIndex < allBadges.length) {
+          const [badgeId, badgeData] = allBadges[selectedIndex];
+          if (confirm(`確定要授予 ${student.name} 「${badgeData.name}」徽章嗎？`)) {
+              awardAchievement(badgeId, student.id);
+          }
+      } else {
+          alert("無效的選擇。");
+      }
+  }
+};
 
   // 自動緩存清理機制
   useEffect(() => {
@@ -304,10 +374,15 @@ export default function App() {
       const unsubAwards = onSnapshot(awardsRef, (snap) => {
         setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
+      const unsubAchievements = onSnapshot(query(achievementsRef, orderBy("timestamp", "desc")), (snap) => {
+        setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }); 
 
       return () => { 
         unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); unsubGallery(); unsubAwards();
+        unsubAchievements(); // [V5.7]
       };
+
     } catch (e) {
       console.error("Firestore Init Error:", e);
     }
@@ -991,6 +1066,51 @@ export default function App() {
         multiple 
         onChange={handleGalleryImageUpload}
       />
+      {/* [V5.7] 新增：隊員詳細資料與成就彈窗 */}
+{viewingStudent && (
+  <div 
+    className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" 
+    onClick={() => setViewingStudent(null)}
+  >
+    <div className="bg-white rounded-[3rem] w-full max-w-lg p-10 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+      <button onClick={() => setViewingStudent(null)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-800 transition-colors"><X size={24} /></button>
+
+      <div className="text-center mb-8">
+        <div className="w-24 h-24 bg-slate-100 rounded-full mx-auto flex items-center justify-center text-4xl font-black text-slate-400 border-4 border-white shadow-inner mb-4 uppercase">{viewingStudent.name[0]}</div>
+        <h3 className="text-3xl font-black text-slate-800">{viewingStudent.name}</h3>
+        <p className="text-sm font-bold text-slate-400">{viewingStudent.class} ({viewingStudent.classNo})</p>
+        <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full border bg-slate-50 text-blue-600 shadow-sm">
+          <TrophyIcon size={16} />
+          <span className="font-mono font-black text-lg">{viewingStudent.totalPoints}</span>
+          <span className="text-xs font-bold">Points</span>
+        </div>
+      </div>
+
+      <div className="bg-slate-50/80 p-6 rounded-3xl border">
+        <h4 className="text-sm font-black text-slate-500 mb-4 text-center tracking-widest uppercase">我的成就</h4>
+        <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+          {achievements.filter(ach => ach.studentId === viewingStudent.id).length === 0 ? (
+            <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章，繼續努力！</p>
+          ) : (
+            achievements.filter(ach => ach.studentId === viewingStudent.id).map(ach => {
+              const badge = ACHIEVEMENT_DATA[ach.badgeId];
+              if (!badge) return null;
+              return (
+                <div key={ach.id} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
+                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
+                    {badge.icon}
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{badge.name}</p>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
       {/* 燈箱 Modal */}
       {viewingImage && (
         <div 
@@ -1323,7 +1443,7 @@ export default function App() {
                     <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] bg-slate-50 border-b font-black"><tr><th className="px-8 py-6 text-center">排名</th><th className="px-8 py-6">隊員資料</th><th className="px-8 py-6">目前章別</th><th className="px-8 py-6 text-right">基礎分</th><th className="px-8 py-6 text-right">總分</th>{role === 'admin' && <th className="px-8 py-6 text-center">教練操作</th>}</tr></thead>
                     <tbody className="divide-y divide-slate-50">
                       {filteredStudents.map((s, i) => (
-                        <tr key={s.id} className="group hover:bg-blue-50/30 transition-all">
+                        <tr key={s.id} className="group hover:bg-blue-50/30 transition-all cursor-pointer" onClick={() => setViewingStudent(s)}>
                           <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
                           <td className="px-8 py-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.name[0]}</div><div><div className="font-black text-lg text-slate-800">{s.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div></div></div></td>
                           <td className="px-8 py-8"><div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black">{s.badge}</span></div></td>
@@ -1386,7 +1506,7 @@ export default function App() {
                         {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
                         <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
-                           
+                           <button onClick={() => handleManualAward(s)} className="text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 p-2 rounded-xl transition-all" title="授予徽章"><Award size={18}/></button>
                            {/* [V5.4] 修改：設定學生登入資料 */}
                            <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={18}/></button>
                            
