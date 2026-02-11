@@ -164,12 +164,10 @@ const awardAchievement = async (badgeId, studentId) => {
 // [V5.7] 新增：手動授予徽章功能
 const handleManualAward = (student) => {
   const allBadges = Object.entries(ACHIEVEMENT_DATA);
-  
   let promptMsg = `請為 ${student.name} 選擇要授予的徽章 (輸入代號):\n\n`;
   allBadges.forEach(([id, data], index) => {
       promptMsg += `${index + 1}. ${data.name}\n`;
   });
-  
   const choice = prompt(promptMsg);
   if (choice && !isNaN(choice)) {
       const selectedIndex = parseInt(choice, 10) - 1;
@@ -183,7 +181,6 @@ const handleManualAward = (student) => {
       }
   }
 };
-
   // 自動緩存清理機制
   useEffect(() => {
     const storedVersion = localStorage.getItem('app_version');
@@ -336,7 +333,7 @@ const handleManualAward = (student) => {
       const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles');
       const galleryRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery'); 
       const awardsRef = collection(db, 'artifacts', appId, 'public', 'data', 'awards');
-      
+      const achievementsRef = collection(db, 'artifacts', appId, 'public', 'data', 'achievements');
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
       const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
 
