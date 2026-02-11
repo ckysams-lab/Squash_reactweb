@@ -997,66 +997,78 @@ const savePendingAttendance = async () => {
     };
 
     // [V5.9.1] 修正：加入 student.length > 0 的判斷
-    const handleCSVImportLeagueMatches = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    // [CORRECTED] Replace the old version of this function with this one.
+const handleCSVImportLeagueMatches = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-        if (students.length === 0) {
-            alert('學員資料尚未載入，請稍候再試。');
-            return;
-        }
+    // This check is important to prevent running before data is loaded.
+    if (students.length === 0) {
+        alert('學員資料尚未載入，請稍候幾秒再試。');
+        return;
+    }
 
-        setIsUpdating(true);
-        let skippedCount = 0;
-        
-        try {
-            const text = await readCSVFile(file, importEncoding);
-            const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-            const batch = writeBatch(db);
-            const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches');
+    setIsUpdating(true);
+    let skippedCount = 0;
+    let foundCount = 0;
+    
+    try {
+        const text = await readCSVFile(file, importEncoding);
+        const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
+        const batch = writeBatch(db);
+        const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches');
 
-            rows.forEach(row => {
-                const [date, time, venue, player1Name, player2Name] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
-                
-                if (date && player1Name && player2Name) {
-                    const player1 = students.find(s => s.name.trim() === player1Name.trim());
-                    const player2 = students.find(s => s.name.trim() === player2Name.trim());
+        rows.forEach(row => {
+            const [date, time, venue, player1Name, player2Name] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
+            
+            if (date && player1Name && player2Name) {
+                // [FIX] Trim both the database name and CSV name for a robust comparison.
+                const player1 = students.find(s => s.name.trim() === player1Name.trim());
+                const player2 = students.find(s => s.name.trim() === player2Name.trim());
 
-                    if (player1 && player2) {
-                        batch.set(doc(colRef), {
-                            date,
-                            time: time || 'N/A',
-                            venue: venue || '待定',
-                            player1Id: player1.id,
-                            player1Name: player1.name,
-                            player2Id: player2.id,
-                            player2Name: player2.name,
-                            score1: null,
-                            score2: null,
-                            winnerId: null,
-                            status: 'scheduled',
-                            createdAt: serverTimestamp()
-                        });
-                    } else {
-                        skippedCount++;
-                        console.warn(`Skipped row: Cannot find players "${player1Name}" or "${player2Name}"`);
-                    }
+                if (player1 && player2) {
+                    batch.set(doc(colRef), {
+                        date,
+                        time: time || 'N/A',
+                        venue: venue || '待定',
+                        player1Id: player1.id,
+                        player1Name: player1.name,
+                        player2Id: player2.id,
+                        player2Name: player2.name,
+                        score1: null,
+                        score2: null,
+                        winnerId: null,
+                        status: 'scheduled',
+                        createdAt: serverTimestamp()
+                    });
+                    foundCount++;
+                } else {
+                    skippedCount++;
+                    // More detailed logging for easier debugging in the future.
+                    if (!player1) console.warn(`[CSV Import] Player not found: "${player1Name}". Please check for typos or extra characters.`);
+                    if (!player2) console.warn(`[CSV Import] Player not found: "${player2Name}". Please check for typos or extra characters.`);
                 }
-            });
-
-            await batch.commit();
-            let alertMsg = `✅ 賽程匯入成功！共新增 ${rows.length - skippedCount} 場比賽。`;
-            if (skippedCount > 0) {
-                alertMsg += `\n⚠️ 有 ${skippedCount} 行因為找不到球員資料而被略過，請檢查 CSV 中的姓名是否與隊員名單完全一致。`;
             }
-            alert(alertMsg);
-        } catch (err) {
-            console.error("League Match Import failed:", err);
-            alert('匯入失敗，請檢查 CSV 格式或檔案編碼。');
+        });
+
+        if (foundCount > 0) {
+            await batch.commit();
         }
-        setIsUpdating(false);
-        e.target.value = null;
-    };
+
+        let alertMsg = `✅ 賽程匯入完成！\n\n成功配對並新增 ${foundCount} 場比賽。`;
+        if (skippedCount > 0) {
+            alertMsg += `\n\n⚠️ 有 ${skippedCount} 場比賽因為找不到對應的球員而被略過。請按 F12 打開開發者工具，在 Console 中查看具體是哪個球員名稱配對失敗。`;
+        }
+        alert(alertMsg);
+
+    } catch (err) {
+        console.error("League Match Import failed:", err);
+        alert('匯入失敗，請檢查 CSV 格式、檔案編碼或聯絡管理員。');
+    }
+    setIsUpdating(false);
+    e.target.value = null; // Reset the file input
+};
+
 
     const handleUpdateLeagueMatchScore = async (match) => {
         const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
