@@ -1605,7 +1605,11 @@ const savePendingAttendance = async () => {
                       return (
                         <button 
                           key={s.id} 
-                          onClick={() => !isAttended && togglePendingAttendance(s.id)}
+                          onClick={() => {
+                              if (!isAttended) {
+                                  togglePendingAttendance(s.id);
+                              }
+                          }}
                           disabled={isAttended}
                           className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden 
                             ${isAttended 
