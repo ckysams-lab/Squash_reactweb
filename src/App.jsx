@@ -82,16 +82,16 @@ export default function App() {
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('rankings');
   const [students, setStudents] = useState([]);
-  const [attendance, setAttendance] = useState([]); 
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
   const [competitions, setCompetitions] = useState([]);
   const [schedules, setSchedules] = useState([]); 
   const [galleryItems, setGalleryItems] = useState([]); 
   const [awards, setAwards] = useState([]); 
-  const [downloadFiles, setDownloadFiles] = useState([]); 
   const [achievements, setAchievements] = useState([]); 
+  const [leagueMatches, setLeagueMatches] = useState([]);
+  const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
-  const [leagueMatches, setLeagueMatches] = useState([]); // [V5.9] 新增
+
   
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
@@ -177,6 +177,57 @@ const handleManualAward = (student) => {
           alert("無效的選擇。");
       }
   }
+};
+
+// [V5.9] 新增：切換學員的待點名狀態
+const togglePendingAttendance = (studentId) => {
+  setPendingAttendance(prev => 
+    prev.includes(studentId) 
+      ? prev.filter(id => id !== studentId)
+      : [...prev, studentId]
+  );
+};
+
+// [V5.9] 新增：儲存所有待處理的點名紀錄
+const savePendingAttendance = async () => {
+  if (pendingAttendance.length === 0) {
+    alert('沒有需要儲存的點名紀錄。');
+    return;
+  }
+  if (!todaySchedule) { 
+    alert('⚠️ 今日沒有設定訓練日程，無法儲存點名。'); 
+    return; 
+  }
+  setIsUpdating(true);
+  try {
+    const batch = writeBatch(db);
+    const attendanceCollection = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs');
+    
+    pendingAttendance.forEach(studentId => {
+      const student = students.find(s => s.id === studentId);
+      if (student) {
+        const newLogRef = doc(attendanceCollection);
+        batch.set(newLogRef, {
+          studentId: student.id,
+          name: student.name,
+          class: student.class,
+          classNo: student.classNo,
+          trainingClass: todaySchedule.trainingClass,
+          date: todaySchedule.date,
+          location: todaySchedule.location,
+          timestamp: serverTimestamp()
+        });
+      }
+    });
+    
+    await batch.commit();
+    alert(`✅ 成功儲存 ${pendingAttendance.length} 筆點名紀錄！`);
+    setPendingAttendance([]); // 清空暫存區
+  } catch (e) {
+    console.error("Batch attendance save failed:", e);
+    alert("儲存失敗，請檢查網絡或聯絡管理員。");
+  }
+  setIsUpdating(false);
 };
 
   // 自動緩存清理機制
@@ -330,7 +381,7 @@ const handleManualAward = (student) => {
       const galleryRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery'); 
       const awardsRef = collection(db, 'artifacts', appId, 'public', 'data', 'awards');
       const achievementsRef = collection(db, 'artifacts', appId, 'public', 'data', 'achievements');
-      const leagueMatchesRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'); // [V5.9] 新增
+      const leagueMatchesRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches');
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
       const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
 
@@ -373,15 +424,14 @@ const handleManualAward = (student) => {
       const unsubAchievements = onSnapshot(query(achievementsRef, orderBy("timestamp", "desc")), (snap) => {
         setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }); 
-      // [V5.9] 新增
       const unsubLeagueMatches = onSnapshot(query(leagueMatchesRef, orderBy("date", "desc")), (snap) => {
-        setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+          setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
       return () => { 
         unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); unsubGallery(); unsubAwards();
         unsubAchievements();
-        unsubLeagueMatches(); // [V5.9] 新增
+        unsubLeagueMatches();
       };
 
     } catch (e) {
@@ -680,42 +730,6 @@ const handleManualAward = (student) => {
     setIsUpdating(false);
   };
 
-  // 自動化點名 (不加分)
-  const markAttendance = async (student) => {
-    if (!todaySchedule) { 
-      alert('⚠️ 今日沒有設定訓練日程，請先到「訓練日程」新增今天的課堂。'); 
-      return; 
-    }
-    
-    const todayStr = todaySchedule.date;
-    const isAttended = attendanceLogs.some(log => 
-      log.studentId === student.id && 
-      log.date === todayStr && 
-      log.trainingClass === todaySchedule.trainingClass
-    );
-    if (isAttended) {
-      alert(`⚠️ ${student.name} 已經點過名了！`);
-      return;
-    }
-    if (confirm(`確認為 ${student.name} 進行「${todaySchedule.trainingClass}」點名？\n\n(註：單純出席訓練不設加分)`)) {
-      try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'), {
-          studentId: student.id,
-          name: student.name,
-          class: student.class,
-          classNo: student.classNo,
-          trainingClass: todaySchedule.trainingClass,
-          date: todaySchedule.date,
-          location: todaySchedule.location,
-          timestamp: serverTimestamp()
-        });
-      } catch (e) {
-        console.error(e);
-        alert('點名失敗，請檢查網絡');
-      }
-    }
-  };
-
   // 自動生成比賽名單
   const generateCompetitionRoster = () => {
     const topStudents = rankedStudents.slice(0, 5);
@@ -736,30 +750,56 @@ const handleManualAward = (student) => {
     });
   };
 
-  // 匯出 CSV 報表功能
-  const exportAttendanceCSV = (targetClass) => {
-    const logs = attendanceLogs.filter(l => targetClass === 'ALL' || l.trainingClass === targetClass);
-    
-    if (logs.length === 0) {
-      alert('⚠️ 沒有找到相關的點名紀錄');
-      return;
-    }
-    logs.sort((a,b) => a.date.localeCompare(b.date) || a.class.localeCompare(b.class) || a.name.localeCompare(b.name));
-    
-    let csvContent = "\uFEFF"; 
-    csvContent += "日期,訓練班別,地點,學生姓名,班級,班號,記錄時間\n";
-    
-    logs.forEach(l => {
-      const time = l.timestamp ? new Date(l.timestamp.seconds * 1000).toLocaleTimeString() : 'N/A';
-      csvContent += `${l.date},${l.trainingClass},${l.location},${l.name},${l.class},${l.classNo},${time}\n`;
-    });
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${targetClass === 'ALL' ? '全部班級' : targetClass}_出席紀錄_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
+  // [V5.9] 更新：匯出新的矩陣格式點名表
+  const exportMatrixAttendanceCSV = (targetClass) => {
+      if (!targetClass || targetClass === 'ALL') {
+          alert('請先從篩選器選擇一個特定的班別以匯出報表。');
+          return;
+      }
+
+      // 1. 過濾所需資料
+      const classStudents = students.filter(s => s.squashClass && s.squashClass.includes(targetClass));
+      if (classStudents.length === 0) {
+          alert(`「${targetClass}」沒有找到任何學員。`);
+          return;
+      }
+      const classLogs = attendanceLogs.filter(log => log.trainingClass === targetClass);
+
+      // 2. 獲取所有唯一及已排序的日期
+      const uniqueDates = [...new Set(classLogs.map(log => log.date))].sort((a, b) => a.localeCompare(b));
+      if (uniqueDates.length === 0) {
+        alert(`「${targetClass}」沒有任何點名紀錄可供匯出。`);
+        return;
+      }
+
+      // 3. 獲取班級資訊 (從第一條紀錄中)
+      const scheduleInfo = schedules.find(s => s.trainingClass === targetClass) || {};
+
+      // 4. 構建 CSV 內容
+      let csvContent = "\uFEFF"; // UTF-8 BOM
+
+      // 第一行: 班級名稱、星期、時間
+      csvContent += `${targetClass},,${scheduleInfo.day || ' '},${scheduleInfo.time || ' '},${','.repeat(uniqueDates.length)}\n`;
+      // 第二行: 地點、日期標題
+      csvContent += `${scheduleInfo.location || ' '},,,,${uniqueDates.join(',')}\n`;
+
+      // 學生資料行
+      classStudents.sort((a,b) => a.class.localeCompare(b.class) || a.classNo.localeCompare(b.classNo)).forEach(student => {
+          let row = `${student.class},${student.classNo},${student.name},${student.phone || ''},`;
+          uniqueDates.forEach(date => {
+              const attended = classLogs.some(log => log.studentId === student.id && log.date === date);
+              row += attended ? 'v,' : ',';
+          });
+          csvContent += row.slice(0, -1) + '\n'; // 移除最後一個逗號並換行
+      });
+
+      // 5. 創建並下載檔案
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${targetClass}_點名總表_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
   };
 
   // --- 智能壓縮圖片 Helper Function ---
@@ -946,7 +986,9 @@ const handleManualAward = (student) => {
 
   const deleteItem = async (col, id) => {
     if (role !== 'admin') return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
+    if (window.confirm('確定要永久刪除這個項目嗎？')) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
+    }
   };
   
   const todaySchedule = useMemo(() => {
@@ -967,7 +1009,7 @@ const handleManualAward = (student) => {
   }, [schedules, selectedClassFilter]);
 
   const studentsInSelectedAttendanceClass = useMemo(() => {
-    const sorted = [...students].sort((a,b) => a.class.localeCompare(b.class));
+    const sorted = [...students].sort((a,b) => a.class.localeCompare(b.class) || a.classNo.localeCompare(b.classNo));
     if (attendanceClassFilter === 'ALL') return sorted;
     return sorted.filter(s => {
       if (!s.squashClass) return false;
@@ -975,7 +1017,6 @@ const handleManualAward = (student) => {
     });
   }, [students, attendanceClassFilter]);
 
-    // [V5.9] 修改
     const downloadTemplate = (type) => {
         let csv = "";
         let filename = "";
@@ -983,9 +1024,9 @@ const handleManualAward = (student) => {
             csv = "班別名稱,日期(YYYY-MM-DD),地點,教練,備註\n初級班A,2024-03-20,學校壁球場,王教練,第一課\n校隊訓練,2024-03-25,歌和老街,李教練,專項訓練";
             filename = "訓練日程匯入範本.csv";
         } else if (type === 'students') {
-            csv = "姓名,班別,班號,章別(無/銅章/銀章/金章/白金章),初始積分,壁球班別\n陳小明,6A,01,銅章,120,校隊訓練班\n張小華,5C,12,無,100,壁球中級訓練班";
+            csv = "姓名,班別,班號,章別(無/銅章/銀章/金章/白金章),初始積分,壁球班別,電話\n陳小明,6A,01,銅章,120,校隊訓練班,98765432\n張小華,5C,12,無,100,壁球中級訓練班,12345678";
             filename = "學員匯入範本.csv";
-        } else if (type === 'league') { // [V5.9] 新增
+        } else if (type === 'league') {
             csv = "日期(YYYY-MM-DD),時間(HH:MM),地點,球員A姓名,球員B姓名\n2024-09-01,14:00,學校壁球場,陳大文,張小明\n2024-09-01,14:30,學校壁球場,李靜,王強";
             filename = "內部聯賽賽程匯入範本.csv";
         }
@@ -994,7 +1035,6 @@ const handleManualAward = (student) => {
         a.href = URL.createObjectURL(blob); a.download = filename; a.click();
     };
 
-    // [V5.9] 新增
     const handleCSVImportLeagueMatches = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -1026,7 +1066,7 @@ const handleManualAward = (student) => {
                             score1: null,
                             score2: null,
                             winnerId: null,
-                            status: 'scheduled', // 'scheduled' | 'completed'
+                            status: 'scheduled',
                             createdAt: serverTimestamp()
                         });
                     } else {
@@ -1050,7 +1090,6 @@ const handleManualAward = (student) => {
         e.target.value = null;
     };
 
-    // [V5.9] 新增
     const handleUpdateLeagueMatchScore = async (match) => {
         const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
         if (score1_str === null) return;
@@ -1065,6 +1104,11 @@ const handleManualAward = (student) => {
             return;
         }
 
+        if (score1 === score2) {
+            alert("比分不能相同，必須有勝負之分。");
+            return;
+        }
+
         const winnerId = score1 > score2 ? match.player1Id : match.player2Id;
         const winner = students.find(s => s.id === winnerId);
         const loser = students.find(s => s.id === (winnerId === match.player1Id ? match.player2Id : match.player1Id));
@@ -1074,7 +1118,6 @@ const handleManualAward = (student) => {
             return;
         }
 
-        // --- 沿用巨人殺手計分邏輯 ---
         const winnerRank = rankedStudents.findIndex(s => s.id === winner.id) + 1;
         const loserRank = rankedStudents.findIndex(s => s.id === loser.id) + 1;
         const winnerBadgeLevel = BADGE_DATA[winner.badge]?.level || 0;
@@ -1095,7 +1138,6 @@ const handleManualAward = (student) => {
             try {
                 const batch = writeBatch(db);
                 
-                // 1. 更新比賽記錄
                 const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
                 batch.update(matchRef, {
                     score1,
@@ -1105,7 +1147,6 @@ const handleManualAward = (student) => {
                     updatedAt: serverTimestamp()
                 });
 
-                // 2. 為勝方加分
                 const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id);
                 batch.update(winnerRef, {
                     points: increment(pointsToAdd),
@@ -1220,18 +1261,11 @@ const handleManualAward = (student) => {
         <h4 className="text-sm font-black text-slate-500 mb-4 text-center tracking-widest uppercase">我的成就</h4>
         <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
           {(() => {
-            // 安全檢查，確保 viewingStudent 存在
             if (!viewingStudent) return null;
-      
-            // 步驟 1: 只過濾一次，取得該學生的所有徽章
             const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
-
-            // 步驟 2: 檢查過濾後的結果是否為空
             if (studentAchievements.length === 0) {
               return <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章，繼續努力！</p>;
             }
-
-            // 步驟 3: 如果不為空，則遍歷過濾後的結果並顯示
             return studentAchievements.map(ach => {
               const badge = ACHIEVEMENT_DATA[ach.badgeId];
               if (!badge) return null;
@@ -1590,7 +1624,7 @@ const handleManualAward = (student) => {
                           <td className="px-8 py-8 text-right font-mono text-slate-400">{s.points}</td>
                           <td className="px-8 py-8 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
                           {role === 'admin' && (
-                            <td className="px-8 py-8"><div className="flex justify-center gap-2"><button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button><button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button><button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" title="校外賽成績錄入"><Globe size={18}/></button><button onClick={() => {if(confirm(`確定要永久刪除 ${s.name} (${s.class} ${s.classNo}) 嗎？`)) {deleteItem('students', s.id);}}} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="永久刪除"><Trash2 size={18}/></button></div></td>
+                            <td className="px-8 py-8"><div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}><button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button><button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button><button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" title="校外賽成績錄入"><Globe size={18}/></button><button onClick={()=>deleteItem('students', s.id)} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="永久刪除"><Trash2 size={18}/></button></div></td>
                           )}
                         </tr>
                       ))}
@@ -1603,7 +1637,6 @@ const handleManualAward = (student) => {
            {/* [V5.9] 內部聯賽 (League) - 更新 */}
            {activeTab === 'league' && role === 'admin' && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
-                  {/* --- 原有的即時對戰錄入 --- */}
                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
                       <div className="absolute -right-10 -bottom-10 opacity-5 rotate-12"><Swords size={200}/></div>
                       <div className="relative z-10 text-center mb-12"><h3 className="text-4xl font-black mb-2">⚔️ 即時對戰錄入</h3><p className="text-slate-400">適用於非賽程的臨時比賽</p></div>
@@ -1615,7 +1648,6 @@ const handleManualAward = (student) => {
                       <div className="mt-8 text-center text-xs text-slate-400 font-bold"><p>✨ 規則：基礎勝利 +10 分</p><p className="mt-1">🔥 巨人殺手：低章贏高章 或 贏高於自己 5 名以上對手 -&gt; <span className="text-orange-500">+20 分</span></p></div>
                   </div>
                   
-                  {/* --- [V5.9 新增] 聯賽賽程與賽果 --- */}
                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
                       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                           <div>
@@ -1685,7 +1717,7 @@ const handleManualAward = (student) => {
                                                       </button>
                                                   )}
                                                   <button 
-                                                      onClick={() => { if(confirm(`確定要刪除這場 ${match.player1Name} vs ${match.player2Name} 的比賽嗎？`)) deleteItem('league_matches', match.id) }}
+                                                      onClick={() => deleteItem('league_matches', match.id)}
                                                       className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="刪除比賽">
                                                       <Trash2 size={18}/>
                                                   </button>
@@ -1729,11 +1761,9 @@ const handleManualAward = (student) => {
                         <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
                         {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
-                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3">
+                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3" onClick={(e) => e.stopPropagation()}>
                            <button onClick={() => handleManualAward(s)} className="text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 p-2 rounded-xl transition-all" title="授予徽章"><Award size={18}/></button>
-                           {/* [V5.4] 修改：設定學生登入資料 */}
                            <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={18}/></button>
-                           
                            <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={18}/></button>
                            <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={18}/></button>
                         </div>
@@ -1751,20 +1781,57 @@ const handleManualAward = (student) => {
                   <div className="flex items-center gap-6"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div><div><h3 className="text-xl font-black">訓練班日程表</h3><p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p></div></div>
                   <div className="flex flex-wrap gap-4 w-full md:w-auto"><div className="relative flex-1 md:flex-none"><Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={18}/><select value={selectedClassFilter} onChange={(e)=>setSelectedClassFilter(e.target.value)} className="w-full md:w-60 bg-slate-50 border-none outline-none pl-12 pr-6 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner">{uniqueTrainingClasses.map(c => (<option key={c} value={c}>{c === 'ALL' ? '🌍 全部訓練班' : `🏸 ${c}`}</option>))}</select></div>{role === 'admin' && (<div className="flex gap-2"><button onClick={()=>downloadTemplate('schedule')} className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border transition-all" title="下載日程範本"><Download size={20}/></button><label className="bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm"><Upload size={18}/> 匯入 CSV 日程<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportSchedules}/></label></div>)}</div>
                </div>
-               {filteredSchedules.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><CalendarIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無訓練日程紀錄</p><p className="text-sm text-slate-300 mt-2">請點擊上方匯入按鈕上傳 CSV 檔案</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{filteredSchedules.map(sc => {const isToday = new Date().toISOString().split('T')[0] === sc.date;return (<div key={sc.id} className={`bg-white p-10 rounded-[3.5rem] border-2 shadow-sm hover:scale-[1.02] transition-all relative overflow-hidden group ${isToday ? 'border-blue-500 shadow-xl shadow-blue-50' : 'border-slate-100'}`}>{isToday && (<div className="absolute top-0 right-0 bg-blue-600 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest animate-pulse">Today • 今日訓練</div>)}<div className="mb-8"><span className="text-[10px] bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all">{sc.trainingClass}</span><h4 className="text-3xl font-black text-slate-800 mt-6">{sc.date}</h4><p className="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-[0.3em]">Training Session</p></div><div className="space-y-5"><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><MapPin size={18}/></div><span className="font-bold">{sc.location}</span></div><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div><span className="font-bold">{sc.coach} 教練</span></div>{role === 'admin' && (<button onClick={() => {if(window.confirm(`確定要刪除 ${sc.date} 的這堂訓練課嗎？`)) {deleteItem('schedules', sc.id);}}} className="absolute top-8 right-8 w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm z-10" title="刪除課堂"><Trash2 size={20}/></button>)}{sc.notes && (<div className="p-6 bg-slate-50 rounded-[2rem] text-xs text-slate-400 leading-relaxed italic border border-slate-100">"{sc.notes}"</div>)}</div>{role === 'admin' && (<div className="mt-10 pt-8 border-t border-dashed border-slate-100 opacity-0 group-hover:opacity-100 transition-all flex justify-end"><button onClick={()=>deleteItem('schedules', sc.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>);})}</div>)}
+               {filteredSchedules.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><CalendarIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無訓練日程紀錄</p><p className="text-sm text-slate-300 mt-2">請點擊上方匯入按鈕上傳 CSV 檔案</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{filteredSchedules.map(sc => {const isToday = new Date().toISOString().split('T')[0] === sc.date;return (<div key={sc.id} className={`bg-white p-10 rounded-[3.5rem] border-2 shadow-sm hover:scale-[1.02] transition-all relative overflow-hidden group ${isToday ? 'border-blue-500 shadow-xl shadow-blue-50' : 'border-slate-100'}`}>{isToday && (<div className="absolute top-0 right-0 bg-blue-600 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest animate-pulse">Today • 今日訓練</div>)}<div className="mb-8"><span className="text-[10px] bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all">{sc.trainingClass}</span><h4 className="text-3xl font-black text-slate-800 mt-6">{sc.date}</h4><p className="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-[0.3em]">Training Session</p></div><div className="space-y-5"><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><MapPin size={18}/></div><span className="font-bold">{sc.location}</span></div><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div><span className="font-bold">{sc.coach} 教練</span></div>{role === 'admin' && (<button onClick={() => deleteItem('schedules', sc.id)} className="absolute top-8 right-8 w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm z-10" title="刪除課堂"><Trash2 size={20}/></button>)}{sc.notes && (<div className="p-6 bg-slate-50 rounded-[2rem] text-xs text-slate-400 leading-relaxed italic border border-slate-100">"{sc.notes}"</div>)}</div></div>);})}</div>)}
             </div>
           )}
-          {/* 3. 快速點名 */}
+          {/* 3. 快速點名 (V5.9 更新) */}
           {activeTab === 'attendance' && role === 'admin' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
                <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}><div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div><div className="relative z-10"><h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3><div className="flex flex-wrap gap-4">{todaySchedule ? (<><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><Star size={14} className="text-yellow-300 fill-yellow-300"/><span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span></div><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><MapPin size={14}/><span className="text-sm font-black">{todaySchedule.location}</span></div></>) : (<div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2"><Info size={14}/><span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span></div>)}</div></div><div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner"><p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p><p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p></div></div>
-               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8"><div className="flex items-center gap-4"><div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div><div><h4 className="font-black text-slate-800">出席率報表中心</h4><p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p></div></div><div className="flex gap-2"><button onClick={() => exportAttendanceCSV('ALL')} className="px-6 py-3 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded-2xl text-xs font-black transition-all">匯出全部紀錄</button>{attendanceClassFilter !== 'ALL' && (<button onClick={() => exportAttendanceCSV(attendanceClassFilter)} className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"><Download size={16}/> 匯出 {attendanceClassFilter} 報表</button>)}</div></div>
+               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8"><div className="flex items-center gap-4"><div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div><div><h4 className="font-black text-slate-800">出席率報表中心</h4><p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p></div></div><div className="flex gap-2"><button onClick={() => exportMatrixAttendanceCSV(attendanceClassFilter)} className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"><Download size={16}/> 匯出班級點名總表</button></div></div>
                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6"><div className="flex items-center gap-3 text-slate-400 min-w-max"><Filter size={20} /><span>選擇點名班別：</span></div><div className="flex flex-wrap gap-2">{uniqueTrainingClasses.map(cls => (<button key={cls} onClick={() => setAttendanceClassFilter(cls)} className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${attendanceClassFilter === cls ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'}`}>{cls === 'ALL' ? '🌍 全部學員' : cls}</button>))}</div></div>
                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                   {studentsInSelectedAttendanceClass.length > 0 ? (
                     studentsInSelectedAttendanceClass.map(s => {
                       const isAttended = todaySchedule && attendanceLogs.some(log => log.studentId === s.id && log.date === todaySchedule.date && log.trainingClass === todaySchedule.trainingClass);
-                      return (<button key={s.id} onClick={() => markAttendance(s)} className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden ${isAttended ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-default' : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-xl hover:shadow-blue-50'}`}><div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase ${isAttended ? 'bg-emerald-200 text-white rotate-12' : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:rotate-6'}`}>{s.name[0]}</div><p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : 'text-slate-800 group-hover:text-blue-600'}`}>{s.name}</p><p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p><div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>{s.squashClass}</div><div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : 'text-slate-100 group-hover:text-blue-100'}`}><CheckCircle2 size={24}/></div>{isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">已出席</div>)}</button>);
+                      const isPending = pendingAttendance.includes(s.id);
+                      return (
+                        <button 
+                          key={s.id} 
+                          onClick={() => {
+                              if (!isAttended) {
+                                  togglePendingAttendance(s.id);
+                              }
+                          }}
+                          disabled={isAttended}
+                          className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden 
+                            ${isAttended 
+                              ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-not-allowed' 
+                              : isPending 
+                                ? 'border-blue-500 shadow-xl shadow-blue-50 ring-4 ring-blue-100' 
+                                : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-lg'
+                            }`}
+                        >
+                          <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase 
+                            ${isAttended 
+                              ? 'bg-emerald-200 text-white rotate-12' 
+                              : isPending 
+                                ? 'bg-blue-600 text-white rotate-6' 
+                                : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-100'
+                            }`}
+                          >
+                            {s.name[0]}
+                          </div>
+                          <p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : isPending ? 'text-blue-600' : 'text-slate-800'}`}>{s.name}</p>
+                          <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
+                          <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>{s.squashClass}</div>
+                          <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : isPending ? 'text-blue-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
+                            <CheckCircle2 size={24}/>
+                          </div>
+                          {isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">已出席</div>)}
+                          {isPending && !isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] py-1 font-black uppercase tracking-widest">待儲存</div>)}
+                        </button>
+                      );
                     })
                   ) : (<div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">此班別暫無學員資料</div>)}
                </div>
@@ -1780,7 +1847,7 @@ const handleManualAward = (student) => {
                   </div>
                   {role === 'admin' && (<div className="flex items-center gap-3">{isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}<button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50"><PlusCircle size={18}/> 新增相片/影片</button></div>)}
                </div>
-               {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => {if(confirm('確定要刪除此項目嗎？')) deleteItem('gallery', item.id);}} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
+               {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
             </div>
            )}
            {/* 獎項成就 (Awards) */}
@@ -1849,9 +1916,7 @@ const handleManualAward = (student) => {
                              
                              {role === 'admin' && (
                                 <button 
-                                  onClick={() => {
-                                     if(confirm(`確定要刪除 "${award.title}" 嗎？`)) deleteItem('awards', award.id);
-                                  }}
+                                  onClick={() => deleteItem('awards', award.id)}
                                   className="absolute top-4 right-4 p-2 bg-white/50 backdrop-blur text-slate-400 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100"
                                 >
                                   <Trash2 size={16}/>
@@ -2065,6 +2130,21 @@ const handleManualAward = (student) => {
           )}
         </div>
       </main>
+
+        {/* --- [V5.9] 新增：浮動儲存點名按鈕 --- */}
+        {activeTab === 'attendance' && pendingAttendance.length > 0 && role === 'admin' && (
+          <div className="fixed bottom-12 right-12 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <button
+              onClick={savePendingAttendance}
+              disabled={isUpdating}
+              className="flex items-center gap-4 px-8 py-5 bg-blue-600 text-white rounded-[2rem] shadow-2xl shadow-blue-200 hover:bg-blue-700 transition-all text-lg font-black disabled:opacity-50"
+            >
+              <Save size={24} />
+              <span>儲存 {pendingAttendance.length} 筆點名紀錄</span>
+              {isUpdating && <Loader2 className="animate-spin" size={20} />}
+            </button>
+          </div>
+        )}
     </div>
   );
 }
