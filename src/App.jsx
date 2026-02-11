@@ -73,12 +73,12 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "5.9";
+const CURRENT_VERSION = "5.9.1"; // Updated version for fixes
 
 export default function App() {
   // --- 狀態管理 ---
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null); // 'admin' | 'student'
+  const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('rankings');
   const [students, setStudents] = useState([]);
@@ -108,11 +108,11 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   
   // 登入狀態
-  const [loginEmail, setLoginEmail] = useState(''); // For Admin
-  const [loginClass, setLoginClass] = useState(''); // For Student
-  const [loginClassNo, setLoginClassNo] = useState(''); // For Student
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginClass, setLoginClass] = useState('');
+  const [loginClassNo, setLoginClassNo] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [loginTab, setLoginTab] = useState('student'); // 'student' | 'admin'
+  const [loginTab, setLoginTab] = useState('student');
 
   // 對戰錄入狀態
   const [matchWinner, setMatchWinner] = useState('');
@@ -135,7 +135,6 @@ export default function App() {
     totalStudents: 50, feePerStudent: 250
   });
 
-// [V5.7] 核心功能：授予徽章
 const awardAchievement = async (badgeId, studentId) => {
   if (!badgeId || !studentId) return;
   const alreadyHasBadge = achievements.some(ach => ach.studentId === studentId && ach.badgeId === badgeId);
@@ -158,7 +157,6 @@ const awardAchievement = async (badgeId, studentId) => {
   }
 };
 
-// [V5.7] 新增：手動授予徽章功能
 const handleManualAward = (student) => {
   const allBadges = Object.entries(ACHIEVEMENT_DATA);
   let promptMsg = `請為 ${student.name} 選擇要授予的徽章 (輸入代號):\n\n`;
@@ -179,7 +177,6 @@ const handleManualAward = (student) => {
   }
 };
 
-// [V5.9] 新增：切換學員的待點名狀態
 const togglePendingAttendance = (studentId) => {
   setPendingAttendance(prev => 
     prev.includes(studentId) 
@@ -188,7 +185,6 @@ const togglePendingAttendance = (studentId) => {
   );
 };
 
-// [V5.9] 新增：儲存所有待處理的點名紀錄
 const savePendingAttendance = async () => {
   if (pendingAttendance.length === 0) {
     alert('沒有需要儲存的點名紀錄。');
@@ -222,7 +218,7 @@ const savePendingAttendance = async () => {
     
     await batch.commit();
     alert(`✅ 成功儲存 ${pendingAttendance.length} 筆點名紀錄！`);
-    setPendingAttendance([]); // 清空暫存區
+    setPendingAttendance([]);
   } catch (e) {
     console.error("Batch attendance save failed:", e);
     alert("儲存失敗，請檢查網絡或聯絡管理員。");
@@ -230,7 +226,6 @@ const savePendingAttendance = async () => {
   setIsUpdating(false);
 };
 
-  // 自動緩存清理機制
   useEffect(() => {
     const storedVersion = localStorage.getItem('app_version');
     if (storedVersion !== CURRENT_VERSION) {
@@ -242,7 +237,6 @@ const savePendingAttendance = async () => {
     }
   }, []);
 
-  // 自動計算總收支
   const financialSummary = useMemo(() => {
     if (!financeConfig) return { revenue: 0, expense: 0, profit: 0 };
     const revenue = (Number(financeConfig.totalStudents) || 0) * (Number(financeConfig.feePerStudent) || 0);
@@ -252,7 +246,6 @@ const savePendingAttendance = async () => {
     return { revenue, expense, profit: revenue - expense };
   }, [financeConfig]);
 
-  // Dashboard 統計數據
   const dashboardStats = useMemo(() => {
     const now = new Date();
     const todayZero = new Date(now.setHours(0,0,0,0));
@@ -292,7 +285,6 @@ const savePendingAttendance = async () => {
     };
   }, [schedules, competitions, awards]);
 
-  // 相簿分組邏輯
   const galleryAlbums = useMemo(() => {
     const albums = {};
     const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
@@ -318,7 +310,6 @@ const savePendingAttendance = async () => {
     return Object.values(albums).sort((a,b) => (b.lastUpdated?.seconds || 0) - (a.lastUpdated?.seconds || 0));
   }, [galleryItems]);
 
-  // 章別定義
   const BADGE_DATA = {
     "白金章": { color: "text-slate-400", bg: "bg-slate-100", icon: "💎", border: "border-slate-200", shadow: "shadow-slate-100", basePoints: 400, level: 4, desc: "最高榮譽" },
     "金章": { color: "text-yellow-600", bg: "bg-yellow-50", icon: "🥇", border: "border-yellow-200", shadow: "shadow-yellow-100", basePoints: 200, level: 3, desc: "卓越表現" },
@@ -327,7 +318,6 @@ const savePendingAttendance = async () => {
     "無": { color: "text-slate-300", bg: "bg-slate-50", icon: "⚪", border: "border-slate-100", shadow: "shadow-transparent", basePoints: 0, level: 0, desc: "努力中" }
   };
 
-  // --- 設定 Favicon ---
   useEffect(() => {
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
     const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
@@ -341,7 +331,6 @@ const savePendingAttendance = async () => {
     } catch(e) { console.error("Favicon error", e); }
   }, [systemConfig?.schoolLogo]);
 
-  // --- Firebase Auth 監聽 ---
   useEffect(() => {
     const safetyTimeout = setTimeout(() => {
       if (loading) setLoading(false);
@@ -368,7 +357,6 @@ const savePendingAttendance = async () => {
     };
   }, []);
 
-  // --- Firestore 資料即時監聽 ---
   useEffect(() => {
     if (!user) return;
     
@@ -439,7 +427,6 @@ const savePendingAttendance = async () => {
     }
   }, [user]);
 
-  // --- [V5.4] 登入邏輯升級 ---
   const handleLogin = async (type) => {
     if (type === 'admin') {
       if (!loginEmail || !loginPassword) {
@@ -456,25 +443,22 @@ const savePendingAttendance = async () => {
         alert('登入失敗：' + error.message + '\n(請確認教練帳號密碼是否正確)');
         return;
       }
-    } else { // Student Login
+    } else {
       if (!loginClass || !loginClassNo || !loginPassword) {
         alert('請輸入班別、班號和密碼');
         return;
       }
       
-      // 組合內部登入電郵
       const studentAuthEmail = `${loginClass.toLowerCase().trim()}${loginClassNo.trim()}@bcklas.squash`;
 
       try {
         const userCredential = await signInWithEmailAndPassword(auth, studentAuthEmail, loginPassword);
         
-        // 登入成功後，根據組合的電郵尋找學生資料
         const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
         
         if (matchedStudent) {
             setCurrentUserInfo(matchedStudent);
         } else {
-            // 如果在資料庫中找不到對應的 authEmail，提供一個基礎資訊
             setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail });
         }
         setRole('student'); 
@@ -487,7 +471,6 @@ const savePendingAttendance = async () => {
       }
     }
 
-    // 清空輸入
     setLoginEmail('');
     setLoginClass('');
     setLoginClassNo('');
@@ -506,7 +489,6 @@ const savePendingAttendance = async () => {
     }
   };
 
-  // --- 積分計算與排行邏輯 ---
   const rankedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
     const uniqueMap = new Map();
@@ -532,13 +514,12 @@ const savePendingAttendance = async () => {
     });
   }, [students]);
 
-  // 統計各出生年份的人數 (Ladder Stats)
   const birthYearStats = useMemo(() => {
     const stats = {};
     if (Array.isArray(rankedStudents)) {
         rankedStudents.forEach(s => {
             if (s.dob) {
-                const year = s.dob.split('-')[0]; // 取 YYYY
+                const year = s.dob.split('-')[0];
                 if (year) {
                     stats[year] = (stats[year] || 0) + 1;
                 } else {
@@ -552,7 +533,6 @@ const savePendingAttendance = async () => {
     return stats;
   }, [rankedStudents]);
 
-  // 隊員過濾邏輯
   const filteredStudents = useMemo(() => {
     return rankedStudents.filter(s => {
       const matchSearch = s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
@@ -561,7 +541,6 @@ const savePendingAttendance = async () => {
     });
   }, [rankedStudents, searchTerm, selectedYearFilter]);
 
-  // --- 財務儲存 ---
   const saveFinanceConfig = async () => {
     setIsUpdating(true);
     try {
@@ -574,7 +553,6 @@ const savePendingAttendance = async () => {
     setIsUpdating(false);
   };
 
-  // --- 積分調整 ---
   const adjustPoints = async (id, amount, reason = "教練調整") => {
     if (role !== 'admin' || !user) return;
     setIsUpdating(true);
@@ -587,7 +565,6 @@ const savePendingAttendance = async () => {
     setIsUpdating(false);
   };
 
-  // 更新學生生日 Handler
   const handleUpdateDOB = async (student) => {
     const currentDob = student.dob || "";
     const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
@@ -607,7 +584,6 @@ const savePendingAttendance = async () => {
     }
   };
 
-  // --- [V5.4] 新增：設定學生登入資料 ---
   const handleSetupStudentAuth = async (student) => {
     if (!student.class || !student.classNo) {
         alert(`錯誤：學生 ${student.name} 的班別或班號為空，無法設定登入資料。`);
@@ -634,7 +610,6 @@ const savePendingAttendance = async () => {
     }
   };
 
-  // 校外賽計分邏輯
   const handleExternalComp = (student) => {
     const option = prompt(
         `請為 ${student.name} 選擇校外賽成績 (輸入代號):\n\n` +
@@ -659,7 +634,6 @@ const savePendingAttendance = async () => {
     }
   };
 
-  // 內部聯賽：提交對戰結果
   const handleMatchSubmit = async () => {
     if (!matchWinner || !matchLoser) {
       alert("請選擇勝方和負方");
@@ -706,7 +680,6 @@ const savePendingAttendance = async () => {
     }
   };
 
-  // 賽季重置功能
   const handleSeasonReset = async () => {
     const confirmText = prompt("⚠️ 警告：這將重置所有學員的積分！\n\n系統將根據學員的「章別」重新賦予底分：\n金章: 200, 銀章: 100, 銅章: 30, 無章: 0\n\n請輸入 'RESET' 確認執行：");
     if (confirmText !== 'RESET') return;
@@ -730,7 +703,6 @@ const savePendingAttendance = async () => {
     setIsUpdating(false);
   };
 
-  // 自動生成比賽名單
   const generateCompetitionRoster = () => {
     const topStudents = rankedStudents.slice(0, 5);
     if (topStudents.length === 0) {
@@ -750,14 +722,12 @@ const savePendingAttendance = async () => {
     });
   };
 
-  // [V5.9] 更新：匯出新的矩陣格式點名表
   const exportMatrixAttendanceCSV = (targetClass) => {
       if (!targetClass || targetClass === 'ALL') {
           alert('請先從篩選器選擇一個特定的班別以匯出報表。');
           return;
       }
 
-      // 1. 過濾所需資料
       const classStudents = students.filter(s => s.squashClass && s.squashClass.includes(targetClass));
       if (classStudents.length === 0) {
           alert(`「${targetClass}」沒有找到任何學員。`);
@@ -765,35 +735,28 @@ const savePendingAttendance = async () => {
       }
       const classLogs = attendanceLogs.filter(log => log.trainingClass === targetClass);
 
-      // 2. 獲取所有唯一及已排序的日期
       const uniqueDates = [...new Set(classLogs.map(log => log.date))].sort((a, b) => a.localeCompare(b));
       if (uniqueDates.length === 0) {
         alert(`「${targetClass}」沒有任何點名紀錄可供匯出。`);
         return;
       }
 
-      // 3. 獲取班級資訊 (從第一條紀錄中)
       const scheduleInfo = schedules.find(s => s.trainingClass === targetClass) || {};
 
-      // 4. 構建 CSV 內容
-      let csvContent = "\uFEFF"; // UTF-8 BOM
+      let csvContent = "\uFEFF"; 
 
-      // 第一行: 班級名稱、星期、時間
       csvContent += `${targetClass},,${scheduleInfo.day || ' '},${scheduleInfo.time || ' '},${','.repeat(uniqueDates.length)}\n`;
-      // 第二行: 地點、日期標題
       csvContent += `${scheduleInfo.location || ' '},,,,${uniqueDates.join(',')}\n`;
 
-      // 學生資料行
       classStudents.sort((a,b) => a.class.localeCompare(b.class) || a.classNo.localeCompare(b.classNo)).forEach(student => {
           let row = `${student.class},${student.classNo},${student.name},${student.phone || ''},`;
           uniqueDates.forEach(date => {
               const attended = classLogs.some(log => log.studentId === student.id && log.date === date);
               row += attended ? 'v,' : ',';
           });
-          csvContent += row.slice(0, -1) + '\n'; // 移除最後一個逗號並換行
+          csvContent += row.slice(0, -1) + '\n';
       });
 
-      // 5. 創建並下載檔案
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -802,7 +765,6 @@ const savePendingAttendance = async () => {
       link.click();
   };
 
-  // --- 智能壓縮圖片 Helper Function ---
   const compressImage = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -812,7 +774,7 @@ const savePendingAttendance = async () => {
         img.src = event.target.result;
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 1024; // 限制最大寬度
+          const MAX_WIDTH = 1024;
           const MAX_HEIGHT = 1024;
           let width = img.width;
           let height = img.height;
@@ -839,7 +801,6 @@ const savePendingAttendance = async () => {
     });
   };
 
-  // --- 新增花絮功能 ---
   const handleAddMedia = async () => {
       const type = prompt("請選擇類型 (輸入 1 或 2):\n1. 上傳照片 (自動建立相簿)\n2. YouTube 影片連結");
       
@@ -907,7 +868,6 @@ const savePendingAttendance = async () => {
       return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
   };
 
-  // --- CSV 工具 ---
   const readCSVFile = (file, encoding) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -964,7 +924,7 @@ const savePendingAttendance = async () => {
       
       rows.forEach(row => {
         const cols = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
-        const [name, cls, no, badge, initPoints, squashClass] = cols;
+        const [name, cls, no, badge, initPoints, squashClass, phone] = cols;
         if (name && name !== "姓名") {
           batch.set(doc(colRef), { 
             name, 
@@ -973,6 +933,7 @@ const savePendingAttendance = async () => {
             badge: badge || '無', 
             points: Number(initPoints) || 100, 
             squashClass: squashClass || '', 
+            phone: phone || '',
             createdAt: serverTimestamp() 
           });
         }
@@ -997,9 +958,9 @@ const savePendingAttendance = async () => {
   }, [schedules]);
 
   const uniqueTrainingClasses = useMemo(() => {
-    const classes = schedules.map(s => s.trainingClass).filter(Boolean);
+    const classes = students.map(s => s.squashClass).filter(Boolean);
     return ['ALL', ...new Set(classes)];
-  }, [schedules]);
+  }, [students]);
 
   const filteredSchedules = useMemo(() => {
     const filtered = selectedClassFilter === 'ALL' 
@@ -1035,9 +996,16 @@ const savePendingAttendance = async () => {
         a.href = URL.createObjectURL(blob); a.download = filename; a.click();
     };
 
+    // [V5.9.1] 修正：加入 student.length > 0 的判斷
     const handleCSVImportLeagueMatches = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
+
+        if (students.length === 0) {
+            alert('學員資料尚未載入，請稍候再試。');
+            return;
+        }
+
         setIsUpdating(true);
         let skippedCount = 0;
         
@@ -1051,8 +1019,8 @@ const savePendingAttendance = async () => {
                 const [date, time, venue, player1Name, player2Name] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
                 
                 if (date && player1Name && player2Name) {
-                    const player1 = students.find(s => s.name === player1Name);
-                    const player2 = students.find(s => s.name === player2Name);
+                    const player1 = students.find(s => s.name.trim() === player1Name.trim());
+                    const player2 = students.find(s => s.name.trim() === player2Name.trim());
 
                     if (player1 && player2) {
                         batch.set(doc(colRef), {
@@ -1228,7 +1196,6 @@ const savePendingAttendance = async () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
       
-      {/* 隱藏的 Input 供花絮上傳使用 */}
       <input 
         type="file" 
         ref={galleryInputRef} 
@@ -1237,7 +1204,7 @@ const savePendingAttendance = async () => {
         multiple 
         onChange={handleGalleryImageUpload}
       />
-      {/* [V5.7] 新增：隊員詳細資料與成就彈窗 */}
+      
 {viewingStudent && (
   <div 
     className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" 
@@ -1262,15 +1229,20 @@ const savePendingAttendance = async () => {
         <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
           {(() => {
             if (!viewingStudent) return null;
+            
+            // [V5.9.1] 修正：只顯示獨一無二的徽章
             const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
-            if (studentAchievements.length === 0) {
+            const uniqueBadgeIds = [...new Set(studentAchievements.map(ach => ach.badgeId))];
+
+            if (uniqueBadgeIds.length === 0) {
               return <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章，繼續努力！</p>;
             }
-            return studentAchievements.map(ach => {
-              const badge = ACHIEVEMENT_DATA[ach.badgeId];
+
+            return uniqueBadgeIds.map(badgeId => {
+              const badge = ACHIEVEMENT_DATA[badgeId];
               if (!badge) return null;
               return (
-                <div key={ach.id} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
+                <div key={badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
                   <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
                     {badge.icon}
                   </div>
@@ -1285,7 +1257,6 @@ const savePendingAttendance = async () => {
   </div>
 )}
 
-      {/* 燈箱 Modal */}
       {viewingImage && (
         <div 
           className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300" 
@@ -1303,7 +1274,6 @@ const savePendingAttendance = async () => {
           </div>
         </div>
       )}
-      {/* 登入視窗 */}
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
@@ -1314,7 +1284,6 @@ const savePendingAttendance = async () => {
             <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
             <div className="space-y-6">
               
-              {/* 登入 Tab 切換 */}
               <div className="bg-slate-50 p-1 rounded-[2rem] flex mb-4 relative">
                  <div className={`absolute top-1 bottom-1 w-1/2 bg-white rounded-[1.8rem] shadow-sm transition-all duration-300 ease-out ${loginTab === 'admin' ? 'left-1/2' : 'left-1'}`}></div>
                  <button onClick={() => setLoginTab('student')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'student' ? 'text-blue-600' : 'text-slate-400'}`}>學員入口</button>
@@ -1322,7 +1291,6 @@ const savePendingAttendance = async () => {
               </div>
               
               {loginTab === 'student' ? (
-                  // [V5.4] 學員登入表單
                   <div className="space-y-3 font-bold animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="flex gap-3">
                       <input 
@@ -1355,7 +1323,6 @@ const savePendingAttendance = async () => {
                     </button>
                   </div>
               ) : (
-                  // 教練登入表單
                   <div className="space-y-3 font-bold animate-in fade-in slide-in-from-left-4 duration-300">
                     <div className="relative">
                       <span className="absolute left-5 top-5 text-slate-300"><Mail size={18}/></span>
@@ -1388,7 +1355,6 @@ const savePendingAttendance = async () => {
         </div>
       )}
       
-      {/* 側邊欄 */}
       <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-white border-r transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
@@ -1465,9 +1431,7 @@ const savePendingAttendance = async () => {
           </div>
         </div>
       </aside>
-      {/* 主內容區 */}
       <main className="flex-1 h-screen overflow-y-auto relative bg-[#F8FAFC]">
-        {/* 頂部標題 */}
         <header className="px-10 py-8 sticky top-0 bg-white/80 backdrop-blur-xl z-40 border-b flex justify-between items-center">
           <div className="flex items-center gap-6">
             <button onClick={()=>setSidebarOpen(true)} className="md:hidden p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-blue-600 transition-all">
@@ -1508,7 +1472,6 @@ const savePendingAttendance = async () => {
         </header>
         <div className="p-10 max-w-7xl mx-auto pb-40">
           
-          {/* 4. 比賽資訊與公告 (Competitions) */}
           {activeTab === 'competitions' && (
              <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
@@ -1572,7 +1535,6 @@ const savePendingAttendance = async () => {
                 </div>
              </div>
           )}
-          {/* 1. 積分排行 */}
           {activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
@@ -1634,7 +1596,6 @@ const savePendingAttendance = async () => {
               </div>
             </div>
           )}
-           {/* [V5.9] 內部聯賽 (League) - 更新 */}
            {activeTab === 'league' && role === 'admin' && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
@@ -1731,7 +1692,6 @@ const savePendingAttendance = async () => {
                   </div>
               </div>
            )}
-          {/* 6. 管理概況 (Dashboard) */}
           {activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
                 <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><History className="text-blue-600"/> 最近更新活動</h3><div className="space-y-6">{competitions.slice(0, 4).map(c => (<div key={c.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div><div><p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p></div></div>))}{schedules.slice(0, 2).map(s => (<div key={s.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div><div><p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p></div></div>))}</div></div>
@@ -1747,7 +1707,6 @@ const savePendingAttendance = async () => {
                 </div>
              </div>
           )}
-           {/* 5. 隊員管理 (教練專用) */}
            {activeTab === 'students' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
                 <div className="flex overflow-x-auto gap-4 pb-4"><div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span><span className="text-xl font-black">{students.length}</span></div>{Object.entries(birthYearStats).sort().map(([year, count]) => (<div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span><span className="text-xl font-black text-slate-800">{count} 人</span></div>))}</div>
@@ -1774,7 +1733,6 @@ const savePendingAttendance = async () => {
              </div>
           )}
           
-          {/* 2. 訓練班日程 */}
           {activeTab === 'schedules' && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1784,7 +1742,6 @@ const savePendingAttendance = async () => {
                {filteredSchedules.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><CalendarIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無訓練日程紀錄</p><p className="text-sm text-slate-300 mt-2">請點擊上方匯入按鈕上傳 CSV 檔案</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{filteredSchedules.map(sc => {const isToday = new Date().toISOString().split('T')[0] === sc.date;return (<div key={sc.id} className={`bg-white p-10 rounded-[3.5rem] border-2 shadow-sm hover:scale-[1.02] transition-all relative overflow-hidden group ${isToday ? 'border-blue-500 shadow-xl shadow-blue-50' : 'border-slate-100'}`}>{isToday && (<div className="absolute top-0 right-0 bg-blue-600 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest animate-pulse">Today • 今日訓練</div>)}<div className="mb-8"><span className="text-[10px] bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all">{sc.trainingClass}</span><h4 className="text-3xl font-black text-slate-800 mt-6">{sc.date}</h4><p className="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-[0.3em]">Training Session</p></div><div className="space-y-5"><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><MapPin size={18}/></div><span className="font-bold">{sc.location}</span></div><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div><span className="font-bold">{sc.coach} 教練</span></div>{role === 'admin' && (<button onClick={() => deleteItem('schedules', sc.id)} className="absolute top-8 right-8 w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm z-10" title="刪除課堂"><Trash2 size={20}/></button>)}{sc.notes && (<div className="p-6 bg-slate-50 rounded-[2rem] text-xs text-slate-400 leading-relaxed italic border border-slate-100">"{sc.notes}"</div>)}</div></div>);})}</div>)}
             </div>
           )}
-          {/* 3. 快速點名 (V5.9 更新) */}
           {activeTab === 'attendance' && role === 'admin' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
                <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}><div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div><div className="relative z-10"><h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3><div className="flex flex-wrap gap-4">{todaySchedule ? (<><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><Star size={14} className="text-yellow-300 fill-yellow-300"/><span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span></div><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><MapPin size={14}/><span className="text-sm font-black">{todaySchedule.location}</span></div></>) : (<div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2"><Info size={14}/><span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span></div>)}</div></div><div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner"><p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p><p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p></div></div>
@@ -1837,7 +1794,6 @@ const savePendingAttendance = async () => {
                </div>
             </div>
           )}
-          {/* 精彩花絮頁面 */}
           {activeTab === 'gallery' && (
             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -1850,7 +1806,6 @@ const savePendingAttendance = async () => {
                {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
             </div>
            )}
-           {/* 獎項成就 (Awards) */}
            {activeTab === 'awards' && (
              <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
@@ -2131,7 +2086,6 @@ const savePendingAttendance = async () => {
         </div>
       </main>
 
-        {/* --- [V5.9] 新增：浮動儲存點名按鈕 --- */}
         {activeTab === 'attendance' && pendingAttendance.length > 0 && role === 'admin' && (
           <div className="fixed bottom-12 right-12 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <button
