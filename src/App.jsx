@@ -74,7 +74,7 @@ const ACHIEVEMENT_DATA = {
 
 // --- 版本控制 ---
 // Version 5.4: [Current] 學生登入改用「班別+班號+密碼」, 新增教練設定學生登入資料功能
-const CURRENT_VERSION = "5.7";
+const CURRENT_VERSION = "5.9";
 
 export default function App() {
   // --- 狀態管理 ---
@@ -91,6 +91,7 @@ export default function App() {
   const [awards, setAwards] = useState([]); 
   const [downloadFiles, setDownloadFiles] = useState([]); 
   const [achievements, setAchievements] = useState([]); // [V5.7] 新增 state
+  const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); // [V5.7] 新增 state
 
   
@@ -168,6 +169,57 @@ const handleManualAward = (student) => {
   allBadges.forEach(([id, data], index) => {
       promptMsg += `${index + 1}. ${data.name}\n`;
   });
+  // [V5.9] 新增：切換學員的待點名狀態
+const togglePendingAttendance = (studentId) => {
+  setPendingAttendance(prev => 
+    prev.includes(studentId) 
+      ? prev.filter(id => id !== studentId)
+      : [...prev, studentId]
+  );
+};
+
+// [V5.9] 新增：儲存所有待處理的點名紀錄
+const savePendingAttendance = async () => {
+  if (pendingAttendance.length === 0) {
+    alert('沒有需要儲存的點名紀錄。');
+    return;
+  }
+  if (!todaySchedule) { 
+    alert('⚠️ 今日沒有設定訓練日程，無法儲存點名。'); 
+    return; 
+  }
+
+  setIsUpdating(true);
+  try {
+    const batch = writeBatch(db);
+    const attendanceCollection = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs');
+    
+    pendingAttendance.forEach(studentId => {
+      const student = students.find(s => s.id === studentId);
+      if (student) {
+        const newLogRef = doc(attendanceCollection);
+        batch.set(newLogRef, {
+          studentId: student.id,
+          name: student.name,
+          class: student.class,
+          classNo: student.classNo,
+          trainingClass: todaySchedule.trainingClass,
+          date: todaySchedule.date,
+          location: todaySchedule.location,
+          timestamp: serverTimestamp()
+        });
+      }
+    });
+    
+    await batch.commit();
+    alert(`✅ 成功儲存 ${pendingAttendance.length} 筆點名紀錄！`);
+    setPendingAttendance([]); // 清空暫存區
+  } catch (e) {
+    console.error("Batch attendance save failed:", e);
+    alert("儲存失敗，請檢查網絡或聯絡管理員。");
+  }
+  setIsUpdating(false);
+};
   const choice = prompt(promptMsg);
   if (choice && !isNaN(choice)) {
       const selectedIndex = parseInt(choice, 10) - 1;
