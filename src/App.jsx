@@ -357,6 +357,7 @@ const handleManualAward = (student) => {
         setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
 
+
       const unsubAttendanceLogs = onSnapshot(attendanceLogsRef, (snap) => {
         setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
