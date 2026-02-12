@@ -9,7 +9,9 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
   // [V5.7] 新增徽章圖示
-Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee
+Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
+// [V5.9.6] 新增圖示
+Pencil
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -73,7 +75,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "5.9.5"; 
+const CURRENT_VERSION = "5.9.6"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -92,7 +94,7 @@ export default function App() {
   const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
   const [selectedTournament, setSelectedTournament] = useState('');
-
+  
   const [showTournamentModal, setShowTournamentModal] = useState(false);
   const [newTournamentName, setNewTournamentName] = useState('');
   const [tournamentPlayers, setTournamentPlayers] = useState([]);
@@ -118,7 +120,7 @@ export default function App() {
   const [loginClass, setLoginClass] = useState('');
   const [loginClassNo, setLoginClassNo] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [loginTab, setLoginTab] = useState('student'); // [FIX] Re-added this state
+  const [loginTab, setLoginTab] = useState('student');
 
   // 對戰錄入狀態
   const [importEncoding, setImportEncoding] = useState('AUTO');
@@ -944,10 +946,14 @@ const savePendingAttendance = async () => {
     
     const filteredMatches = useMemo(() => {
       if (!selectedTournament) {
+        // [PHASE 1] 如果沒有選擇錦標賽，但在列表中存在，則自動選擇第一個
+        if (tournamentList.length > 0) {
+          setSelectedTournament(tournamentList[0]);
+        }
         return [];
       }
       return leagueMatches.filter(m => m.tournamentName === selectedTournament);
-    }, [leagueMatches, selectedTournament]);
+    }, [leagueMatches, selectedTournament, tournamentList]);
 
   const groupedMatches = useMemo(() => {
     if(filteredMatches.length === 0) return {};
@@ -959,7 +965,18 @@ const savePendingAttendance = async () => {
         }
         groups[groupKey].push(match);
     });
-    return groups;
+    // 對組名進行排序 (A組, B組...)
+    const sortedGroups = Object.keys(groups).sort((a, b) => {
+        if (a === '所有比賽') return -1;
+        if (b === '所有比賽') return 1;
+        return a.localeCompare(b);
+    });
+
+    const result = {};
+    sortedGroups.forEach(key => {
+        result[key] = groups[key];
+    })
+    return result;
   }, [filteredMatches]);
 
   useEffect(() => {
@@ -967,7 +984,6 @@ const savePendingAttendance = async () => {
       setSelectedTournament(tournamentList[0]);
     }
   }, [tournamentList, selectedTournament]);
-
 
     const downloadTemplate = (type) => {
         let csv = "";
@@ -1080,9 +1096,7 @@ const savePendingAttendance = async () => {
 
         setIsUpdating(true);
         try {
-            // 1. 分配球員到各組
             const groups = Array.from({ length: numGroups }, () => []);
-            // 隨機排序以確保分組公平性
             const shuffledPlayers = [...tournamentPlayers].sort(() => 0.5 - Math.random());
             shuffledPlayers.forEach((playerId, index) => {
                 groups[index % numGroups].push(playerId);
@@ -1092,7 +1106,6 @@ const savePendingAttendance = async () => {
             const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches');
             let matchCount = 0;
 
-            // 2. 為每個小組生成對戰組合
             groups.forEach((groupPlayers, groupIndex) => {
                 const groupName = `${String.fromCharCode(65 + groupIndex)}組`; 
 
@@ -1140,6 +1153,42 @@ const savePendingAttendance = async () => {
         }
         setIsUpdating(false);
     };
+
+    // [V5.9.6] 新增：編輯比賽日期和時間
+    const handleEditLeagueMatch = async (match) => {
+        const newDate = prompt(`請輸入新的比賽日期 (YYYY-MM-DD):`, match.date);
+        if (newDate === null) return;
+        
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(newDate)) {
+            alert("日期格式錯誤！請使用 YYYY-MM-DD 格式。");
+            return;
+        }
+
+        const newTime = prompt(`請輸入新的比賽時間 (HH:MM):`, match.time);
+        if (newTime === null) return;
+        
+        const timeRegex = /^\d{2}:\d{2}$/;
+        if (!timeRegex.test(newTime)) {
+            alert("時間格式錯誤！請使用 HH:MM 格式。");
+            return;
+        }
+        
+        setIsUpdating(true);
+        try {
+            const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
+            await updateDoc(matchRef, {
+                date: newDate,
+                time: newTime,
+            });
+            alert('比賽時間已更新！');
+        } catch (e) {
+            console.error("Failed to update match time:", e);
+            alert("更新失敗，請稍後再試。");
+        }
+        setIsUpdating(false);
+    };
+
 
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
@@ -1699,7 +1748,7 @@ const savePendingAttendance = async () => {
                           {leagueMatches.length > 0 ? '請從上方選擇一個賽事' : '暫無任何賽事，請教練建立新賽事。'}
                         </div>
                       ) : (
-                        Object.keys(groupedMatches).sort((a,b) => a.localeCompare(b)).map(groupName => (
+                        Object.keys(groupedMatches).map(groupName => (
                             <div key={groupName} className="mb-10">
                                 <h4 className="text-2xl font-black text-slate-600 mb-4 pl-2">{groupName}</h4>
                                 <div className="overflow-x-auto bg-slate-50/50 p-6 rounded-3xl border">
@@ -1745,11 +1794,18 @@ const savePendingAttendance = async () => {
                                                       <td className="px-6 py-5 text-center">
                                                           <div className="flex justify-center gap-2">
                                                               {match.status === 'scheduled' && (
-                                                                  <button 
-                                                                      onClick={() => handleUpdateLeagueMatchScore(match)}
-                                                                      className="p-3 bg-white text-blue-600 rounded-xl border hover:bg-blue-600 hover:text-white transition-all" title="輸入比分">
-                                                                      <FileText size={16}/>
-                                                                  </button>
+                                                                  <>
+                                                                    <button 
+                                                                        onClick={() => handleUpdateLeagueMatchScore(match)}
+                                                                        className="p-3 bg-white text-blue-600 rounded-xl border hover:bg-blue-600 hover:text-white transition-all" title="輸入比分">
+                                                                        <FileText size={16}/>
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => handleEditLeagueMatch(match)}
+                                                                        className="p-3 bg-white text-gray-600 rounded-xl border hover:bg-gray-600 hover:text-white transition-all" title="編輯比賽">
+                                                                        <Pencil size={16}/>
+                                                                    </button>
+                                                                  </>
                                                               )}
                                                               <button 
                                                                   onClick={() => deleteItem('league_matches', match.id)}
