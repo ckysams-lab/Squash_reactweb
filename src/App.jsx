@@ -8,10 +8,8 @@ import {
   Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
-  // [V5.7] 新增徽章圖示
-Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-// [V5.9.6] 新增圖示
-Pencil
+  Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
+  Pencil
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -56,7 +54,6 @@ const db = getFirestore(app);
 
 // 強制鎖定 App ID
 const appId = 'bcklas-squash-core-v1'; 
-// [V5.7] 新增：成就徽章定義
 const ACHIEVEMENT_DATA = {
   'ice-breaker': { name: '破蛋者', desc: '首次在內部聯賽中獲勝', icon: <Zap size={24} /> },
   'giant-killer': { name: '巨人殺手', desc: '戰勝比自己排名高10位以上的對手', icon: <ShieldIcon size={24} /> },
@@ -75,7 +72,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "5.9.6"; 
+const CURRENT_VERSION = "5.9.7"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -115,25 +112,21 @@ export default function App() {
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   
-  // 登入狀態
   const [loginEmail, setLoginEmail] = useState('');
   const [loginClass, setLoginClass] = useState('');
   const [loginClassNo, setLoginClassNo] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginTab, setLoginTab] = useState('student');
 
-  // 對戰錄入狀態
   const [importEncoding, setImportEncoding] = useState('AUTO');
   const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
   const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL');
   
-  // 年份篩選狀態
   const [selectedYearFilter, setSelectedYearFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const galleryInputRef = useRef(null);
   
-  // 財務參數
   const [financeConfig, setFinanceConfig] = useState({
     nTeam: 1, costTeam: 2750,
     nTrain: 3, costTrain: 1350,
@@ -946,7 +939,6 @@ const savePendingAttendance = async () => {
     
     const filteredMatches = useMemo(() => {
       if (!selectedTournament) {
-        // [PHASE 1] 如果沒有選擇錦標賽，但在列表中存在，則自動選擇第一個
         if (tournamentList.length > 0) {
           setSelectedTournament(tournamentList[0]);
         }
@@ -965,7 +957,6 @@ const savePendingAttendance = async () => {
         }
         groups[groupKey].push(match);
     });
-    // 對組名進行排序 (A組, B組...)
     const sortedGroups = Object.keys(groups).sort((a, b) => {
         if (a === '所有比賽') return -1;
         if (b === '所有比賽') return 1;
@@ -985,25 +976,7 @@ const savePendingAttendance = async () => {
     }
   }, [tournamentList, selectedTournament]);
 
-    const downloadTemplate = (type) => {
-        let csv = "";
-        let filename = "";
-        if (type === 'schedule') {
-            csv = "班別名稱,日期(YYYY-MM-DD),地點,教練,備註\n初級班A,2024-03-20,學校壁球場,王教練,第一課\n校隊訓練,2024-03-25,歌和老街,李教練,專項訓練";
-            filename = "訓練日程匯入範本.csv";
-        } else if (type === 'students') {
-            csv = "姓名,班別,班號,章別(無/銅章/銀章/金章/白金章),初始積分,壁球班別,電話\n陳小明,6A,01,銅章,120,校隊訓練班,98765432\n張小華,5C,12,無,100,壁球中級訓練班,12345678";
-            filename = "學員匯入範本.csv";
-        } else if (type === 'league') {
-            csv = "日期(YYYY-MM-DD),時間(HH:MM),地點,球員A姓名,球員B姓名\n2024-09-01,14:00,學校壁球場,陳大文,張小明\n2024-09-01,14:30,學校壁球場,李靜,王強";
-            filename = "內部聯賽賽程匯入範本.csv";
-        }
-        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob); a.download = filename; a.click();
-    };
-
-    const handleUpdateLeagueMatchScore = async (match) => {
+  const handleUpdateLeagueMatchScore = async (match) => {
         const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
         if (score1_str === null) return;
         const score2_str = prompt(`請輸入 ${match.player2Name} 的分數:`);
@@ -1154,7 +1127,6 @@ const savePendingAttendance = async () => {
         setIsUpdating(false);
     };
 
-    // [V5.9.6] 新增：編輯比賽日期和時間
     const handleEditLeagueMatch = async (match) => {
         const newDate = prompt(`請輸入新的比賽日期 (YYYY-MM-DD):`, match.date);
         if (newDate === null) return;
@@ -1189,6 +1161,93 @@ const savePendingAttendance = async () => {
         setIsUpdating(false);
     };
 
+  // [PHASE 2] 新增：計算積分榜
+  const tournamentStandings = useMemo(() => {
+    if (filteredMatches.length === 0) return {};
+    
+    const standings = {};
+
+    // 初始化所有參賽球員的數據
+    const playerIdsInTournament = new Set();
+    filteredMatches.forEach(match => {
+        playerIdsInTournament.add(match.player1Id);
+        playerIdsInTournament.add(match.player2Id);
+    });
+
+    playerIdsInTournament.forEach(playerId => {
+        const student = students.find(s => s.id === playerId);
+        if(student) {
+          const groupKey = filteredMatches.find(m => m.player1Id === playerId || m.player2Id === playerId)?.groupName || '所有比賽';
+          if (!standings[groupKey]) {
+            standings[groupKey] = {};
+          }
+          standings[groupKey][playerId] = {
+              id: playerId,
+              name: student.name,
+              played: 0,
+              wins: 0,
+              losses: 0,
+              pointsFor: 0,
+              pointsAgainst: 0,
+              leaguePoints: 0
+          };
+        }
+    });
+
+    // 遍歷已完成的比賽來計算統計數據
+    filteredMatches.filter(m => m.status === 'completed').forEach(match => {
+        const groupKey = match.groupName || '所有比賽';
+        const p1Stats = standings[groupKey]?.[match.player1Id];
+        const p2Stats = standings[groupKey]?.[match.player2Id];
+
+        if (p1Stats && p2Stats) {
+            p1Stats.played += 1;
+            p2Stats.played += 1;
+            p1Stats.pointsFor += match.score1;
+            p1Stats.pointsAgainst += match.score2;
+            p2Stats.pointsFor += match.score2;
+            p2Stats.pointsAgainst += match.score1;
+
+            if (match.winnerId === match.player1Id) {
+                p1Stats.wins += 1;
+                p1Stats.leaguePoints += 3;
+                p2Stats.losses += 1;
+            } else {
+                p2Stats.wins += 1;
+                p2Stats.leaguePoints += 3;
+                p1Stats.losses += 1;
+            }
+        }
+    });
+
+    // 排序
+    for (const group in standings) {
+        standings[group] = Object.values(standings[group]).sort((a, b) => {
+            if (b.leaguePoints !== a.leaguePoints) return b.leaguePoints - a.leaguePoints;
+            const diffA = a.pointsFor - a.pointsAgainst;
+            const diffB = b.pointsFor - b.pointsAgainst;
+            if (diffB !== diffA) return diffB - diffA;
+            return b.pointsFor - a.pointsFor;
+        });
+    }
+
+    return standings;
+  }, [filteredMatches, students]);
+
+  // [PHASE 2] 新增：為登入學生篩選個人化數據
+  const myUpcomingMatches = useMemo(() => {
+    if (role !== 'student' || !currentUserInfo) return [];
+    return filteredMatches.filter(m => m.status === 'scheduled' && (m.player1Id === currentUserInfo.id || m.player2Id === currentUserInfo.id));
+  }, [filteredMatches, currentUserInfo, role]);
+
+  const myTournamentStats = useMemo(() => {
+    if (role !== 'student' || !currentUserInfo || !selectedTournament) return null;
+    for(const group in tournamentStandings){
+      const playerStat = tournamentStandings[group].find(p => p.id === currentUserInfo.id);
+      if(playerStat) return playerStat;
+    }
+    return null;
+  }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
