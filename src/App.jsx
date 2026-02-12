@@ -73,7 +73,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "5.9.1"; // Updated version for fixes
+const CURRENT_VERSION = "5.9.2"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -634,52 +634,6 @@ const savePendingAttendance = async () => {
     }
   };
 
-  const handleMatchSubmit = async () => {
-    if (!matchWinner || !matchLoser) {
-      alert("請選擇勝方和負方");
-      return;
-    }
-    if (matchWinner === matchLoser) {
-      alert("勝負雙方不能是同一人");
-      return;
-    }
-    const winner = students.find(s => s.id === matchWinner);
-    const loser = students.find(s => s.id === matchLoser);
-    if (!winner || !loser) return;
-    const winnerRank = rankedStudents.findIndex(s => s.id === winner.id) + 1;
-    const loserRank = rankedStudents.findIndex(s => s.id === loser.id) + 1;
-    
-    const winnerBadgeLevel = BADGE_DATA[winner.badge]?.level || 0;
-    const loserBadgeLevel = BADGE_DATA[loser.badge]?.level || 0;
-    const isRankGiantKiller = (winnerRank - loserRank) >= 5;
-    const isBadgeGiantKiller = winnerBadgeLevel < loserBadgeLevel;
-    const isGiantKiller = isRankGiantKiller || isBadgeGiantKiller;
-    const pointsToAdd = isGiantKiller ? 20 : 10;
-    
-    const confirmMsg = `⚔️ 確認對戰結果？\n\n` + 
-                       `🏆 勝方: ${winner.name} (排名:${winnerRank}, ${winner.badge})\n` +
-                       `💀 負方: ${loser.name} (排名:${loserRank}, ${loser.badge})\n\n` +
-                       `${isGiantKiller ? "🔥 觸發「巨人殺手」獎勵！\n" : ""}` + 
-                       `勝方獲得: +${pointsToAdd} 分\n負方獲得: +0 分`;
-    if (confirm(confirmMsg)) {
-        setIsUpdating(true);
-        try {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id), { 
-                points: increment(pointsToAdd),
-                lastUpdated: serverTimestamp() 
-            });
-            
-            alert("✅ 成績已錄入！");
-            setMatchWinner('');
-            setMatchLoser('');
-        } catch(e) {
-            console.error(e);
-            alert("錄入失敗");
-        }
-        setIsUpdating(false);
-    }
-  };
-
   const handleSeasonReset = async () => {
     const confirmText = prompt("⚠️ 警告：這將重置所有學員的積分！\n\n系統將根據學員的「章別」重新賦予底分：\n金章: 200, 銀章: 100, 銅章: 30, 無章: 0\n\n請輸入 'RESET' 確認執行：");
     if (confirmText !== 'RESET') return;
@@ -996,79 +950,73 @@ const savePendingAttendance = async () => {
         a.href = URL.createObjectURL(blob); a.download = filename; a.click();
     };
 
-    // [V5.9.1] 修正：加入 student.length > 0 的判斷
-    // [CORRECTED] Replace the old version of this function with this one.
-const handleCSVImportLeagueMatches = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const handleCSVImportLeagueMatches = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
 
-    // This check is important to prevent running before data is loaded.
-    if (students.length === 0) {
-        alert('學員資料尚未載入，請稍候幾秒再試。');
-        return;
-    }
+        if (students.length === 0) {
+            alert('學員資料尚未載入，請稍候幾秒再試。');
+            return;
+        }
 
-    setIsUpdating(true);
-    let skippedCount = 0;
-    let foundCount = 0;
-    
-    try {
-        const text = await readCSVFile(file, importEncoding);
-        const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-        const batch = writeBatch(db);
-        const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches');
+        setIsUpdating(true);
+        let skippedCount = 0;
+        let foundCount = 0;
+        
+        try {
+            const text = await readCSVFile(file, importEncoding);
+            const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
+            const batch = writeBatch(db);
+            const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches');
 
-        rows.forEach(row => {
-            const [date, time, venue, player1Name, player2Name] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
-            
-            if (date && player1Name && player2Name) {
-                // [FIX] Trim both the database name and CSV name for a robust comparison.
-                const player1 = students.find(s => s.name.trim() === player1Name.trim());
-                const player2 = students.find(s => s.name.trim() === player2Name.trim());
+            rows.forEach(row => {
+                const [date, time, venue, player1Name, player2Name] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
+                
+                if (date && player1Name && player2Name) {
+                    const player1 = students.find(s => s.name.trim() === player1Name.trim());
+                    const player2 = students.find(s => s.name.trim() === player2Name.trim());
 
-                if (player1 && player2) {
-                    batch.set(doc(colRef), {
-                        date,
-                        time: time || 'N/A',
-                        venue: venue || '待定',
-                        player1Id: player1.id,
-                        player1Name: player1.name,
-                        player2Id: player2.id,
-                        player2Name: player2.name,
-                        score1: null,
-                        score2: null,
-                        winnerId: null,
-                        status: 'scheduled',
-                        createdAt: serverTimestamp()
-                    });
-                    foundCount++;
-                } else {
-                    skippedCount++;
-                    // More detailed logging for easier debugging in the future.
-                    if (!player1) console.warn(`[CSV Import] Player not found: "${player1Name}". Please check for typos or extra characters.`);
-                    if (!player2) console.warn(`[CSV Import] Player not found: "${player2Name}". Please check for typos or extra characters.`);
+                    if (player1 && player2) {
+                        batch.set(doc(colRef), {
+                            date,
+                            time: time || 'N/A',
+                            venue: venue || '待定',
+                            player1Id: player1.id,
+                            player1Name: player1.name,
+                            player2Id: player2.id,
+                            player2Name: player2.name,
+                            score1: null,
+                            score2: null,
+                            winnerId: null,
+                            status: 'scheduled',
+                            createdAt: serverTimestamp()
+                        });
+                        foundCount++;
+                    } else {
+                        skippedCount++;
+                        if (!player1) console.warn(`[CSV Import] Player not found: "${player1Name}". Please check for typos or extra characters.`);
+                        if (!player2) console.warn(`[CSV Import] Player not found: "${player2Name}". Please check for typos or extra characters.`);
+                    }
                 }
+            });
+
+            if (foundCount > 0) {
+                await batch.commit();
             }
-        });
 
-        if (foundCount > 0) {
-            await batch.commit();
+            let alertMsg = `✅ 賽程匯入完成！\n\n成功配對並新增 ${foundCount} 場比賽。`;
+            if (skippedCount > 0) {
+                alertMsg += `\n\n⚠️ 有 ${skippedCount} 場比賽因為找不到對應的球員而被略過。請按 F12 打開開發者工具，在 Console 中查看具體是哪個球員名稱配對失敗。`;
+            }
+            alert(alertMsg);
+
+        } catch (err) {
+            console.error("League Match Import failed:", err);
+            alert('匯入失敗，請檢查 CSV 格式、檔案編碼或聯絡管理員。');
         }
-
-        let alertMsg = `✅ 賽程匯入完成！\n\n成功配對並新增 ${foundCount} 場比賽。`;
-        if (skippedCount > 0) {
-            alertMsg += `\n\n⚠️ 有 ${skippedCount} 場比賽因為找不到對應的球員而被略過。請按 F12 打開開發者工具，在 Console 中查看具體是哪個球員名稱配對失敗。`;
-        }
-        alert(alertMsg);
-
-    } catch (err) {
-        console.error("League Match Import failed:", err);
-        alert('匯入失敗，請檢查 CSV 格式、檔案編碼或聯絡管理員。');
-    }
-    setIsUpdating(false);
-    e.target.value = null; // Reset the file input
-};
-
+        setIsUpdating(false);
+        e.target.value = null;
+    };
 
     const handleUpdateLeagueMatchScore = async (match) => {
         const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
@@ -1144,7 +1092,6 @@ const handleCSVImportLeagueMatches = async (e) => {
     };
 
 
-  // --- 校徽 Logo 組件 ---
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
@@ -1242,7 +1189,6 @@ const handleCSVImportLeagueMatches = async (e) => {
           {(() => {
             if (!viewingStudent) return null;
             
-            // [V5.9.1] 修正：只顯示獨一無二的徽章
             const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
             const uniqueBadgeIds = [...new Set(studentAchievements.map(ach => ach.badgeId))];
 
@@ -1383,29 +1329,31 @@ const handleCSVImportLeagueMatches = async (e) => {
             <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
             
             {(role === 'admin' || role === 'student') && (
-              <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                <LayoutDashboard size={20}/> 管理概況
-              </button>
+              <>
+                <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                  <LayoutDashboard size={20}/> 管理概況
+                </button>
+                <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                  <Trophy size={20}/> 積分排行
+                </button>
+                <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                  <Swords size={20}/> 內部聯賽
+                </button>
+                <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                  <ImageIcon size={20}/> 精彩花絮
+                </button>
+                <button onClick={() => {setActiveTab('awards'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'awards' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                  <Award size={20}/> 獎項成就
+                </button>
+                <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                  <CalendarIcon size={20}/> 訓練日程
+                </button>
+                <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                  <Megaphone size={20}/> 比賽與公告
+                </button>
+              </>
             )}
             
-            <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-              <Trophy size={20}/> 積分排行
-            </button>
-            <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-              <Swords size={20}/> 內部聯賽
-            </button>
-            <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-              <ImageIcon size={20}/> 精彩花絮
-            </button>
-            <button onClick={() => {setActiveTab('awards'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'awards' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-              <Award size={20}/> 獎項成就
-            </button>
-            <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-              <CalendarIcon size={20}/> 訓練日程
-            </button>
-            <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-              <Megaphone size={20}/> 比賽與公告
-            </button>
             {role === 'admin' && (
               <>
                 <div className="text-[10px] text-slate-300 uppercase tracking-widest my-6 px-6 pt-6 border-t">教練工具</div>
@@ -1608,34 +1556,26 @@ const handleCSVImportLeagueMatches = async (e) => {
               </div>
             </div>
           )}
-           {activeTab === 'league' && role === 'admin' && (
+           {/* [V5.9.2] 內部聯賽 (League) - 更新: 移除即時對戰，開放學生瀏覽 */}
+           {activeTab === 'league' && (role === 'admin' || role === 'student') && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
-                  <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
-                      <div className="absolute -right-10 -bottom-10 opacity-5 rotate-12"><Swords size={200}/></div>
-                      <div className="relative z-10 text-center mb-12"><h3 className="text-4xl font-black mb-2">⚔️ 即時對戰錄入</h3><p className="text-slate-400">適用於非賽程的臨時比賽</p></div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-10 relative z-10">
-                          <div className="bg-emerald-50 p-8 rounded-[3rem] border-2 border-emerald-100 text-center"><h4 className="text-2xl font-black text-emerald-600 mb-6">🏆 勝方 (Winner)</h4><select className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm" value={matchWinner} onChange={(e) => setMatchWinner(e.target.value)}><option value="">選擇勝方隊員</option>{rankedStudents.map(s => (<option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>))}</select></div>
-                          <div className="bg-rose-50 p-8 rounded-[3rem] border-2 border-rose-100 text-center"><h4 className="text-2xl font-black text-rose-600 mb-6">💀 負方 (Loser)</h4><select className="w-full p-4 rounded-2xl border-none outline-none text-center font-black text-lg shadow-sm" value={matchLoser} onChange={(e) => setMatchLoser(e.target.value)}><option value="">選擇負方隊員</option>{rankedStudents.map(s => (<option key={s.id} value={s.id}>{s.name} ({s.badge}) - Rank {rankedStudents.indexOf(s)+1}</option>))}</select></div>
-                      </div>
-                      <div className="mt-12 flex justify-center relative z-10"><button onClick={handleMatchSubmit} className="bg-slate-900 text-white px-12 py-5 rounded-[2.5rem] text-xl font-black shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-4"><Swords size={28}/> 提交對戰結果</button></div>
-                      <div className="mt-8 text-center text-xs text-slate-400 font-bold"><p>✨ 規則：基礎勝利 +10 分</p><p className="mt-1">🔥 巨人殺手：低章贏高章 或 贏高於自己 5 名以上對手 -&gt; <span className="text-orange-500">+20 分</span></p></div>
-                  </div>
-                  
                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
                       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                           <div>
                               <h3 className="text-4xl font-black mb-2">🗓️ 聯賽賽程與賽果</h3>
-                              <p className="text-slate-400">匯入賽程 CSV，並在此更新賽果</p>
+                              <p className="text-slate-400">查看所有已安排及已完成的比賽</p>
                           </div>
-                          <div className="flex gap-3">
-                              <button onClick={() => downloadTemplate('league')} className="p-4 bg-slate-100 text-slate-500 border border-slate-200 rounded-2xl hover:text-blue-600 transition-all" title="下載賽程匯入範本">
-                                  <Download size={20}/>
-                              </button>
-                              <label className="bg-blue-600 text-white px-6 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm">
-                                  <Upload size={18}/> 匯入賽程 CSV
-                                  <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportLeagueMatches}/>
-                              </label>
-                          </div>
+                          {role === 'admin' && (
+                            <div className="flex gap-3">
+                                <button onClick={() => downloadTemplate('league')} className="p-4 bg-slate-100 text-slate-500 border border-slate-200 rounded-2xl hover:text-blue-600 transition-all" title="下載賽程匯入範本">
+                                    <Download size={20}/>
+                                </button>
+                                <label className="bg-blue-600 text-white px-6 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm">
+                                    <Upload size={18}/> 匯入賽程 CSV
+                                    <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportLeagueMatches}/>
+                                </label>
+                            </div>
+                          )}
                       </div>
 
                       <div className="overflow-x-auto">
@@ -1646,12 +1586,12 @@ const handleCSVImportLeagueMatches = async (e) => {
                                       <th className="px-6 py-5">對賽球員</th>
                                       <th className="px-6 py-5 text-center">比分</th>
                                       <th className="px-6 py-5 text-center">狀態</th>
-                                      <th className="px-6 py-5 text-center">操作</th>
+                                      {role === 'admin' && <th className="px-6 py-5 text-center">操作</th>}
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
                                   {leagueMatches.length === 0 && (
-                                      <tr><td colSpan="5" className="text-center py-20 text-slate-300 font-bold">暫無賽程，請匯入 CSV 檔案。</td></tr>
+                                      <tr><td colSpan={role === 'admin' ? 5: 4} className="text-center py-20 text-slate-300 font-bold">暫無賽程，請等待教練匯入 CSV 檔案。</td></tr>
                                   )}
                                   {leagueMatches.map(match => (
                                       <tr key={match.id} className={`transition-all ${match.status === 'completed' ? 'bg-slate-50 text-slate-400' : 'hover:bg-blue-50/50'}`}>
@@ -1680,22 +1620,24 @@ const handleCSVImportLeagueMatches = async (e) => {
                                                   <span className="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-black rounded-full border border-yellow-200">待開賽</span>
                                               )}
                                           </td>
-                                          <td className="px-6 py-6 text-center">
-                                              <div className="flex justify-center gap-2">
-                                                  {match.status === 'scheduled' && (
-                                                      <button 
-                                                          onClick={() => handleUpdateLeagueMatchScore(match)}
-                                                          className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="輸入比分">
-                                                          <FileText size={18}/>
-                                                      </button>
-                                                  )}
-                                                  <button 
-                                                      onClick={() => deleteItem('league_matches', match.id)}
-                                                      className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="刪除比賽">
-                                                      <Trash2 size={18}/>
-                                                  </button>
-                                              </div>
-                                          </td>
+                                          {role === 'admin' && (
+                                            <td className="px-6 py-6 text-center">
+                                                <div className="flex justify-center gap-2">
+                                                    {match.status === 'scheduled' && (
+                                                        <button 
+                                                            onClick={() => handleUpdateLeagueMatchScore(match)}
+                                                            className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="輸入比分">
+                                                            <FileText size={18}/>
+                                                        </button>
+                                                    )}
+                                                    <button 
+                                                        onClick={() => deleteItem('league_matches', match.id)}
+                                                        className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="刪除比賽">
+                                                        <Trash2 size={18}/>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                          )}
                                       </tr>
                                   ))}
                               </tbody>
@@ -2103,14 +2045,4 @@ const handleCSVImportLeagueMatches = async (e) => {
             <button
               onClick={savePendingAttendance}
               disabled={isUpdating}
-              className="flex items-center gap-4 px-8 py-5 bg-blue-600 text-white rounded-[2rem] shadow-2xl shadow-blue-200 hover:bg-blue-700 transition-all text-lg font-black disabled:opacity-50"
-            >
-              <Save size={24} />
-              <span>儲存 {pendingAttendance.length} 筆點名紀錄</span>
-              {isUpdating && <Loader2 className="animate-spin" size={20} />}
-            </button>
-          </div>
-        )}
-    </div>
-  );
-}
+          
