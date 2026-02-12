@@ -73,7 +73,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "5.9.2"; 
+const CURRENT_VERSION = "5.9.3"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -91,6 +91,7 @@ export default function App() {
   const [leagueMatches, setLeagueMatches] = useState([]);
   const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
+  const [selectedTournament, setSelectedTournament] = useState('ALL'); // [PHASE 1] 新增
 
   
   const [systemConfig, setSystemConfig] = useState({ 
@@ -932,6 +933,21 @@ const savePendingAttendance = async () => {
     });
   }, [students, attendanceClassFilter]);
 
+    // [PHASE 1]
+    const tournamentList = useMemo(() => {
+      if (leagueMatches.length === 0) return [];
+      const uniqueNames = [...new Set(leagueMatches.map(m => m.tournamentName).filter(Boolean))];
+      return ['ALL', ...uniqueNames.sort((a, b) => b.localeCompare(a))];
+    }, [leagueMatches]);
+    
+    // [PHASE 1]
+    const filteredMatches = useMemo(() => {
+      if (selectedTournament === 'ALL' || !selectedTournament) {
+        return leagueMatches;
+      }
+      return leagueMatches.filter(m => m.tournamentName === selectedTournament);
+    }, [leagueMatches, selectedTournament]);
+
     const downloadTemplate = (type) => {
         let csv = "";
         let filename = "";
@@ -953,6 +969,13 @@ const savePendingAttendance = async () => {
     const handleCSVImportLeagueMatches = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
+
+        const tournamentName = prompt("請為這個新的聯賽賽程命名 (例如：2024-25 第一學期循環賽):");
+        if (!tournamentName || tournamentName.trim() === "") {
+            alert("必須提供賽事名稱。");
+            e.target.value = null; 
+            return;
+        }
 
         if (students.length === 0) {
             alert('學員資料尚未載入，請稍候幾秒再試。');
@@ -978,6 +1001,7 @@ const savePendingAttendance = async () => {
 
                     if (player1 && player2) {
                         batch.set(doc(colRef), {
+                            tournamentName: tournamentName.trim(),
                             date,
                             time: time || 'N/A',
                             venue: venue || '待定',
@@ -1337,7 +1361,7 @@ const savePendingAttendance = async () => {
                   <Trophy size={20}/> 積分排行
                 </button>
                 <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Swords size={20}/> 內部聯賽
+                  <Swords size={20}/> 聯賽專區
                 </button>
                 <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                   <ImageIcon size={20}/> 精彩花絮
@@ -1407,7 +1431,7 @@ const savePendingAttendance = async () => {
                 {activeTab === 'schedules' && "📅 訓練班日程表"}
                 {activeTab === 'gallery' && "📸 精彩花絮"}
                 {activeTab === 'awards' && "🏆 獎項成就"}
-                {activeTab === 'league' && "⚔️ 內部聯賽"}
+                {activeTab === 'league' && "🗓️ 聯賽專區 (Tournaments)"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
@@ -1559,22 +1583,32 @@ const savePendingAttendance = async () => {
            {activeTab === 'league' && (role === 'admin' || role === 'student') && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
-                      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
                           <div>
-                              <h3 className="text-4xl font-black mb-2">🗓️ 聯賽賽程與賽果</h3>
-                              <p className="text-slate-400">查看所有已安排及已完成的比賽</p>
+                              <h3 className="text-4xl font-black mb-2">🗓️ 聯賽專區</h3>
+                              <p className="text-slate-400">查看賽程、賽果及歷史賽事</p>
                           </div>
-                          {role === 'admin' && (
-                            <div className="flex gap-3">
-                                <button onClick={() => downloadTemplate('league')} className="p-4 bg-slate-100 text-slate-500 border border-slate-200 rounded-2xl hover:text-blue-600 transition-all" title="下載賽程匯入範本">
-                                    <Download size={20}/>
-                                </button>
-                                <label className="bg-blue-600 text-white px-6 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm">
-                                    <Upload size={18}/> 匯入賽程 CSV
-                                    <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportLeagueMatches}/>
-                                </label>
-                            </div>
-                          )}
+                           <div className="flex w-full md:w-auto items-center gap-3">
+                               <select 
+                                   value={selectedTournament} 
+                                   onChange={(e) => setSelectedTournament(e.target.value)} 
+                                   className="flex-grow w-full md:w-72 bg-slate-50 border-none outline-none pl-6 pr-10 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner"
+                               >
+                                   <option value="ALL">所有賽事</option>
+                                   {tournamentList.filter(t => t !== 'ALL').map(t => <option key={t} value={t}>{t}</option>)}
+                               </select>
+                               {role === 'admin' && (
+                                <div className="flex gap-2">
+                                  <button onClick={() => downloadTemplate('league')} className="p-4 bg-slate-100 text-slate-500 border border-slate-200 rounded-2xl hover:text-blue-600 transition-all" title="下載賽程匯入範本">
+                                      <Download size={20}/>
+                                  </button>
+                                  <label className="p-4 bg-blue-600 text-white rounded-2xl cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all" title="匯入新賽程">
+                                      <Upload size={20}/>
+                                      <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportLeagueMatches}/>
+                                  </label>
+                                </div>
+                               )}
+                           </div>
                       </div>
 
                       <div className="overflow-x-auto">
@@ -1589,10 +1623,12 @@ const savePendingAttendance = async () => {
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
-                                  {leagueMatches.length === 0 && (
-                                      <tr><td colSpan={role === 'admin' ? 5 : 4} className="text-center py-20 text-slate-300 font-bold">暫無賽程，請等待教練匯入 CSV 檔案。</td></tr>
+                                  {filteredMatches.length === 0 && (
+                                      <tr><td colSpan={role === 'admin' ? 5 : 4} className="text-center py-20 text-slate-300 font-bold">
+                                        {selectedTournament === 'ALL' ? '請從上方選擇一個賽事' : '這個賽事暫無比賽記錄'}
+                                      </td></tr>
                                   )}
-                                  {leagueMatches.map(match => (
+                                  {filteredMatches.map(match => (
                                       <tr key={match.id} className={`transition-all ${match.status === 'completed' ? 'bg-slate-50 text-slate-400' : 'hover:bg-blue-50/50'}`}>
                                           <td className="px-6 py-6">
                                               <div className="font-black text-slate-800">{match.date} <span className="font-mono text-sm">{match.time}</span></div>
