@@ -1591,7 +1591,7 @@ const savePendingAttendance = async () => {
                               </thead>
                               <tbody className="divide-y divide-slate-100">
                                   {leagueMatches.length === 0 && (
-                                      <tr><td colSpan={role === 'admin' ? 5: 4} className="text-center py-20 text-slate-300 font-bold">暫無賽程，請等待教練匯入 CSV 檔案。</td></tr>
+                                      <tr><td colSpan={role === 'admin' ? 5 : 4} className="text-center py-20 text-slate-300 font-bold">暫無賽程，請等待教練匯入 CSV 檔案。</td></tr>
                                   )}
                                   {leagueMatches.map(match => (
                                       <tr key={match.id} className={`transition-all ${match.status === 'completed' ? 'bg-slate-50 text-slate-400' : 'hover:bg-blue-50/50'}`}>
