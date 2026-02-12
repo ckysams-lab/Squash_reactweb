@@ -73,7 +73,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "5.9.4"; 
+const CURRENT_VERSION = "5.9.5"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -92,8 +92,7 @@ export default function App() {
   const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
   const [selectedTournament, setSelectedTournament] = useState('');
-  
-  // [PHASE 2] 新增：創建賽事 Modal 相關狀態
+
   const [showTournamentModal, setShowTournamentModal] = useState(false);
   const [newTournamentName, setNewTournamentName] = useState('');
   const [tournamentPlayers, setTournamentPlayers] = useState([]);
@@ -114,15 +113,25 @@ export default function App() {
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   
+  // 登入狀態
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginClass, setLoginClass] = useState('');
+  const [loginClassNo, setLoginClassNo] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginTab, setLoginTab] = useState('student'); // [FIX] Re-added this state
+
+  // 對戰錄入狀態
   const [importEncoding, setImportEncoding] = useState('AUTO');
   const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
   const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL');
   
+  // 年份篩選狀態
   const [selectedYearFilter, setSelectedYearFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const galleryInputRef = useRef(null);
   
+  // 財務參數
   const [financeConfig, setFinanceConfig] = useState({
     nTeam: 1, costTeam: 2750,
     nTrain: 3, costTrain: 1350,
@@ -927,6 +936,39 @@ const savePendingAttendance = async () => {
     });
   }, [students, attendanceClassFilter]);
 
+    const tournamentList = useMemo(() => {
+      if (leagueMatches.length === 0) return [];
+      const uniqueNames = [...new Set(leagueMatches.map(m => m.tournamentName).filter(Boolean))];
+      return uniqueNames.sort((a, b) => b.localeCompare(a));
+    }, [leagueMatches]);
+    
+    const filteredMatches = useMemo(() => {
+      if (!selectedTournament) {
+        return [];
+      }
+      return leagueMatches.filter(m => m.tournamentName === selectedTournament);
+    }, [leagueMatches, selectedTournament]);
+
+  const groupedMatches = useMemo(() => {
+    if(filteredMatches.length === 0) return {};
+    const groups = {};
+    filteredMatches.forEach(match => {
+        const groupKey = match.groupName || '所有比賽';
+        if (!groups[groupKey]) {
+            groups[groupKey] = [];
+        }
+        groups[groupKey].push(match);
+    });
+    return groups;
+  }, [filteredMatches]);
+
+  useEffect(() => {
+    if (tournamentList.length > 0 && !selectedTournament) {
+      setSelectedTournament(tournamentList[0]);
+    }
+  }, [tournamentList, selectedTournament]);
+
+
     const downloadTemplate = (type) => {
         let csv = "";
         let filename = "";
@@ -1018,7 +1060,6 @@ const savePendingAttendance = async () => {
         }
     };
     
-    // [PHASE 2] 新增：自動生成循環賽事
     const handleGenerateRoundRobinMatches = async () => {
         if (newTournamentName.trim() === '') {
             alert('請輸入賽事名稱。');
@@ -1041,7 +1082,9 @@ const savePendingAttendance = async () => {
         try {
             // 1. 分配球員到各組
             const groups = Array.from({ length: numGroups }, () => []);
-            tournamentPlayers.forEach((playerId, index) => {
+            // 隨機排序以確保分組公平性
+            const shuffledPlayers = [...tournamentPlayers].sort(() => 0.5 - Math.random());
+            shuffledPlayers.forEach((playerId, index) => {
                 groups[index % numGroups].push(playerId);
             });
 
@@ -1051,7 +1094,7 @@ const savePendingAttendance = async () => {
 
             // 2. 為每個小組生成對戰組合
             groups.forEach((groupPlayers, groupIndex) => {
-                const groupName = `${String.fromCharCode(65 + groupIndex)}組`; // A組, B組...
+                const groupName = `${String.fromCharCode(65 + groupIndex)}組`; 
 
                 for (let i = 0; i < groupPlayers.length; i++) {
                     for (let j = i + 1; j < groupPlayers.length; j++) {
@@ -1061,8 +1104,8 @@ const savePendingAttendance = async () => {
                         if (player1 && player2) {
                             batch.set(doc(colRef), {
                                 tournamentName: newTournamentName.trim(),
-                                groupName: numGroups > 1 ? groupName : null, // 只有多於一組時才標記組名
-                                date: new Date().toISOString().split('T')[0], // 預設為今天
+                                groupName: numGroups > 1 ? groupName : null,
+                                date: new Date().toISOString().split('T')[0],
                                 time: 'N/A',
                                 venue: '待定',
                                 player1Id: player1.id,
@@ -1084,7 +1127,6 @@ const savePendingAttendance = async () => {
             await batch.commit();
             alert(`✅ 成功生成 ${newTournamentName.trim()} 賽事！\n\n共 ${numGroups} 個分組，${matchCount} 場比賽已創建。`);
             
-            // 重置並關閉 modal
             setShowTournamentModal(false);
             setNewTournamentName('');
             setTournamentPlayers([]);
@@ -1098,43 +1140,6 @@ const savePendingAttendance = async () => {
         }
         setIsUpdating(false);
     };
-
-  // [PHASE 1] 聯賽相關的 useMemo
-  const tournamentList = useMemo(() => {
-    if (leagueMatches.length === 0) return [];
-    const uniqueNames = [...new Set(leagueMatches.map(m => m.tournamentName).filter(Boolean))];
-    // 把最新的放最前面
-    return uniqueNames.sort((a, b) => b.localeCompare(a));
-  }, [leagueMatches]);
-  
-  const filteredMatches = useMemo(() => {
-    if (!selectedTournament) {
-      return [];
-    }
-    return leagueMatches.filter(m => m.tournamentName === selectedTournament);
-  }, [leagueMatches, selectedTournament]);
-
-  // [PHASE 2] 為已篩選的比賽進行分組
-  const groupedMatches = useMemo(() => {
-    if(filteredMatches.length === 0) return {};
-    const groups = {};
-    filteredMatches.forEach(match => {
-        const groupKey = match.groupName || '所有比賽';
-        if (!groups[groupKey]) {
-            groups[groupKey] = [];
-        }
-        groups[groupKey].push(match);
-    });
-    return groups;
-  }, [filteredMatches]);
-
-  // [PHASE 1] 自動選擇最新的賽事
-  useEffect(() => {
-    if (tournamentList.length > 0 && !selectedTournament) {
-      setSelectedTournament(tournamentList[0]);
-    }
-  }, [tournamentList, selectedTournament]);
-
 
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
@@ -1207,8 +1212,7 @@ const savePendingAttendance = async () => {
         multiple 
         onChange={handleGalleryImageUpload}
       />
-
-    {/* [PHASE 2] 建立新賽事 Modal */}
+      
     {showTournamentModal && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowTournamentModal(false)}>
             <div className="bg-white rounded-[3rem] w-full max-w-2xl p-10 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
@@ -1695,7 +1699,7 @@ const savePendingAttendance = async () => {
                           {leagueMatches.length > 0 ? '請從上方選擇一個賽事' : '暫無任何賽事，請教練建立新賽事。'}
                         </div>
                       ) : (
-                        Object.keys(groupedMatches).map(groupName => (
+                        Object.keys(groupedMatches).sort((a,b) => a.localeCompare(b)).map(groupName => (
                             <div key={groupName} className="mb-10">
                                 <h4 className="text-2xl font-black text-slate-600 mb-4 pl-2">{groupName}</h4>
                                 <div className="overflow-x-auto bg-slate-50/50 p-6 rounded-3xl border">
@@ -1725,7 +1729,7 @@ const savePendingAttendance = async () => {
                                                     </td>
                                                     <td className="px-6 py-5 text-center">
                                                         {match.status === 'completed' ? (
-                                                            <span className="font-mono font-black text-xl text-slate-800">{match.score1} : {match.score2}</span>
+                                                            <span className="font-mono font-black text-2xl text-slate-800">{match.score1} : {match.score2}</span>
                                                         ) : (
                                                             <span className="text-slate-300">-</span>
                                                         )}
