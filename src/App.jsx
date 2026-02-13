@@ -107,7 +107,7 @@ export default function App() {
   
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(true); 
   const [viewingImage, setViewingImage] = useState(null);
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -334,96 +334,57 @@ const savePendingAttendance = async () => {
     const safetyTimeout = setTimeout(() => {
       if (loading) setLoading(false);
     }, 5000);
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        }
-      } catch (err) { 
-        console.error("Auth Error:", err);
-      }
-      setLoading(false);
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
       clearTimeout(safetyTimeout);
     });
+    
     return () => {
-      unsubscribe();
+      unsubAuth();
       clearTimeout(safetyTimeout);
     };
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) return; // Only fetch data if user is logged in
     
-    try {
-      const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
-      const attendanceLogsRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs');
-      const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
-      const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
-      const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles');
-      const galleryRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery'); 
-      const awardsRef = collection(db, 'artifacts', appId, 'public', 'data', 'awards');
-      const achievementsRef = collection(db, 'artifacts', appId, 'public', 'data', 'achievements');
-      const leagueMatchesRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches');
-      const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
-      const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
+    const unsubFns = [];
+    const collectionsToFetch = [
+        'students', 'attendance_logs', 'competitions', 'schedules',
+        'gallery', 'awards', 'achievements', 'league_matches'
+    ];
+    const stateSetters = {
+        students: setStudents,
+        attendance_logs: setAttendanceLogs,
+        competitions: setCompetitions,
+        schedules: setSchedules,
+        gallery: setGalleryItems,
+        awards: setAwards,
+        achievements: setAchievements,
+        league_matches: setLeagueMatches,
+    };
 
-      const unsubSystemConfig = onSnapshot(systemConfigRef, (docSnap) => {
+    collectionsToFetch.forEach(col => {
+        const q = query(collection(db, 'artifacts', appId, 'public', 'data', col), orderBy('createdAt', 'desc'));
+        const unsub = onSnapshot(q, (snap) => {
+            stateSetters[col](snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (e) => console.error(`Error loading ${col}:`, e));
+        unsubFns.push(unsub);
+    });
+
+    const unsubSystemConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system'), (docSnap) => {
         if (docSnap.exists()) setSystemConfig(docSnap.data());
-        else setDoc(systemConfigRef, { adminPassword: 'admin', announcements: [], seasonalTheme: 'default', schoolLogo: null });
-      }, (e) => console.error("Config err", e));
-
-      const unsubFinanceConfig = onSnapshot(financeConfigRef, (docSnap) => {
-        if (docSnap.exists()) {
-          setFinanceConfig(prev => ({...prev, ...docSnap.data()}));
-        } else {
-          setDoc(financeConfigRef, financeConfig);
-        }
-      }, (e) => console.error("Finance err", e));
-      
-      const unsubStudents = onSnapshot(studentsRef, (snap) => {
-        setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-
-
-      const unsubAttendanceLogs = onSnapshot(attendanceLogsRef, (snap) => {
-        setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubCompetitions = onSnapshot(competitionsRef, (snap) => {
-        setCompetitions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubSchedules = onSnapshot(schedulesRef, (snap) => {
-        setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubFiles = onSnapshot(filesRef, (snap) => {
-        setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubGallery = onSnapshot(galleryRef, (snap) => {
-        setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubAwards = onSnapshot(awardsRef, (snap) => {
-        setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubAchievements = onSnapshot(query(achievementsRef, orderBy("timestamp", "desc")), (snap) => {
-        setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      }); 
-      const unsubLeagueMatches = onSnapshot(query(leagueMatchesRef, orderBy("date", "desc")), (snap) => {
-          setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-
-      return () => { 
-        unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); unsubGallery(); unsubAwards();
-        unsubAchievements();
-        unsubLeagueMatches();
-      };
-
-    } catch (e) {
-      console.error("Firestore Init Error:", e);
-    }
+    });
+    unsubFns.push(unsubSystemConfig);
+    
+    const unsubFinanceConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance'), (docSnap) => {
+        if (docSnap.exists()) setFinanceConfig(prev => ({...prev, ...docSnap.data()}));
+    });
+    unsubFns.push(unsubFinanceConfig);
+    
+    return () => unsubFns.forEach(unsub => unsub());
   }, [user]);
 
   const handleLogin = async (type) => {
@@ -433,8 +394,9 @@ const savePendingAttendance = async () => {
         return;
       }
       try {
-        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+        const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
         setRole('admin'); 
+        setCurrentUserInfo({name: userCredential.user.email});
         setShowLoginModal(false); 
         setActiveTab('dashboard');
       } catch (error) {
@@ -452,7 +414,6 @@ const savePendingAttendance = async () => {
 
       try {
         const userCredential = await signInWithEmailAndPassword(auth, studentAuthEmail, loginPassword);
-        
         const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
         
         if (matchedStudent) {
@@ -462,7 +423,7 @@ const savePendingAttendance = async () => {
         }
         setRole('student'); 
         setShowLoginModal(false); 
-        setActiveTab('competitions');
+        setActiveTab('dashboard');
       } catch (error) {
         console.error("Student Login failed", error);
         alert('登入失敗：\n(請確認班別、班號和密碼是否正確)');
@@ -483,6 +444,7 @@ const savePendingAttendance = async () => {
       setCurrentUserInfo(null); 
       setShowLoginModal(true); 
       setSidebarOpen(false);
+      setActiveTab('showcase');
     } catch (e) {
       console.error("Logout error", e);
     }
@@ -541,6 +503,7 @@ const savePendingAttendance = async () => {
   }, [rankedStudents, searchTerm, selectedYearFilter]);
 
   const saveFinanceConfig = async () => {
+    if (role !== 'admin') return;
     setIsUpdating(true);
     try {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance'), financeConfig);
@@ -565,6 +528,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleUpdateDOB = async (student) => {
+    if (role !== 'admin') return;
     const currentDob = student.dob || "";
     const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
     
@@ -584,6 +548,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleSetupStudentAuth = async (student) => {
+    if (role !== 'admin') return;
     if (!student.class || !student.classNo) {
         alert(`錯誤：學生 ${student.name} 的班別或班號為空，無法設定登入資料。`);
         return;
@@ -610,6 +575,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleExternalComp = (student) => {
+    if (role !== 'admin') return;
     const option = prompt(
         `請為 ${student.name} 選擇校外賽成績 (輸入代號):\n\n` +
         `1. 🔵 代表學校參賽 (+20)\n` +
@@ -634,6 +600,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleSeasonReset = async () => {
+    if (role !== 'admin') return;
     const confirmText = prompt("⚠️ 警告：這將重置所有學員的積分！\n\n系統將根據學員的「章別」重新賦予底分：\n金章: 200, 銀章: 100, 銅章: 30, 無章: 0\n\n請輸入 'RESET' 確認執行：");
     if (confirmText !== 'RESET') return;
     setIsUpdating(true);
@@ -657,6 +624,7 @@ const savePendingAttendance = async () => {
   };
 
   const generateCompetitionRoster = () => {
+    if (role !== 'admin') return;
     const topStudents = rankedStudents.slice(0, 5);
     if (topStudents.length === 0) {
       alert('目前沒有學員資料可生成名單。');
@@ -755,6 +723,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleAddMedia = async () => {
+      if (role !== 'admin') return;
       const type = prompt("請選擇類型 (輸入 1 或 2):\n1. 上傳照片 (自動建立相簿)\n2. YouTube 影片連結");
       
       if (type === '1') {
@@ -836,6 +805,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleCSVImportSchedules = async (e) => {
+    if (role !== 'admin') return;
     const file = e.target.files[0];
     if (!file) return;
     setIsUpdating(true);
@@ -866,6 +836,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleCSVImportStudents = async (e) => {
+    if (role !== 'admin') return;
     const file = e.target.files[0];
     if (!file) return;
     setIsUpdating(true);
@@ -977,6 +948,7 @@ const savePendingAttendance = async () => {
   }, [tournamentList, selectedTournament]);
 
     const handleUpdateLeagueMatchScore = async (match) => {
+        if(role !== 'admin') return;
         const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
         if (score1_str === null) return;
         const score2_str = prompt(`請輸入 ${match.player2Name} 的分數:`);
@@ -1050,6 +1022,7 @@ const savePendingAttendance = async () => {
     };
     
     const handleGenerateRoundRobinMatches = async () => {
+        if (role !== 'admin') return;
         if (newTournamentName.trim() === '') {
             alert('請輸入賽事名稱。');
             return;
@@ -1128,6 +1101,7 @@ const savePendingAttendance = async () => {
     };
 
     const handleEditLeagueMatch = async (match) => {
+        if(role !== 'admin') return;
         const newDate = prompt(`請輸入新的比賽日期 (YYYY-MM-DD):`, match.date);
         if (newDate === null) return;
         
@@ -1273,6 +1247,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleAddAward = async () => {
+    if (role !== 'admin') return;
     const title = prompt("獎項名稱 (例如：全港學界壁球賽 冠軍):");
     if (!title) return;
     const studentName = prompt("獲獎學生姓名:");
@@ -1289,7 +1264,8 @@ const savePendingAttendance = async () => {
             rank,
             photoUrl: photoUrl || "", 
             description: desc,
-            timestamp: serverTimestamp()
+            timestamp: serverTimestamp(),
+            createdAt: serverTimestamp(),
         });
         alert('🏆 獎項新增成功！');
     } catch (e) {
@@ -1527,7 +1503,10 @@ const savePendingAttendance = async () => {
                   </div>
               )}
             </div>
-            <p className="text-center text-[10px] text-slate-300 mt-10 font-bold uppercase tracking-widest">BCKLAS Management v{CURRENT_VERSION}</p>
+            {/* [MODIFIED] Added button to go to showcase page */}
+            <button onClick={() => { setShowLoginModal(false); setActiveTab('showcase'); }} className="w-full mt-6 text-center text-sm text-slate-400 hover:text-white font-bold">
+              或進入球隊專區瀏覽
+            </button>
           </div>
         </div>
       )}
@@ -1545,69 +1524,80 @@ const savePendingAttendance = async () => {
           </div>
           
           <nav className="space-y-2 flex-1 overflow-y-auto">
-            <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
-            
-            {(role === 'admin' || role === 'student') && (
-              <>
-                <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <LayoutDashboard size={20}/> 管理概況
-                </button>
-                <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Trophy size={20}/> 積分排行
-                </button>
-                <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Swords size={20}/> 聯賽專區
-                </button>
-                <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <ImageIcon size={20}/> 精彩花絮
-                </button>
-                <button onClick={() => {setActiveTab('awards'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'awards' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Award size={20}/> 獎項成就
-                </button>
-                <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <CalendarIcon size={20}/> 訓練日程
-                </button>
-                <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Megaphone size={20}/> 比賽與公告
-                </button>
-              </>
-            )}
+            {/* [MODIFIED] New Sidebar Structure */}
+            {user ? (
+                <>
+                  <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
+                  <button onClick={() => {setActiveTab('showcase'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'showcase' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                      <Home size={20}/> 返回主頁
+                  </button>
+                  <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <LayoutDashboard size={20}/> 管理總覽
+                  </button>
+                  <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <Trophy size={20}/> 積分排行
+                  </button>
+                  <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <Swords size={20}/> 聯賽專區
+                  </button>
+                  <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <Megaphone size={20}/> 比賽與公告
+                  </button>
+                  <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <CalendarIcon size={20}/> 訓練日程
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">選單</div>
+                  <button onClick={() => {setActiveTab('showcase'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'showcase' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                      <Home size={20}/> 球隊專區
+                  </button>
+                   <button onClick={() => setShowLoginModal(true)} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-slate-400 hover:bg-slate-50">
+                    <LogIn size={20}/> 隊員/教練登入
+                  </button>
+                </>
+              )}
             
             {role === 'admin' && (
               <>
-                <div className="text-[10px] text-slate-300 uppercase tracking-widest my-6 px-6 pt-6 border-t">教練工具</div>
-                <button onClick={() => {setActiveTab('students'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'students' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Users size={20}/> 隊員管理
-                </button>
-                <button onClick={() => {setActiveTab('attendance'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <ClipboardCheck size={20}/> 快速點名
-                </button>
-                <button onClick={() => {setActiveTab('financial'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'financial' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <DollarSign size={20}/> 財務收支
-                </button>
-                <button onClick={() => {setActiveTab('settings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'settings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Settings2 size={20}/> 系統設定
-                </button>
+                <div className="pt-4 mt-4 border-t">
+                  <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">教練工具</div>
+                  <button onClick={() => {setActiveTab('students'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'students' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <Users size={20}/> 隊員管理
+                  </button>
+                  <button onClick={() => {setActiveTab('attendance'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <ClipboardCheck size={20}/> 快速點名
+                  </button>
+                  <button onClick={() => {setActiveTab('financial'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'financial' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <DollarSign size={20}/> 財務收支
+                  </button>
+                  <button onClick={() => {setActiveTab('settings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'settings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <Settings2 size={20}/> 系統設定
+                  </button>
+                </div>
               </>
             )}
           </nav>
           
-          <div className="pt-10 border-t">
-            <div className="bg-slate-50 rounded-3xl p-6 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-blue-600 shadow-sm">
-                  {role === 'admin' ? <ShieldCheck size={20}/> : <User size={20}/>}
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">登入身份</p>
-                  <p className="text-sm font-black text-slate-800">{role === 'admin' ? '校隊教練' : currentUserInfo?.name || '學員'}</p>
+          {user && (
+            <div className="pt-10 border-t">
+              <div className="bg-slate-50 rounded-3xl p-6 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-blue-600 shadow-sm">
+                    {role === 'admin' ? <ShieldCheck size={20}/> : <User size={20}/>}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400">登入身份</p>
+                    <p className="text-sm font-black text-slate-800">{role === 'admin' ? '校隊教練' : currentUserInfo?.name || '學員'}</p>
+                  </div>
                 </div>
               </div>
+              <button onClick={handleLogout} className="w-full py-4 bg-white border border-slate-100 rounded-2xl text-xs font-black text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all flex items-center justify-center gap-2">
+                <LogOut size={14}/> 登出系統
+              </button>
             </div>
-            <button onClick={handleLogout} className="w-full py-4 bg-white border border-slate-100 rounded-2xl text-xs font-black text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all flex items-center justify-center gap-2">
-              <LogOut size={14}/> 登出系統
-            </button>
-          </div>
+          )}
         </div>
       </aside>
       <main className="flex-1 h-screen overflow-y-auto relative bg-[#F8FAFC]">
@@ -1618,14 +1608,13 @@ const savePendingAttendance = async () => {
             </button>
             <div>
               <h1 className="text-3xl font-black tracking-tight text-slate-800">
+                {activeTab === 'showcase' && "🏆 球隊專區"}
                 {activeTab === 'rankings' && "🏆 積分排行榜"}
                 {activeTab === 'dashboard' && "📊 管理總結"}
                 {activeTab === 'students' && "👥 隊員檔案庫"}
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
-                {activeTab === 'schedules' && "📅 訓練班日程表"}
-                {activeTab === 'gallery' && "📸 精彩花絮"}
-                {activeTab === 'awards' && "🏆 獎項成就"}
+                {activeTab === 'schedules' && "📅 訓練日程"}
                 {activeTab === 'league' && "🗓️ 聯賽專區"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
@@ -1651,7 +1640,78 @@ const savePendingAttendance = async () => {
         </header>
         <div className="p-10 max-w-7xl mx-auto pb-40">
           
-          {activeTab === 'competitions' && (
+          {/* [MODIFIED] New Showcase Tab */}
+          {activeTab === 'showcase' && (
+            <div className="space-y-12 animate-in fade-in duration-500">
+              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm text-center">
+                  <h2 className="text-4xl font-black text-slate-800 mb-4">正覺壁球校隊</h2>
+                  <p className="text-slate-500 max-w-2xl mx-auto">
+                      歡迎來到我們的大家庭！在這裡，我們不僅追求壁球技術的卓越，更重視每一位隊員的品格發展、團隊精神和對運動的熱愛。
+                  </p>
+              </div>
+
+              {/* Awards Section */}
+              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                <h3 className="text-2xl font-black text-slate-800 mb-6">🏆 榮譽牆 (Hall of Fame)</h3>
+                {awards.length === 0 ? (
+                    <p className="text-slate-400">球隊正在努力創造歷史！</p>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                     {awards.slice(0, 6).map((award) => {
+                        const student = students.find(s => s.name === award.studentName);
+                        return (
+                          <div key={award.id} className="relative group bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col gap-4">
+                             <div className="px-1">
+                                 <div className="flex items-start justify-between">
+                                    <h4 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight mb-2">{award.title}</h4>
+                                    <div className="text-xs bg-yellow-400 text-white px-2 py-0.5 rounded-full font-bold shadow-sm">{award.rank}</div>
+                                 </div>
+                                 <div className="flex items-center gap-2 text-slate-500 text-sm mt-2">
+                                    <User size={14} className="text-blue-500"/>
+                                    <span className="font-bold">{award.studentName}</span>
+                                    {student && (
+                                       <span className="bg-slate-200 text-slate-500 px-2 py-0.5 rounded-lg text-xs">
+                                         {student.class}
+                                       </span>
+                                    )}
+                                 </div>
+                                 <p className="text-xs text-slate-400 mt-1 font-medium">{award.date}</p>
+                             </div>
+                          </div>
+                        );
+                     })}
+                    </div>
+                )}
+              </div>
+              
+              {/* Gallery Section */}
+              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                  <h3 className="text-2xl font-black text-slate-800 mb-6">📸 媒體中心 (Media Center)</h3>
+                  {galleryAlbums.length === 0 ? (<p className="text-slate-400">更多精彩時刻，即將呈現...</p>) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                      {galleryAlbums.slice(0,3).map((album) => (<div key={album.title} onClick={() => { setActiveTab('gallery'); setCurrentAlbum(album.title); }} className="group cursor-pointer">
+                        <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">
+                          {album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}
+                          <div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div>
+                        </div>
+                        <div className="px-2">
+                          <h4 className="font-black text-lg text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4>
+                          <p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p>
+                        </div>
+                      </div>))}
+                    </div>
+                  )}
+              </div>
+
+              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                  <h3 className="text-2xl font-black text-slate-800 mb-6">如何加入我們</h3>
+                  <p className="text-slate-500">我們每年會在特定時間進行招募，歡迎對壁球有熱情的同學留意學校通告。如有任何疑問，請隨時聯絡負責老師。</p>
+                  <p className="mt-4 text-blue-600 font-bold">電郵: ckysams@bcklas.edu.hk</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'competitions' && user && (
              <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
                    <div className="absolute -right-10 -top-10 text-slate-50 rotate-12"><Megaphone size={120}/></div>
@@ -1714,8 +1774,8 @@ const savePendingAttendance = async () => {
                 </div>
              </div>
           )}
-          {activeTab === 'rankings' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          {activeTab === 'rankings' && user && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 font-bold">
               <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
@@ -1775,7 +1835,7 @@ const savePendingAttendance = async () => {
               </div>
             </div>
           )}
-           {activeTab === 'league' && (role === 'admin' || role === 'student') && (
+           {activeTab === 'league' && user && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
@@ -1936,7 +1996,7 @@ const savePendingAttendance = async () => {
                   </div>
               </div>
            )}
-          {activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
+          {activeTab === 'dashboard' && user && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
                 <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><History className="text-blue-600"/> 最近更新活動</h3><div className="space-y-6">{competitions.slice(0, 4).map(c => (<div key={c.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div><div><p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p></div></div>))}{schedules.slice(0, 2).map(s => (<div key={s.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div><div><p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p></div></div>))}</div></div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -1977,7 +2037,7 @@ const savePendingAttendance = async () => {
              </div>
           )}
           
-          {activeTab === 'schedules' && (
+          {activeTab === 'schedules' && user && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-6"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div><div><h3 className="text-xl font-black">訓練班日程表</h3><p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p></div></div>
@@ -2038,7 +2098,7 @@ const savePendingAttendance = async () => {
                </div>
             </div>
           )}
-          {activeTab === 'gallery' && (
+          {activeTab === 'gallery' && user && (
             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-6">
@@ -2050,84 +2110,7 @@ const savePendingAttendance = async () => {
                {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
             </div>
            )}
-           {activeTab === 'awards' && (
-             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
-                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                   <div className="flex items-center gap-6">
-                     <div className="p-4 bg-yellow-100 text-yellow-600 rounded-2xl"><Award/></div>
-                     <div>
-                       <h3 className="text-xl font-black">獎項成就 (Hall of Fame)</h3>
-                       <p className="text-xs text-slate-400 mt-1">紀錄校隊輝煌戰績</p>
-                     </div>
-                   </div>
-                   
-                   {role === 'admin' && (
-                      <button onClick={handleAddAward} className="bg-yellow-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black text-sm">
-                        <PlusCircle size={18}/> 新增獎項
-                      </button>
-                   )}
-                </div>
- 
-                {awards.length === 0 ? (
-                  <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
-                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><Trophy size={40}/></div>
-                     <p className="text-xl font-black text-slate-400">目前暫無獎項紀錄</p>
-                     <p className="text-sm text-slate-300 mt-2">請教練新增比賽獲獎紀錄</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                     {awards.sort((a,b) => b.date.localeCompare(a.date)).map((award) => {
-                        const student = students.find(s => s.name === award.studentName);
-                        return (
-                          <div key={award.id} className="relative group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:scale-105 transition-all flex flex-col gap-4">
-                             <div className="w-full aspect-[4/3] rounded-2xl bg-slate-50 overflow-hidden relative border border-slate-100">
-                                 {award.photoUrl ? (
-                                     <img src={award.photoUrl} alt="Award" className="w-full h-full object-cover" />
-                                 ) : (
-                                     <div className="w-full h-full flex items-center justify-center text-yellow-200/50">
-                                         <Trophy size={64}/>
-                                     </div>
-                                 )}
-                                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black text-slate-500 shadow-sm">
-                                     {award.date}
-                                 </div>
-                                 <div className="absolute bottom-3 right-3 bg-yellow-400 text-white px-4 py-1 rounded-full text-xs font-black shadow-lg shadow-yellow-100">
-                                     {award.rank}
-                                 </div>
-                             </div>
-                             <div className="px-1">
-                                 <h4 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight mb-2">{award.title}</h4>
-                                 <div className="flex items-center gap-2 text-slate-500 text-sm">
-                                    <User size={14} className="text-blue-500"/>
-                                    <span className="font-bold">{award.studentName}</span>
-                                    {student && (
-                                       <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-lg text-xs">
-                                         {student.class}
-                                       </span>
-                                    )}
-                                 </div>
-                                 {award.description && (
-                                   <p className="text-xs text-slate-400 mt-3 font-medium bg-slate-50 p-2 rounded-lg line-clamp-2">
-                                      {award.description}
-                                   </p>
-                                 )}
-                             </div>
-                             
-                             {role === 'admin' && (
-                                <button 
-                                  onClick={() => deleteItem('awards', award.id)}
-                                  className="absolute top-4 right-4 p-2 bg-white/50 backdrop-blur text-slate-400 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100"
-                                >
-                                  <Trash2 size={16}/>
-                                </button>
-                             )}
-                          </div>
-                        );
-                     })}
-                  </div>
-                )}
-             </div>
-            )}
+           
           {activeTab === 'financial' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
                 <div className="flex justify-end">
