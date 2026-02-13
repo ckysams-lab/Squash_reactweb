@@ -9,7 +9,7 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
   Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-  Pencil
+  Pencil, Home, LogIn as LogInIcon
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -72,14 +72,14 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "5.9.8"; 
+const CURRENT_VERSION = "5.9.9"; 
 
 export default function App() {
   // --- 狀態管理 ---
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
-  const [activeTab, setActiveTab] = useState('rankings');
+  const [activeTab, setActiveTab] = useState('showcase'); // [PHASE 1] 預設為公開頁面
   const [students, setStudents] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
   const [competitions, setCompetitions] = useState([]);
@@ -107,7 +107,7 @@ export default function App() {
   
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(false); // [PHASE 1] 預設不顯示
   const [viewingImage, setViewingImage] = useState(null);
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -330,101 +330,64 @@ const savePendingAttendance = async () => {
     } catch(e) { console.error("Favicon error", e); }
   }, [systemConfig?.schoolLogo]);
 
+  // [PHASE 1] 改為監聽所有公開數據，無論是否登入
   useEffect(() => {
-    const safetyTimeout = setTimeout(() => {
-      if (loading) setLoading(false);
-    }, 5000);
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        }
-      } catch (err) { 
-        console.error("Auth Error:", err);
-      }
-      setLoading(false);
+    const unsubFns = [];
+    const publicCollections = [
+        'students', 'attendance_logs', 'competitions', 'schedules',
+        'gallery', 'awards', 'achievements', 'league_matches'
+    ];
+    const stateSetters = {
+        students: setStudents,
+        attendance_logs: setAttendanceLogs,
+        competitions: setCompetitions,
+        schedules: setSchedules,
+        gallery: setGalleryItems,
+        awards: setAwards,
+        achievements: setAchievements,
+        league_matches: setLeagueMatches,
     };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+
+    publicCollections.forEach(col => {
+        const q = query(collection(db, 'artifacts', appId, 'public', 'data', col), orderBy('createdAt', 'desc'));
+        const unsub = onSnapshot(q, (snap) => {
+            stateSetters[col](snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (e) => console.error(`Error loading ${col}:`, e));
+        unsubFns.push(unsub);
+    });
+
+    const unsubSystemConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system'), (docSnap) => {
+        if (docSnap.exists()) setSystemConfig(docSnap.data());
+    });
+    unsubFns.push(unsubSystemConfig);
+    
+    const unsubFinanceConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance'), (docSnap) => {
+        if (docSnap.exists()) setFinanceConfig(prev => ({...prev, ...docSnap.data()}));
+    });
+    unsubFns.push(unsubFinanceConfig);
+    
+    const safetyTimeout = setTimeout(() => {
+        if (loading) setLoading(false);
+    }, 5000);
+    
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
+      if(!u) {
+        setRole(null);
+        setCurrentUserInfo(null);
+        setActiveTab('showcase'); // 如果用戶登出，跳回公開頁
+      }
       setLoading(false);
       clearTimeout(safetyTimeout);
     });
+    unsubFns.push(unsubAuth);
+
     return () => {
-      unsubscribe();
+      unsubFns.forEach(unsub => unsub());
       clearTimeout(safetyTimeout);
     };
   }, []);
 
-  useEffect(() => {
-    if (!user) return;
-    
-    try {
-      const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
-      const attendanceLogsRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs');
-      const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
-      const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
-      const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles');
-      const galleryRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery'); 
-      const awardsRef = collection(db, 'artifacts', appId, 'public', 'data', 'awards');
-      const achievementsRef = collection(db, 'artifacts', appId, 'public', 'data', 'achievements');
-      const leagueMatchesRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches');
-      const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
-      const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
-
-      const unsubSystemConfig = onSnapshot(systemConfigRef, (docSnap) => {
-        if (docSnap.exists()) setSystemConfig(docSnap.data());
-        else setDoc(systemConfigRef, { adminPassword: 'admin', announcements: [], seasonalTheme: 'default', schoolLogo: null });
-      }, (e) => console.error("Config err", e));
-
-      const unsubFinanceConfig = onSnapshot(financeConfigRef, (docSnap) => {
-        if (docSnap.exists()) {
-          setFinanceConfig(prev => ({...prev, ...docSnap.data()}));
-        } else {
-          setDoc(financeConfigRef, financeConfig);
-        }
-      }, (e) => console.error("Finance err", e));
-      
-      const unsubStudents = onSnapshot(studentsRef, (snap) => {
-        setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-
-
-      const unsubAttendanceLogs = onSnapshot(attendanceLogsRef, (snap) => {
-        setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubCompetitions = onSnapshot(competitionsRef, (snap) => {
-        setCompetitions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubSchedules = onSnapshot(schedulesRef, (snap) => {
-        setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubFiles = onSnapshot(filesRef, (snap) => {
-        setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubGallery = onSnapshot(galleryRef, (snap) => {
-        setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubAwards = onSnapshot(awardsRef, (snap) => {
-        setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubAchievements = onSnapshot(query(achievementsRef, orderBy("timestamp", "desc")), (snap) => {
-        setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      }); 
-      const unsubLeagueMatches = onSnapshot(query(leagueMatchesRef, orderBy("date", "desc")), (snap) => {
-          setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-
-      return () => { 
-        unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); unsubGallery(); unsubAwards();
-        unsubAchievements();
-        unsubLeagueMatches();
-      };
-
-    } catch (e) {
-      console.error("Firestore Init Error:", e);
-    }
-  }, [user]);
 
   const handleLogin = async (type) => {
     if (type === 'admin') {
@@ -433,8 +396,9 @@ const savePendingAttendance = async () => {
         return;
       }
       try {
-        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+        const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
         setRole('admin'); 
+        setCurrentUserInfo({name: userCredential.user.email});
         setShowLoginModal(false); 
         setActiveTab('dashboard');
       } catch (error) {
@@ -451,8 +415,7 @@ const savePendingAttendance = async () => {
       const studentAuthEmail = `${loginClass.toLowerCase().trim()}${loginClassNo.trim()}@bcklas.squash`;
 
       try {
-        const userCredential = await signInWithEmailAndPassword(auth, studentAuthEmail, loginPassword);
-        
+        await signInWithEmailAndPassword(auth, studentAuthEmail, loginPassword);
         const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
         
         if (matchedStudent) {
@@ -462,7 +425,7 @@ const savePendingAttendance = async () => {
         }
         setRole('student'); 
         setShowLoginModal(false); 
-        setActiveTab('competitions');
+        setActiveTab('dashboard');
       } catch (error) {
         console.error("Student Login failed", error);
         alert('登入失敗：\n(請確認班別、班號和密碼是否正確)');
@@ -479,9 +442,7 @@ const savePendingAttendance = async () => {
   const handleLogout = async () => { 
     try {
       await signOut(auth);
-      setRole(null); 
-      setCurrentUserInfo(null); 
-      setShowLoginModal(true); 
+      // State changes will be handled by onAuthStateChanged listener
       setSidebarOpen(false);
     } catch (e) {
       console.error("Logout error", e);
@@ -1545,69 +1506,73 @@ const savePendingAttendance = async () => {
           </div>
           
           <nav className="space-y-2 flex-1 overflow-y-auto">
-            <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
-            
-            {(role === 'admin' || role === 'student') && (
-              <>
-                <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <LayoutDashboard size={20}/> 管理概況
-                </button>
-                <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Trophy size={20}/> 積分排行
-                </button>
-                <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Swords size={20}/> 聯賽專區
-                </button>
-                <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <ImageIcon size={20}/> 精彩花絮
-                </button>
-                <button onClick={() => {setActiveTab('awards'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'awards' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Award size={20}/> 獎項成就
-                </button>
-                <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <CalendarIcon size={20}/> 訓練日程
-                </button>
-                <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Megaphone size={20}/> 比賽與公告
-                </button>
-              </>
-            )}
+            <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">公開資訊</div>
+            <button onClick={() => {setActiveTab('showcase'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'showcase' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+              <Home size={20}/> 球隊專區
+            </button>
+            <div className="pt-4 mt-4 border-t">
+              <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">隊員系統</div>
+              {user ? (
+                <>
+                  <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <LayoutDashboard size={20}/> 管理總覽
+                  </button>
+                  <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <Trophy size={20}/> 積分排行
+                  </button>
+                  <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <Swords size={20}/> 聯賽專區
+                  </button>
+                </>
+              ) : (
+                <div className="px-6 py-4">
+                  <button onClick={() => setShowLoginModal(true)} className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all">
+                    <LogInIcon size={16}/>
+                    <span className="font-bold">隊員/教練登入</span>
+                  </button>
+                </div>
+              )}
+            </div>
             
             {role === 'admin' && (
               <>
-                <div className="text-[10px] text-slate-300 uppercase tracking-widest my-6 px-6 pt-6 border-t">教練工具</div>
-                <button onClick={() => {setActiveTab('students'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'students' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Users size={20}/> 隊員管理
-                </button>
-                <button onClick={() => {setActiveTab('attendance'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <ClipboardCheck size={20}/> 快速點名
-                </button>
-                <button onClick={() => {setActiveTab('financial'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'financial' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <DollarSign size={20}/> 財務收支
-                </button>
-                <button onClick={() => {setActiveTab('settings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'settings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Settings2 size={20}/> 系統設定
-                </button>
+                <div className="pt-4 mt-4 border-t">
+                  <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">教練工具</div>
+                  <button onClick={() => {setActiveTab('students'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'students' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <Users size={20}/> 隊員管理
+                  </button>
+                  <button onClick={() => {setActiveTab('attendance'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <ClipboardCheck size={20}/> 快速點名
+                  </button>
+                  <button onClick={() => {setActiveTab('financial'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'financial' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <DollarSign size={20}/> 財務收支
+                  </button>
+                  <button onClick={() => {setActiveTab('settings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'settings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <Settings2 size={20}/> 系統設定
+                  </button>
+                </div>
               </>
             )}
           </nav>
           
-          <div className="pt-10 border-t">
-            <div className="bg-slate-50 rounded-3xl p-6 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-blue-600 shadow-sm">
-                  {role === 'admin' ? <ShieldCheck size={20}/> : <User size={20}/>}
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">登入身份</p>
-                  <p className="text-sm font-black text-slate-800">{role === 'admin' ? '校隊教練' : currentUserInfo?.name || '學員'}</p>
+          {user && (
+            <div className="pt-10 border-t">
+              <div className="bg-slate-50 rounded-3xl p-6 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-blue-600 shadow-sm">
+                    {role === 'admin' ? <ShieldCheck size={20}/> : <User size={20}/>}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400">登入身份</p>
+                    <p className="text-sm font-black text-slate-800">{role === 'admin' ? '校隊教練' : currentUserInfo?.name || '學員'}</p>
+                  </div>
                 </div>
               </div>
+              <button onClick={handleLogout} className="w-full py-4 bg-white border border-slate-100 rounded-2xl text-xs font-black text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all flex items-center justify-center gap-2">
+                <LogOut size={14}/> 登出系統
+              </button>
             </div>
-            <button onClick={handleLogout} className="w-full py-4 bg-white border border-slate-100 rounded-2xl text-xs font-black text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all flex items-center justify-center gap-2">
-              <LogOut size={14}/> 登出系統
-            </button>
-          </div>
+          )}
         </div>
       </aside>
       <main className="flex-1 h-screen overflow-y-auto relative bg-[#F8FAFC]">
@@ -1618,6 +1583,7 @@ const savePendingAttendance = async () => {
             </button>
             <div>
               <h1 className="text-3xl font-black tracking-tight text-slate-800">
+                {activeTab === 'showcase' && "🏆 球隊專區"}
                 {activeTab === 'rankings' && "🏆 積分排行榜"}
                 {activeTab === 'dashboard' && "📊 管理總結"}
                 {activeTab === 'students' && "👥 隊員檔案庫"}
@@ -1651,6 +1617,30 @@ const savePendingAttendance = async () => {
         </header>
         <div className="p-10 max-w-7xl mx-auto pb-40">
           
+          {/* [PHASE 1] 新增：公開的球隊專區頁面 */}
+          {activeTab === 'showcase' && (
+            <div className="space-y-12 animate-in fade-in duration-500">
+              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm text-center">
+                  <h2 className="text-4xl font-black text-slate-800 mb-4">正覺壁球校隊</h2>
+                  <p className="text-slate-500 max-w-2xl mx-auto">
+                      歡迎來到我們的大家庭！在這裡，我們不僅追求壁球技術的卓越，更重視每一位隊員的品格發展、團隊精神和對運動的熱愛。
+                  </p>
+              </div>
+
+              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                  <h3 className="text-2xl font-black text-slate-800 mb-6">訓練資訊</h3>
+                  <p className="text-slate-500">我們提供系統化的訓練，無論您是初學者還是進階球員，都能找到適合自己的位置。</p>
+                  {/* 此處為靜態內容，未來可考慮從資料庫讀取 */}
+              </div>
+
+              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                  <h3 className="text-2xl font-black text-slate-800 mb-6">如何加入我們</h3>
+                  <p className="text-slate-500">我們每年會在特定時間進行招募，歡迎對壁球有熱情的同學留意學校通告。如有任何疑問，請隨時聯絡負責老師。</p>
+                  <p className="mt-4 text-blue-600 font-bold">電郵: ckysams@bcklas.edu.hk</p>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'competitions' && (
              <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
@@ -1715,7 +1705,7 @@ const savePendingAttendance = async () => {
              </div>
           )}
           {activeTab === 'rankings' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 font-bold">
               <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
