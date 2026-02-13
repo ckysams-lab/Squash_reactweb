@@ -72,7 +72,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "5.9.7"; 
+const CURRENT_VERSION = "5.9.8"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -976,7 +976,7 @@ const savePendingAttendance = async () => {
     }
   }, [tournamentList, selectedTournament]);
 
-  const handleUpdateLeagueMatchScore = async (match) => {
+    const handleUpdateLeagueMatchScore = async (match) => {
         const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
         if (score1_str === null) return;
         const score2_str = prompt(`請輸入 ${match.player2Name} 的分數:`);
@@ -1141,7 +1141,7 @@ const savePendingAttendance = async () => {
         if (newTime === null) return;
         
         const timeRegex = /^\d{2}:\d{2}$/;
-        if (!timeRegex.test(newTime)) {
+        if (!timeRegex.test(newTime) && newTime !== 'N/A') {
             alert("時間格式錯誤！請使用 HH:MM 格式。");
             return;
         }
@@ -1161,13 +1161,11 @@ const savePendingAttendance = async () => {
         setIsUpdating(false);
     };
 
-  // [PHASE 2] 新增：計算積分榜
   const tournamentStandings = useMemo(() => {
     if (filteredMatches.length === 0) return {};
     
     const standings = {};
 
-    // 初始化所有參賽球員的數據
     const playerIdsInTournament = new Set();
     filteredMatches.forEach(match => {
         playerIdsInTournament.add(match.player1Id);
@@ -1177,7 +1175,8 @@ const savePendingAttendance = async () => {
     playerIdsInTournament.forEach(playerId => {
         const student = students.find(s => s.id === playerId);
         if(student) {
-          const groupKey = filteredMatches.find(m => m.player1Id === playerId || m.player2Id === playerId)?.groupName || '所有比賽';
+          const matchWithGroup = filteredMatches.find(m => m.player1Id === playerId || m.player2Id === playerId);
+          const groupKey = matchWithGroup?.groupName || '所有比賽';
           if (!standings[groupKey]) {
             standings[groupKey] = {};
           }
@@ -1189,12 +1188,12 @@ const savePendingAttendance = async () => {
               losses: 0,
               pointsFor: 0,
               pointsAgainst: 0,
+              pointsDiff: 0,
               leaguePoints: 0
           };
         }
     });
 
-    // 遍歷已完成的比賽來計算統計數據
     filteredMatches.filter(m => m.status === 'completed').forEach(match => {
         const groupKey = match.groupName || '所有比賽';
         const p1Stats = standings[groupKey]?.[match.player1Id];
@@ -1220,13 +1219,13 @@ const savePendingAttendance = async () => {
         }
     });
 
-    // 排序
     for (const group in standings) {
-        standings[group] = Object.values(standings[group]).sort((a, b) => {
+        standings[group] = Object.values(standings[group]).map(stat => ({
+            ...stat,
+            pointsDiff: stat.pointsFor - stat.pointsAgainst
+        })).sort((a, b) => {
             if (b.leaguePoints !== a.leaguePoints) return b.leaguePoints - a.leaguePoints;
-            const diffA = a.pointsFor - a.pointsAgainst;
-            const diffB = b.pointsFor - b.pointsAgainst;
-            if (diffB !== diffA) return diffB - diffA;
+            if (b.pointsDiff !== a.pointsDiff) return b.pointsDiff - a.pointsDiff;
             return b.pointsFor - a.pointsFor;
         });
     }
@@ -1234,10 +1233,10 @@ const savePendingAttendance = async () => {
     return standings;
   }, [filteredMatches, students]);
 
-  // [PHASE 2] 新增：為登入學生篩選個人化數據
   const myUpcomingMatches = useMemo(() => {
     if (role !== 'student' || !currentUserInfo) return [];
-    return filteredMatches.filter(m => m.status === 'scheduled' && (m.player1Id === currentUserInfo.id || m.player2Id === currentUserInfo.id));
+    return filteredMatches.filter(m => m.status === 'scheduled' && (m.player1Id === currentUserInfo.id || m.player2Id === currentUserInfo.id))
+      .sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
   }, [filteredMatches, currentUserInfo, role]);
 
   const myTournamentStats = useMemo(() => {
@@ -1246,8 +1245,9 @@ const savePendingAttendance = async () => {
       const playerStat = tournamentStandings[group].find(p => p.id === currentUserInfo.id);
       if(playerStat) return playerStat;
     }
-    return null;
+    return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
+
 
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
@@ -1802,6 +1802,28 @@ const savePendingAttendance = async () => {
                            </div>
                       </div>
                       
+                      {role === 'student' && myTournamentStats && (
+                        <div className="mb-10 p-8 bg-blue-50 border-2 border-blue-100 rounded-3xl">
+                          <h4 className="text-xl font-black text-blue-800 mb-6">我的個人戰績 ({selectedTournament})</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                            <div><p className="text-3xl font-black text-blue-600">{myTournamentStats.played}</p><p className="text-xs font-bold text-slate-400">已賽</p></div>
+                            <div><p className="text-3xl font-black text-emerald-600">{myTournamentStats.wins}</p><p className="text-xs font-bold text-slate-400">勝</p></div>
+                            <div><p className="text-3xl font-black text-rose-600">{myTournamentStats.losses}</p><p className="text-xs font-bold text-slate-400">負</p></div>
+                            <div><p className="text-3xl font-black text-slate-600">{myTournamentStats.leaguePoints}</p><p className="text-xs font-bold text-slate-400">積分</p></div>
+                          </div>
+                          {myUpcomingMatches.length > 0 && (
+                            <div className="mt-6 pt-6 border-t border-blue-200">
+                               <h5 className="font-bold text-sm text-blue-800 mb-2">你即將到來的比賽：</h5>
+                               {myUpcomingMatches.map(match => (
+                                   <div key={match.id} className="text-xs text-slate-600">
+                                       <span>{match.date} {match.time} vs <strong>{match.player1Id === currentUserInfo.id ? match.player2Name : match.player1Name}</strong></span>
+                                   </div>
+                               ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
                       {Object.keys(groupedMatches).length === 0 ? (
                         <div className="text-center py-20 text-slate-300 font-bold bg-slate-50/50 rounded-2xl">
                           {leagueMatches.length > 0 ? '請從上方選擇一個賽事' : '暫無任何賽事，請教練建立新賽事。'}
@@ -1810,8 +1832,35 @@ const savePendingAttendance = async () => {
                         Object.keys(groupedMatches).map(groupName => (
                             <div key={groupName} className="mb-10">
                                 <h4 className="text-2xl font-black text-slate-600 mb-4 pl-2">{groupName}</h4>
-                                <div className="overflow-x-auto bg-slate-50/50 p-6 rounded-3xl border">
-                                    <table className="w-full text-left">
+                                <div className="overflow-x-auto bg-slate-50/50 p-2 md:p-6 rounded-3xl border">
+                                    <table className="w-full text-left mb-4">
+                                      <thead className="text-[10px] text-slate-400 uppercase tracking-widest font-black">
+                                        <tr>
+                                          <th className="px-4 py-3">排名</th>
+                                          <th className="px-4 py-3">球員</th>
+                                          <th className="px-4 py-3 text-center">已賽</th>
+                                          <th className="px-4 py-3 text-center">勝</th>
+                                          <th className="px-4 py-3 text-center">負</th>
+                                          <th className="px-4 py-3 text-center">分差</th>
+                                          <th className="px-4 py-3 text-center">積分</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-200/50">
+                                        {tournamentStandings[groupName]?.map((player, index) => (
+                                          <tr key={player.id} className="font-bold">
+                                            <td className="px-4 py-3 text-center">{index + 1}</td>
+                                            <td className="px-4 py-3 text-slate-800">{player.name}</td>
+                                            <td className="px-4 py-3 text-center text-slate-500">{player.played}</td>
+                                            <td className="px-4 py-3 text-center text-emerald-500">{player.wins}</td>
+                                            <td className="px-4 py-3 text-center text-rose-500">{player.losses}</td>
+                                            <td className="px-4 py-3 text-center font-mono">{player.pointsDiff > 0 ? `+${player.pointsDiff}` : player.pointsDiff}</td>
+                                            <td className="px-4 py-3 text-center font-mono text-blue-600 text-lg">{player.leaguePoints}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+
+                                    <table className="w-full text-left mt-6">
                                         <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-black">
                                             <tr>
                                                 <th className="px-6 py-4">日期 / 地點</th>
