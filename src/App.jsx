@@ -1833,32 +1833,34 @@ const savePendingAttendance = async () => {
                             <div key={groupName} className="mb-10">
                                 <h4 className="text-2xl font-black text-slate-600 mb-4 pl-2">{groupName}</h4>
                                 <div className="overflow-x-auto bg-slate-50/50 p-2 md:p-6 rounded-3xl border">
-                                    <table className="w-full text-left mb-4">
-                                      <thead className="text-[10px] text-slate-400 uppercase tracking-widest font-black">
-                                        <tr>
-                                          <th className="px-4 py-3">排名</th>
-                                          <th className="px-4 py-3">球員</th>
-                                          <th className="px-4 py-3 text-center">已賽</th>
-                                          <th className="px-4 py-3 text-center">勝</th>
-                                          <th className="px-4 py-3 text-center">負</th>
-                                          <th className="px-4 py-3 text-center">分差</th>
-                                          <th className="px-4 py-3 text-center">積分</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-slate-200/50">
-                                        {tournamentStandings[groupName]?.map((player, index) => (
-                                          <tr key={player.id} className="font-bold">
-                                            <td className="px-4 py-3 text-center">{index + 1}</td>
-                                            <td className="px-4 py-3 text-slate-800">{player.name}</td>
-                                            <td className="px-4 py-3 text-center text-slate-500">{player.played}</td>
-                                            <td className="px-4 py-3 text-center text-emerald-500">{player.wins}</td>
-                                            <td className="px-4 py-3 text-center text-rose-500">{player.losses}</td>
-                                            <td className="px-4 py-3 text-center font-mono">{player.pointsDiff > 0 ? `+${player.pointsDiff}` : player.pointsDiff}</td>
-                                            <td className="px-4 py-3 text-center font-mono text-blue-600 text-lg">{player.leaguePoints}</td>
+                                    {tournamentStandings[groupName] && (
+                                      <table className="w-full text-left mb-4">
+                                        <thead className="text-[10px] text-slate-400 uppercase tracking-widest font-black">
+                                          <tr>
+                                            <th className="px-4 py-3">排名</th>
+                                            <th className="px-4 py-3">球員</th>
+                                            <th className="px-4 py-3 text-center">已賽</th>
+                                            <th className="px-4 py-3 text-center">勝</th>
+                                            <th className="px-4 py-3 text-center">負</th>
+                                            <th className="px-4 py-3 text-center">分差</th>
+                                            <th className="px-4 py-3 text-center">積分</th>
                                           </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-200/50">
+                                          {tournamentStandings[groupName]?.map((player, index) => (
+                                            <tr key={player.id} className="font-bold">
+                                              <td className="px-4 py-3 text-center">{index + 1}</td>
+                                              <td className="px-4 py-3 text-slate-800">{player.name}</td>
+                                              <td className="px-4 py-3 text-center text-slate-500">{player.played}</td>
+                                              <td className="px-4 py-3 text-center text-emerald-500">{player.wins}</td>
+                                              <td className="px-4 py-3 text-center text-rose-500">{player.losses}</td>
+                                              <td className="px-4 py-3 text-center font-mono">{player.pointsDiff > 0 ? `+${player.pointsDiff}` : player.pointsDiff}</td>
+                                              <td className="px-4 py-3 text-center font-mono text-blue-600 text-lg">{player.leaguePoints}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    )}
 
                                     <table className="w-full text-left mt-6">
                                         <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-black">
@@ -1871,7 +1873,7 @@ const savePendingAttendance = async () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-200/50">
-                                            {groupedMatches[groupName].map(match => (
+                                            {groupedMatches[groupName].sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)).map(match => (
                                                 <tr key={match.id} className={`transition-all ${match.status === 'completed' ? 'text-slate-400' : 'hover:bg-white/50'}`}>
                                                     <td className="px-6 py-5">
                                                         <div className="font-bold text-slate-800">{match.date} <span className="font-mono text-sm">{match.time}</span></div>
