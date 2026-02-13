@@ -9,7 +9,7 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
   Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-  Pencil, Home, LogIn as LogInIcon
+  Pencil, Home
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -79,7 +79,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
-  const [activeTab, setActiveTab] = useState('showcase'); // [PHASE 1] 預設為公開頁面
+  const [activeTab, setActiveTab] = useState('showcase'); // [MODIFIED] 預設為公開頁面
   const [students, setStudents] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
   const [competitions, setCompetitions] = useState([]);
@@ -107,7 +107,7 @@ export default function App() {
   
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false); // [PHASE 1] 預設不顯示
+  const [showLoginModal, setShowLoginModal] = useState(false); 
   const [viewingImage, setViewingImage] = useState(null);
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -330,7 +330,6 @@ const savePendingAttendance = async () => {
     } catch(e) { console.error("Favicon error", e); }
   }, [systemConfig?.schoolLogo]);
 
-  // [PHASE 1] 改為監聽所有公開數據，無論是否登入
   useEffect(() => {
     const unsubFns = [];
     const publicCollections = [
@@ -375,7 +374,7 @@ const savePendingAttendance = async () => {
       if(!u) {
         setRole(null);
         setCurrentUserInfo(null);
-        setActiveTab('showcase'); // 如果用戶登出，跳回公開頁
+        setActiveTab('showcase');
       }
       setLoading(false);
       clearTimeout(safetyTimeout);
@@ -442,7 +441,6 @@ const savePendingAttendance = async () => {
   const handleLogout = async () => { 
     try {
       await signOut(auth);
-      // State changes will be handled by onAuthStateChanged listener
       setSidebarOpen(false);
     } catch (e) {
       console.error("Logout error", e);
@@ -502,6 +500,7 @@ const savePendingAttendance = async () => {
   }, [rankedStudents, searchTerm, selectedYearFilter]);
 
   const saveFinanceConfig = async () => {
+    if (role !== 'admin') return;
     setIsUpdating(true);
     try {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance'), financeConfig);
@@ -526,6 +525,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleUpdateDOB = async (student) => {
+    if (role !== 'admin') return;
     const currentDob = student.dob || "";
     const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
     
@@ -545,6 +545,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleSetupStudentAuth = async (student) => {
+    if (role !== 'admin') return;
     if (!student.class || !student.classNo) {
         alert(`錯誤：學生 ${student.name} 的班別或班號為空，無法設定登入資料。`);
         return;
@@ -571,6 +572,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleExternalComp = (student) => {
+    if (role !== 'admin') return;
     const option = prompt(
         `請為 ${student.name} 選擇校外賽成績 (輸入代號):\n\n` +
         `1. 🔵 代表學校參賽 (+20)\n` +
@@ -595,6 +597,7 @@ const savePendingAttendance = async () => {
   };
 
   const handleSeasonReset = async () => {
+    if (role !== 'admin') return;
     const confirmText = prompt("⚠️ 警告：這將重置所有學員的積分！\n\n系統將根據學員的「章別」重新賦予底分：\n金章: 200, 銀章: 100, 銅章: 30, 無章: 0\n\n請輸入 'RESET' 確認執行：");
     if (confirmText !== 'RESET') return;
     setIsUpdating(true);
@@ -618,6 +621,7 @@ const savePendingAttendance = async () => {
   };
 
   const generateCompetitionRoster = () => {
+    if (role !== 'admin') return;
     const topStudents = rankedStudents.slice(0, 5);
     if (topStudents.length === 0) {
       alert('目前沒有學員資料可生成名單。');
@@ -1488,7 +1492,9 @@ const savePendingAttendance = async () => {
                   </div>
               )}
             </div>
-            <p className="text-center text-[10px] text-slate-300 mt-10 font-bold uppercase tracking-widest">BCKLAS Management v{CURRENT_VERSION}</p>
+            <button onClick={() => { setShowLoginModal(false); setActiveTab('showcase'); }} className="w-full mt-6 text-center text-sm text-slate-400 hover:text-white font-bold">
+              或進入球隊專區瀏覽
+            </button>
           </div>
         </div>
       )}
@@ -1523,11 +1529,17 @@ const savePendingAttendance = async () => {
                   <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                     <Swords size={20}/> 聯賽專區
                   </button>
+                  <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <Megaphone size={20}/> 比賽與公告
+                  </button>
+                  <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <CalendarIcon size={20}/> 訓練日程
+                  </button>
                 </>
               ) : (
                 <div className="px-6 py-4">
                   <button onClick={() => setShowLoginModal(true)} className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all">
-                    <LogInIcon size={16}/>
+                    <LogIn size={16}/>
                     <span className="font-bold">隊員/教練登入</span>
                   </button>
                 </div>
@@ -1589,9 +1601,7 @@ const savePendingAttendance = async () => {
                 {activeTab === 'students' && "👥 隊員檔案庫"}
                 {activeTab === 'attendance' && "✅ 日程連動點名"}
                 {activeTab === 'competitions' && "🏸 比賽資訊公告"}
-                {activeTab === 'schedules' && "📅 訓練班日程表"}
-                {activeTab === 'gallery' && "📸 精彩花絮"}
-                {activeTab === 'awards' && "🏆 獎項成就"}
+                {activeTab === 'schedules' && "📅 訓練日程"}
                 {activeTab === 'league' && "🗓️ 聯賽專區"}
                 {activeTab === 'financial' && "💰 財務收支管理"}
                 {activeTab === 'settings' && "⚙️ 系統核心設定"}
@@ -1617,31 +1627,19 @@ const savePendingAttendance = async () => {
         </header>
         <div className="p-10 max-w-7xl mx-auto pb-40">
           
-          {/* [PHASE 1] 新增：公開的球隊專區頁面 */}
           {activeTab === 'showcase' && (
-            <div className="space-y-12 animate-in fade-in duration-500">
-              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm text-center">
-                  <h2 className="text-4xl font-black text-slate-800 mb-4">正覺壁球校隊</h2>
-                  <p className="text-slate-500 max-w-2xl mx-auto">
-                      歡迎來到我們的大家庭！在這裡，我們不僅追求壁球技術的卓越，更重視每一位隊員的品格發展、團隊精神和對運動的熱愛。
-                  </p>
-              </div>
-
-              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
-                  <h3 className="text-2xl font-black text-slate-800 mb-6">訓練資訊</h3>
-                  <p className="text-slate-500">我們提供系統化的訓練，無論您是初學者還是進階球員，都能找到適合自己的位置。</p>
-                  {/* 此處為靜態內容，未來可考慮從資料庫讀取 */}
-              </div>
-
-              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
-                  <h3 className="text-2xl font-black text-slate-800 mb-6">如何加入我們</h3>
-                  <p className="text-slate-500">我們每年會在特定時間進行招募，歡迎對壁球有熱情的同學留意學校通告。如有任何疑問，請隨時聯絡負責老師。</p>
-                  <p className="mt-4 text-blue-600 font-bold">電郵: ckysams@bcklas.edu.hk</p>
-              </div>
-            </div>
+             <div className="space-y-12 animate-in fade-in duration-500">
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm text-center">
+                    <h2 className="text-4xl font-black text-slate-800 mb-4">正覺壁球校隊</h2>
+                    <p className="text-slate-500 max-w-2xl mx-auto">
+                        歡迎來到我們的大家庭！在這裡，我們不僅追求壁球技術的卓越，更重視每一位隊員的品格發展、團隊精神和對運動的熱愛。
+                    </p>
+                </div>
+                {/* Placeholder for future features */}
+             </div>
           )}
 
-          {activeTab === 'competitions' && (
+          {activeTab === 'competitions' && user && (
              <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
                    <div className="absolute -right-10 -top-10 text-slate-50 rotate-12"><Megaphone size={120}/></div>
@@ -1704,7 +1702,7 @@ const savePendingAttendance = async () => {
                 </div>
              </div>
           )}
-          {activeTab === 'rankings' && (
+          {activeTab === 'rankings' && user && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 font-bold">
               <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
@@ -1765,7 +1763,7 @@ const savePendingAttendance = async () => {
               </div>
             </div>
           )}
-           {activeTab === 'league' && (role === 'admin' || role === 'student') && (
+           {activeTab === 'league' && user && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
@@ -1926,7 +1924,7 @@ const savePendingAttendance = async () => {
                   </div>
               </div>
            )}
-          {activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
+          {activeTab === 'dashboard' && user && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
                 <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><History className="text-blue-600"/> 最近更新活動</h3><div className="space-y-6">{competitions.slice(0, 4).map(c => (<div key={c.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div><div><p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p></div></div>))}{schedules.slice(0, 2).map(s => (<div key={s.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div><div><p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p></div></div>))}</div></div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -1967,7 +1965,7 @@ const savePendingAttendance = async () => {
              </div>
           )}
           
-          {activeTab === 'schedules' && (
+          {activeTab === 'schedules' && user && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-6"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div><div><h3 className="text-xl font-black">訓練班日程表</h3><p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p></div></div>
