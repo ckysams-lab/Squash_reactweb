@@ -72,7 +72,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "5.9.8"; 
+const CURRENT_VERSION = "5.9.9"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -88,6 +88,7 @@ export default function App() {
   const [awards, setAwards] = useState([]); 
   const [achievements, setAchievements] = useState([]); 
   const [leagueMatches, setLeagueMatches] = useState([]);
+  const [downloadFiles, setDownloadFiles] = useState([]);
   const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
   const [selectedTournament, setSelectedTournament] = useState('');
@@ -189,10 +190,17 @@ const savePendingAttendance = async () => {
     alert('沒有需要儲存的點名紀錄。');
     return;
   }
-  if (!todaySchedule) { 
-    alert('⚠️ 今日沒有設定訓練日程，無法儲存點名。'); 
-    return; 
+  
+  let scheduleToUse = todaySchedule;
+  if (!scheduleToUse) {
+    // If no schedule today, create a generic one for logging purposes
+    scheduleToUse = {
+      trainingClass: '一般練習',
+      date: new Date().toISOString().split('T')[0],
+      location: '學校壁球場',
+    };
   }
+
   setIsUpdating(true);
   try {
     const batch = writeBatch(db);
@@ -207,9 +215,9 @@ const savePendingAttendance = async () => {
           name: student.name,
           class: student.class,
           classNo: student.classNo,
-          trainingClass: todaySchedule.trainingClass,
-          date: todaySchedule.date,
-          location: todaySchedule.location,
+          trainingClass: scheduleToUse.trainingClass,
+          date: scheduleToUse.date,
+          location: scheduleToUse.location,
           timestamp: serverTimestamp()
         });
       }
@@ -388,7 +396,6 @@ const savePendingAttendance = async () => {
       const unsubStudents = onSnapshot(studentsRef, (snap) => {
         setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
-
 
       const unsubAttendanceLogs = onSnapshot(attendanceLogsRef, (snap) => {
         setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -930,6 +937,33 @@ const savePendingAttendance = async () => {
       return s.squashClass.includes(attendanceClassFilter);
     });
   }, [students, attendanceClassFilter]);
+
+  const downloadTemplate = (type) => {
+    let csvContent = "\uFEFF"; // BOM for Excel
+    let fileName = '';
+
+    if (type === 'students') {
+      csvContent += '姓名,班別,班號,章別,初始積分,壁球班,電話\n';
+      csvContent += '陳小明,6A,1,銅章,120,A班,\n';
+      fileName = 'student_template.csv';
+    } else if (type === 'schedule') {
+      csvContent += '訓練班名稱,日期,地點,教練,備註\n';
+      csvContent += 'A班,2024-09-05,學校壁球場,徐教練,請準時出席\n';
+      fileName = 'schedule_template.csv';
+    } else {
+      return;
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
     const tournamentList = useMemo(() => {
       if (leagueMatches.length === 0) return [];
