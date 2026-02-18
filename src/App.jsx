@@ -9,7 +9,7 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
   Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-  Pencil
+  Pencil, Percent
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -72,7 +72,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "5.9.9"; 
+const CURRENT_VERSION = "6.0.0"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -1282,6 +1282,57 @@ const savePendingAttendance = async () => {
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
+    const playerDashboardData = useMemo(() => {
+        if (!viewingStudent) return null;
+
+        // 1. Filter data for the selected student
+        const studentMatches = leagueMatches.filter(m => m.player1Id === viewingStudent.id || m.player2Id === viewingStudent.id);
+        const completedMatches = studentMatches.filter(m => m.status === 'completed');
+        const studentAttendance = attendanceLogs.filter(log => log.studentId === viewingStudent.id);
+        const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
+
+        // 2. Calculate statistics
+        const wins = completedMatches.filter(m => m.winnerId === viewingStudent.id).length;
+        const totalPlayed = completedMatches.length;
+        const winRate = totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : 0;
+
+        const totalScheduledSessions = schedules.filter(s => viewingStudent.squashClass && s.trainingClass === viewingStudent.squashClass).length;
+        const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
+        const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
+
+        // 3. Prepare data for charts and lists
+        const pointsHistory = [{ date: viewingStudent.createdAt?.toDate().toISOString().split('T')[0] || 'N/A', points: BADGE_DATA[viewingStudent.badge]?.basePoints || 0 }];
+        // This is a simplified logic. A more robust solution would track points chronologically from all sources.
+        completedMatches
+            .sort((a,b) => a.date.localeCompare(b.date))
+            .forEach(match => {
+                const lastPoint = pointsHistory[pointsHistory.length - 1].points;
+                if (match.winnerId === viewingStudent.id) {
+                    const winnerRank = rankedStudents.findIndex(s => s.id === match.winnerId) + 1;
+                    const loserRank = rankedStudents.findIndex(s => s.id === (match.winnerId === match.player1Id ? match.player2Id : match.player1Id)) + 1;
+                    const isGiantKiller = winnerRank > 0 && loserRank > 0 && (winnerRank - loserRank) >= 5;
+                    const pointsToAdd = isGiantKiller ? 20 : 10;
+                    pointsHistory.push({ date: match.date, points: lastPoint + pointsToAdd });
+                }
+        });
+
+        const recentMatches = studentMatches
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .slice(0, 5);
+
+        return {
+            winRate,
+            wins,
+            totalPlayed,
+            attendanceRate,
+            attendedSessions,
+            totalScheduledSessions,
+            pointsHistory,
+            recentMatches,
+            achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
+        };
+    }, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents]);
+
 
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
@@ -1331,6 +1382,105 @@ const savePendingAttendance = async () => {
         alert('新增失敗');
     }
   };
+
+  const PlayerDashboard = ({ student, data, onClose }) => {
+    if (!student || !data) return null;
+
+    return (
+        <div className="animate-in fade-in duration-500 font-bold">
+            <div className="flex items-center gap-6 mb-10">
+                <button onClick={onClose} className="p-4 bg-white text-slate-500 hover:text-blue-600 rounded-2xl transition-all border shadow-sm">
+                    <ArrowLeft size={24}/>
+                </button>
+                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-4xl font-black text-slate-400 border-4 border-white shadow-inner uppercase">{student.name[0]}</div>
+                <div>
+                    <h3 className="text-4xl font-black text-slate-800">{student.name}</h3>
+                    <p className="text-sm font-bold text-slate-400">{student.class} ({student.classNo}) - {student.squashClass}</p>
+                </div>
+            </div>
+
+            {/* Key Stat Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <TrophyIcon size={32} className="mx-auto text-yellow-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{student.totalPoints}</p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Total Points</p>
+                </div>
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <Swords size={32} className="mx-auto text-blue-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{data.winRate}<span className="text-2xl">%</span></p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Win Rate ({data.wins}/{data.totalPlayed})</p>
+                </div>
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <ClipboardCheck size={32} className="mx-auto text-emerald-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{data.attendanceRate}<span className="text-2xl">%</span></p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Attendance</p>
+                </div>
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <Award size={32} className="mx-auto text-orange-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{data.achievements.length}</p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Achievements</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                {/* Points Trend Chart Placeholder */}
+                <div className="lg:col-span-2 bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <h4 className="text-2xl font-black mb-6">積分走勢圖</h4>
+                    <div className="h-80 bg-slate-50 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-400 text-center">
+                        <FileBarChart size={48} className="mb-4"/>
+                        <p className="font-bold">圖表即將在此顯示</p>
+                        <p className="text-xs mt-2">下一步我們將引入圖表庫來視覺化積分走勢。</p>
+                        <p className="text-xs font-mono mt-4 p-2 bg-slate-100 rounded">Data Points: {data.pointsHistory.length}</p>
+                    </div>
+                </div>
+
+                {/* Achievements */}
+                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <h4 className="text-2xl font-black mb-6">我的成就</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                        {data.achievements.length > 0 ? data.achievements.map(badgeId => {
+                            const badge = ACHIEVEMENT_DATA[badgeId];
+                            if (!badge) return null;
+                            return (
+                                <div key={badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
+                                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
+                                        {badge.icon}
+                                    </div>
+                                    <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{badge.name}</p>
+                                </div>
+                            );
+                        }) : <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章。</p>}
+                    </div>
+                </div>
+            </div>
+
+            {/* Recent Match History */}
+            <div className="mt-10 bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                <h4 className="text-2xl font-black mb-6">近期比賽記錄</h4>
+                <div className="space-y-4">
+                    {data.recentMatches.length > 0 ? data.recentMatches.map(match => {
+                        const isWinner = match.winnerId === student.id;
+                        const opponentName = match.player1Id === student.id ? match.player2Name : match.player1Name;
+                        const score = match.player1Id === student.id ? `${match.score1} - ${match.score2}` : `${match.score2} - ${match.score1}`;
+                        return (
+                            <div key={match.id} className={`p-6 rounded-3xl flex items-center justify-between gap-4 ${isWinner ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-bold">{match.date} - {match.tournamentName}</p>
+                                    <p className="font-bold text-slate-700">vs. {opponentName}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className={`font-black text-2xl ${isWinner ? 'text-emerald-600' : 'text-rose-600'}`}>{score}</p>
+                                    <p className={`text-xs font-bold ${isWinner ? 'text-emerald-500' : 'text-rose-500'}`}>{isWinner ? '勝利' : '落敗'}</p>
+                                </div>
+                            </div>
+                        )
+                    }) : <p className="text-center text-slate-400 py-10">暫無比賽記錄</p>}
+                </div>
+            </div>
+        </div>
+    );
+};
 
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -1417,57 +1567,6 @@ const savePendingAttendance = async () => {
     )}
 
       
-{viewingStudent && (
-  <div 
-    className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" 
-    onClick={() => setViewingStudent(null)}
-  >
-    <div className="bg-white rounded-[3rem] w-full max-w-lg p-10 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
-      <button onClick={() => setViewingStudent(null)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-800 transition-colors"><X size={24} /></button>
-
-      <div className="text-center mb-8">
-        <div className="w-24 h-24 bg-slate-100 rounded-full mx-auto flex items-center justify-center text-4xl font-black text-slate-400 border-4 border-white shadow-inner mb-4 uppercase">{viewingStudent.name[0]}</div>
-        <h3 className="text-3xl font-black text-slate-800">{viewingStudent.name}</h3>
-        <p className="text-sm font-bold text-slate-400">{viewingStudent.class} ({viewingStudent.classNo})</p>
-        <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full border bg-slate-50 text-blue-600 shadow-sm">
-          <TrophyIcon size={16} />
-          <span className="font-mono font-black text-lg">{viewingStudent.totalPoints}</span>
-          <span className="text-xs font-bold">Points</span>
-        </div>
-      </div>
-
-      <div className="bg-slate-50/80 p-6 rounded-3xl border">
-        <h4 className="text-sm font-black text-slate-500 mb-4 text-center tracking-widest uppercase">我的成就</h4>
-        <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
-          {(() => {
-            if (!viewingStudent) return null;
-            
-            const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
-            const uniqueBadgeIds = [...new Set(studentAchievements.map(ach => ach.badgeId))];
-
-            if (uniqueBadgeIds.length === 0) {
-              return <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章，繼續努力！</p>;
-            }
-
-            return uniqueBadgeIds.map(badgeId => {
-              const badge = ACHIEVEMENT_DATA[badgeId];
-              if (!badge) return null;
-              return (
-                <div key={badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
-                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
-                    {badge.icon}
-                  </div>
-                  <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{badge.name}</p>
-                </div>
-              );
-            });
-          })()}
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
       {viewingImage && (
         <div 
           className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300" 
@@ -1652,17 +1751,18 @@ const savePendingAttendance = async () => {
             </button>
             <div>
               <h1 className="text-3xl font-black tracking-tight text-slate-800">
-                {activeTab === 'rankings' && "🏆 積分排行榜"}
-                {activeTab === 'dashboard' && "📊 管理總結"}
-                {activeTab === 'students' && "👥 隊員檔案庫"}
-                {activeTab === 'attendance' && "✅ 日程連動點名"}
-                {activeTab === 'competitions' && "🏸 比賽資訊公告"}
-                {activeTab === 'schedules' && "📅 訓練班日程表"}
-                {activeTab === 'gallery' && "📸 精彩花絮"}
-                {activeTab === 'awards' && "🏆 獎項成就"}
-                {activeTab === 'league' && "🗓️ 聯賽專區"}
-                {activeTab === 'financial' && "💰 財務收支管理"}
-                {activeTab === 'settings' && "⚙️ 系統核心設定"}
+                {viewingStudent && "👨‍🎓 球員儀表板"}
+                {!viewingStudent && activeTab === 'rankings' && "🏆 積分排行榜"}
+                {!viewingStudent && activeTab === 'dashboard' && "📊 管理總結"}
+                {!viewingStudent && activeTab === 'students' && "👥 隊員檔案庫"}
+                {!viewingStudent && activeTab === 'attendance' && "✅ 日程連動點名"}
+                {!viewingStudent && activeTab === 'competitions' && "🏸 比賽資訊公告"}
+                {!viewingStudent && activeTab === 'schedules' && "📅 訓練班日程表"}
+                {!viewingStudent && activeTab === 'gallery' && "📸 精彩花絮"}
+                {!viewingStudent && activeTab === 'awards' && "🏆 獎項成就"}
+                {!viewingStudent && activeTab === 'league' && "🗓️ 聯賽專區"}
+                {!viewingStudent && activeTab === 'financial' && "💰 財務收支管理"}
+                {!viewingStudent && activeTab === 'settings' && "⚙️ 系統核心設定"}
               </h1>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
@@ -1684,8 +1784,11 @@ const savePendingAttendance = async () => {
           </div>
         </header>
         <div className="p-10 max-w-7xl mx-auto pb-40">
-          
-          {activeTab === 'competitions' && (
+          {viewingStudent && (
+             <PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />
+          )}
+
+          {!viewingStudent && activeTab === 'competitions' && (
              <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
                    <div className="absolute -right-10 -top-10 text-slate-50 rotate-12"><Megaphone size={120}/></div>
@@ -1748,7 +1851,7 @@ const savePendingAttendance = async () => {
                 </div>
              </div>
           )}
-          {activeTab === 'rankings' && (
+          {!viewingStudent && activeTab === 'rankings' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
@@ -1809,7 +1912,7 @@ const savePendingAttendance = async () => {
               </div>
             </div>
           )}
-           {activeTab === 'league' && (role === 'admin' || role === 'student') && (
+           {!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
@@ -1970,7 +2073,7 @@ const savePendingAttendance = async () => {
                   </div>
               </div>
            )}
-          {activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
+          {!viewingStudent && activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
                 <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><History className="text-blue-600"/> 最近更新活動</h3><div className="space-y-6">{competitions.slice(0, 4).map(c => (<div key={c.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div><div><p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p></div></div>))}{schedules.slice(0, 2).map(s => (<div key={s.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div><div><p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p></div></div>))}</div></div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -1985,13 +2088,13 @@ const savePendingAttendance = async () => {
                 </div>
              </div>
           )}
-           {activeTab === 'students' && role === 'admin' && (
+           {!viewingStudent && activeTab === 'students' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
                 <div className="flex overflow-x-auto gap-4 pb-4"><div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span><span className="text-xl font-black">{students.length}</span></div>{Object.entries(birthYearStats).sort().map(([year, count]) => (<div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span><span className="text-xl font-black text-slate-800">{count} 人</span></div>))}</div>
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden"><div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div><div className="relative z-10"><h3 className="text-3xl font-black">隊員檔案管理</h3><p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p></div><div className="flex gap-4 relative z-10 flex-wrap justify-center"><div className="relative"><Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><select value={selectedYearFilter} onChange={(e) => setSelectedYearFilter(e.target.value)} className="pl-10 pr-10 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 outline-none shadow-sm"><option value="ALL">全部年份</option>{Object.keys(birthYearStats).sort().map(year => (<option key={year} value={year}>{year} 年出生 ({birthYearStats[year]}人)</option>))}</select><ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/></div><button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button><label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]"><Upload size={20}/> 批量匯入 CSV 名單<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/></label></div></div>
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                    {filteredStudents.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
-                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative">
+                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative cursor-pointer" onClick={() => setViewingStudent(s)}>
                         <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>{s.badge}</div>
                         <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">{s.name[0]}</div>
                         <p className="text-xl font-black text-slate-800">{s.name}</p>
@@ -2011,7 +2114,7 @@ const savePendingAttendance = async () => {
              </div>
           )}
           
-          {activeTab === 'schedules' && (
+          {!viewingStudent && activeTab === 'schedules' && (
             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-6"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div><div><h3 className="text-xl font-black">訓練班日程表</h3><p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p></div></div>
@@ -2020,7 +2123,7 @@ const savePendingAttendance = async () => {
                {filteredSchedules.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><CalendarIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無訓練日程紀錄</p><p className="text-sm text-slate-300 mt-2">請點擊上方匯入按鈕上傳 CSV 檔案</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{filteredSchedules.map(sc => {const isToday = new Date().toISOString().split('T')[0] === sc.date;return (<div key={sc.id} className={`bg-white p-10 rounded-[3.5rem] border-2 shadow-sm hover:scale-[1.02] transition-all relative overflow-hidden group ${isToday ? 'border-blue-500 shadow-xl shadow-blue-50' : 'border-slate-100'}`}>{isToday && (<div className="absolute top-0 right-0 bg-blue-600 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest animate-pulse">Today • 今日訓練</div>)}<div className="mb-8"><span className="text-[10px] bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all">{sc.trainingClass}</span><h4 className="text-3xl font-black text-slate-800 mt-6">{sc.date}</h4><p className="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-[0.3em]">Training Session</p></div><div className="space-y-5"><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><MapPin size={18}/></div><span className="font-bold">{sc.location}</span></div><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div><span className="font-bold">{sc.coach} 教練</span></div>{role === 'admin' && (<button onClick={() => deleteItem('schedules', sc.id)} className="absolute top-8 right-8 w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm z-10" title="刪除課堂"><Trash2 size={20}/></button>)}{sc.notes && (<div className="p-6 bg-slate-50 rounded-[2rem] text-xs text-slate-400 leading-relaxed italic border border-slate-100">"{sc.notes}"</div>)}</div></div>);})}</div>)}
             </div>
           )}
-          {activeTab === 'attendance' && role === 'admin' && (
+          {!viewingStudent && activeTab === 'attendance' && role === 'admin' && (
             <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
                <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}><div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div><div className="relative z-10"><h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3><div className="flex flex-wrap gap-4">{todaySchedule ? (<><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><Star size={14} className="text-yellow-300 fill-yellow-300"/><span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span></div><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><MapPin size={14}/><span className="text-sm font-black">{todaySchedule.location}</span></div></>) : (<div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2"><Info size={14}/><span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span></div>)}</div></div><div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner"><p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p><p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p></div></div>
                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8"><div className="flex items-center gap-4"><div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div><div><h4 className="font-black text-slate-800">出席率報表中心</h4><p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p></div></div><div className="flex gap-2"><button onClick={() => exportMatrixAttendanceCSV(attendanceClassFilter)} className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"><Download size={16}/> 匯出班級點名總表</button></div></div>
@@ -2072,7 +2175,7 @@ const savePendingAttendance = async () => {
                </div>
             </div>
           )}
-          {activeTab === 'gallery' && (
+          {!viewingStudent && activeTab === 'gallery' && (
             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-6">
@@ -2084,7 +2187,7 @@ const savePendingAttendance = async () => {
                {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
             </div>
            )}
-           {activeTab === 'awards' && (
+           {!viewingStudent && activeTab === 'awards' && (
              <div className="space-y-8 animate-in fade-in duration-500 font-bold">
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
                    <div className="flex items-center gap-6">
@@ -2162,7 +2265,7 @@ const savePendingAttendance = async () => {
                 )}
              </div>
             )}
-          {activeTab === 'financial' && role === 'admin' && (
+          {!viewingStudent && activeTab === 'financial' && role === 'admin' && (
              <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
                 <div className="flex justify-end">
                   <button 
@@ -2251,7 +2354,7 @@ const savePendingAttendance = async () => {
                 </div>
              </div>
           )}
-          {activeTab === 'settings' && role === 'admin' && (
+          {!viewingStudent && activeTab === 'settings' && role === 'admin' && (
              <div className="max-w-2xl mx-auto space-y-10 animate-in zoom-in-95 duration-500 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
                    <h3 className="text-3xl font-black mb-10 text-center">系統偏好設定</h3>
