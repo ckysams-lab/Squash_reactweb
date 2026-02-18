@@ -72,7 +72,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "7.0.0"; 
+const CURRENT_VERSION = "7.1.0"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -136,7 +136,7 @@ export default function App() {
   });
 
   const [monthlyStars, setMonthlyStars] = useState([]);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonthForAdmin, setSelectedMonthForAdmin] = useState(new Date().toISOString().slice(0, 7));
   const [monthlyStarEditData, setMonthlyStarEditData] = useState({
       month: new Date().toISOString().slice(0, 7),
       maleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
@@ -1443,13 +1443,13 @@ const savePendingAttendance = async () => {
       }
       setIsUpdating(true);
       try {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'monthly_stars', selectedMonth);
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'monthly_stars', selectedMonthForAdmin);
           await setDoc(docRef, {
               ...monthlyStarEditData,
-              month: selectedMonth,
+              month: selectedMonthForAdmin,
               publishedAt: serverTimestamp()
           });
-          alert(`✅ 成功發佈/更新 ${selectedMonth} 的每月之星！`);
+          alert(`✅ 成功發佈/更新 ${selectedMonthForAdmin} 的每月之星！`);
       } catch (e) {
           console.error("Failed to save monthly star:", e);
           alert("儲存失敗，請檢查網絡連線。");
@@ -1458,16 +1458,18 @@ const savePendingAttendance = async () => {
   };
 
   useEffect(() => {
-    const dataForMonth = monthlyStars.find(ms => ms.id === selectedMonth);
-    const emptyData = {
-        month: selectedMonth,
-        maleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
-        femaleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
-    };
-    setMonthlyStarEditData(dataForMonth || emptyData);
-    setMalePhotoPreview(dataForMonth?.maleWinner?.fullBodyPhotoUrl || null);
-    setFemalePhotoPreview(dataForMonth?.femaleWinner?.fullBodyPhotoUrl || null);
-  }, [selectedMonth, monthlyStars]);
+    if(activeTab === 'monthlyStarsAdmin') {
+      const dataForMonth = monthlyStars.find(ms => ms.id === selectedMonthForAdmin);
+      const emptyData = {
+          month: selectedMonthForAdmin,
+          maleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
+          femaleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
+      };
+      setMonthlyStarEditData(dataForMonth || emptyData);
+      setMalePhotoPreview(dataForMonth?.maleWinner?.fullBodyPhotoUrl || null);
+      setFemalePhotoPreview(dataForMonth?.femaleWinner?.fullBodyPhotoUrl || null);
+    }
+  }, [selectedMonthForAdmin, monthlyStars, activeTab]);
 
 
   const PlayerDashboard = ({ student, data, onClose }) => {
@@ -1565,6 +1567,84 @@ const savePendingAttendance = async () => {
                     }) : <p className="text-center text-slate-400 py-10">暫無比賽記錄</p>}
                 </div>
             </div>
+        </div>
+    );
+};
+  
+const MonthlyStarsPage = ({ monthlyStarsData }) => {
+    const [displayMonth, setDisplayMonth] = useState('');
+
+    useEffect(() => {
+        if (monthlyStarsData.length > 0) {
+            setDisplayMonth(monthlyStarsData[0].id);
+        }
+    }, [monthlyStarsData]);
+
+    const currentData = monthlyStarsData.find(ms => ms.id === displayMonth);
+
+    if (monthlyStarsData.length === 0) {
+        return (
+            <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
+               <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center text-yellow-300 mb-6"><Star size={40}/></div>
+               <p className="text-xl font-black text-slate-400">「每月之星」即將登場</p>
+               <p className="text-sm text-slate-300 mt-2">請教練在後台設定本月的得獎者。</p>
+            </div>
+        )
+    }
+
+    return (
+        <div className="animate-in fade-in duration-500 font-bold">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+                <h3 className="text-4xl font-black text-slate-800">每月之星 <span className="text-yellow-500">Player of the Month</span></h3>
+                <select 
+                    value={displayMonth} 
+                    onChange={e => setDisplayMonth(e.target.value)}
+                    className="bg-white border-2 border-slate-100 focus:border-blue-600 transition-all rounded-2xl p-4 outline-none text-lg font-bold shadow-sm"
+                >
+                    {monthlyStars.map(ms => <option key={ms.id} value={ms.id}>{ms.id.replace('-', ' 年 ')} 月</option>)}
+                </select>
+            </div>
+
+            {currentData && (
+                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                    {/* Male Winner Display */}
+                    <div className="bg-gradient-to-br from-blue-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
+                        <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
+                           {currentData.maleWinner.fullBodyPhotoUrl ? <img src={currentData.maleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
+                        </div>
+                        <h4 className="text-3xl font-black text-blue-800">{currentData.maleWinner.studentName}</h4>
+                        <p className="text-sm font-bold text-slate-400 mb-6">{currentData.maleWinner.studentClass}</p>
+                        <div className="space-y-6">
+                            <div>
+                                <h5 className="font-black text-slate-500 mb-2">獲選原因</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed">{currentData.maleWinner.reason}</p>
+                            </div>
+                             <div>
+                                <h5 className="font-black text-slate-500 mb-2">本年度目標</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed font-semibold italic">"{currentData.maleWinner.goals}"</p>
+                            </div>
+                        </div>
+                    </div>
+                     {/* Female Winner Display */}
+                    <div className="bg-gradient-to-br from-pink-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
+                        <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
+                            {currentData.femaleWinner.fullBodyPhotoUrl ? <img src={currentData.femaleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
+                        </div>
+                        <h4 className="text-3xl font-black text-pink-800">{currentData.femaleWinner.studentName}</h4>
+                        <p className="text-sm font-bold text-slate-400 mb-6">{currentData.femaleWinner.studentClass}</p>
+                        <div className="space-y-6">
+                            <div>
+                                <h5 className="font-black text-slate-500 mb-2">獲選原因</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed">{currentData.femaleWinner.reason}</p>
+                            </div>
+                             <div>
+                                <h5 className="font-black text-slate-500 mb-2">本年度目標</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed font-semibold italic">"{currentData.femaleWinner.goals}"</p>
+                            </div>
+                        </div>
+                    </div>
+                 </div>
+            )}
         </div>
     );
 };
@@ -1772,6 +1852,9 @@ const savePendingAttendance = async () => {
                 <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                   <LayoutDashboard size={20}/> 管理概況
                 </button>
+                <button onClick={() => {setActiveTab('monthlyStars'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStars' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                  <Star size={20}/> 每月之星
+                </button>
                 <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                   <Trophy size={20}/> 積分排行
                 </button>
@@ -1797,7 +1880,7 @@ const savePendingAttendance = async () => {
               <>
                 <div className="text-[10px] text-slate-300 uppercase tracking-widest my-6 px-6 pt-6 border-t">教練工具</div>
                 <button onClick={() => {setActiveTab('monthlyStarsAdmin'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStarsAdmin' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Star size={20}/> 每月之星管理
+                  <Crown size={20}/> 每月之星管理
                 </button>
                 <button onClick={() => {setActiveTab('students'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'students' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                   <Users size={20}/> 隊員管理
@@ -1854,6 +1937,7 @@ const savePendingAttendance = async () => {
                 {!viewingStudent && activeTab === 'financial' && "💰 財務收支管理"}
                 {!viewingStudent && activeTab === 'settings' && "⚙️ 系統核心設定"}
                 {!viewingStudent && activeTab === 'monthlyStarsAdmin' && "🌟 每月之星管理"}
+                {!viewingStudent && activeTab === 'monthlyStars' && "🌟 每月之星"}
               </h1>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
@@ -1878,6 +1962,10 @@ const savePendingAttendance = async () => {
           {viewingStudent && (
              <PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />
           )}
+
+          {!viewingStudent && activeTab === 'monthlyStars' && (
+             <MonthlyStarsPage monthlyStarsData={monthlyStars} />
+          )}
           
           {!viewingStudent && activeTab === 'monthlyStarsAdmin' && role === 'admin' && (
               <div className="animate-in fade-in duration-500 font-bold">
@@ -1886,8 +1974,8 @@ const savePendingAttendance = async () => {
                         <h3 className="text-3xl font-black">每月之星內容管理</h3>
                         <input 
                           type="month"
-                          value={selectedMonth}
-                          onChange={e => setSelectedMonth(e.target.value)}
+                          value={selectedMonthForAdmin}
+                          onChange={e => setSelectedMonthForAdmin(e.target.value)}
                           className="bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg font-bold"
                         />
                     </div>
