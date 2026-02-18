@@ -9,7 +9,7 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
   Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-  Pencil, Percent
+  Pencil, Percent, UserPlus
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -72,7 +72,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "6.0.0"; 
+const CURRENT_VERSION = "7.0.0"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -134,6 +134,17 @@ export default function App() {
     nHobby: 4, costHobby: 1200,
     totalStudents: 50, feePerStudent: 250
   });
+
+  const [monthlyStars, setMonthlyStars] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [monthlyStarEditData, setMonthlyStarEditData] = useState({
+      month: new Date().toISOString().slice(0, 7),
+      maleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
+      femaleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
+  });
+  const [malePhotoPreview, setMalePhotoPreview] = useState(null);
+  const [femalePhotoPreview, setFemalePhotoPreview] = useState(null);
+
 
 const awardAchievement = async (badgeId, studentId) => {
   if (!badgeId || !studentId) return;
@@ -377,6 +388,7 @@ const savePendingAttendance = async () => {
       const awardsRef = collection(db, 'artifacts', appId, 'public', 'data', 'awards');
       const achievementsRef = collection(db, 'artifacts', appId, 'public', 'data', 'achievements');
       const leagueMatchesRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches');
+      const monthlyStarsRef = collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars');
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
       const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
 
@@ -421,11 +433,15 @@ const savePendingAttendance = async () => {
       const unsubLeagueMatches = onSnapshot(query(leagueMatchesRef, orderBy("date", "desc")), (snap) => {
           setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
+      const unsubMonthlyStars = onSnapshot(query(monthlyStarsRef, orderBy("month", "desc")), (snap) => {
+          setMonthlyStars(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
 
       return () => { 
         unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); unsubGallery(); unsubAwards();
         unsubAchievements();
         unsubLeagueMatches();
+        unsubMonthlyStars();
       };
 
     } catch (e) {
@@ -725,7 +741,7 @@ const savePendingAttendance = async () => {
       link.click();
   };
 
-  const compressImage = (file) => {
+  const compressImage = (file, quality = 0.7) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -734,8 +750,8 @@ const savePendingAttendance = async () => {
         img.src = event.target.result;
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 1024;
-          const MAX_HEIGHT = 1024;
+          const MAX_WIDTH = 1280;
+          const MAX_HEIGHT = 1280;
           let width = img.width;
           let height = img.height;
           if (width > height) {
@@ -754,7 +770,7 @@ const savePendingAttendance = async () => {
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
           
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
           resolve(dataUrl);
         };
       };
@@ -1383,6 +1399,77 @@ const savePendingAttendance = async () => {
     }
   };
 
+  const handleMonthlyStarFieldChange = (gender, field, value) => {
+    setMonthlyStarEditData(prev => ({
+        ...prev,
+        [gender]: { ...prev[gender], [field]: value }
+    }));
+  };
+
+  const handleMonthlyStarStudentSelect = (gender, studentId) => {
+    const student = students.find(s => s.id === studentId);
+    if (student) {
+        setMonthlyStarEditData(prev => ({
+            ...prev,
+            [gender]: {
+                ...prev[gender],
+                studentId: student.id,
+                studentName: student.name,
+                studentClass: student.class,
+            }
+        }));
+    }
+  };
+  
+  const handleMonthlyStarPhotoUpload = async (gender, file) => {
+    if (!file) return;
+    setIsUpdating(true);
+    try {
+        const compressedUrl = await compressImage(file, 0.8);
+        handleMonthlyStarFieldChange(gender, 'fullBodyPhotoUrl', compressedUrl);
+        if (gender === 'maleWinner') setMalePhotoPreview(compressedUrl);
+        if (gender === 'femaleWinner') setFemalePhotoPreview(compressedUrl);
+    } catch (e) {
+        console.error("Photo upload failed:", e);
+        alert("照片上傳失敗。");
+    }
+    setIsUpdating(false);
+  };
+
+  const handleSaveMonthlyStar = async () => {
+      if (!monthlyStarEditData.maleWinner.studentId || !monthlyStarEditData.femaleWinner.studentId) {
+          alert("請同時選擇一位男生和一位女生作為每月之星。");
+          return;
+      }
+      setIsUpdating(true);
+      try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'monthly_stars', selectedMonth);
+          await setDoc(docRef, {
+              ...monthlyStarEditData,
+              month: selectedMonth,
+              publishedAt: serverTimestamp()
+          });
+          alert(`✅ 成功發佈/更新 ${selectedMonth} 的每月之星！`);
+      } catch (e) {
+          console.error("Failed to save monthly star:", e);
+          alert("儲存失敗，請檢查網絡連線。");
+      }
+      setIsUpdating(false);
+  };
+
+  useEffect(() => {
+    const dataForMonth = monthlyStars.find(ms => ms.id === selectedMonth);
+    const emptyData = {
+        month: selectedMonth,
+        maleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
+        femaleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
+    };
+    setMonthlyStarEditData(dataForMonth || emptyData);
+    setMalePhotoPreview(dataForMonth?.maleWinner?.fullBodyPhotoUrl || null);
+    setFemalePhotoPreview(dataForMonth?.femaleWinner?.fullBodyPhotoUrl || null);
+  }, [selectedMonth, monthlyStars]);
+
+
   const PlayerDashboard = ({ student, data, onClose }) => {
     if (!student || !data) return null;
 
@@ -1607,7 +1694,7 @@ const savePendingAttendance = async () => {
                         type="text" 
                         value={loginClass}
                         onChange={(e) => setLoginClass(e.target.value)}
-                        className="w-1/2 bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" 
+                        className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" 
                         placeholder="班別 (如 6A)" 
                       />
                       <input 
@@ -1709,6 +1796,9 @@ const savePendingAttendance = async () => {
             {role === 'admin' && (
               <>
                 <div className="text-[10px] text-slate-300 uppercase tracking-widest my-6 px-6 pt-6 border-t">教練工具</div>
+                <button onClick={() => {setActiveTab('monthlyStarsAdmin'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStarsAdmin' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
+                  <Star size={20}/> 每月之星管理
+                </button>
                 <button onClick={() => {setActiveTab('students'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'students' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
                   <Users size={20}/> 隊員管理
                 </button>
@@ -1763,6 +1853,7 @@ const savePendingAttendance = async () => {
                 {!viewingStudent && activeTab === 'league' && "🗓️ 聯賽專區"}
                 {!viewingStudent && activeTab === 'financial' && "💰 財務收支管理"}
                 {!viewingStudent && activeTab === 'settings' && "⚙️ 系統核心設定"}
+                {!viewingStudent && activeTab === 'monthlyStarsAdmin' && "🌟 每月之星管理"}
               </h1>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
@@ -1786,6 +1877,90 @@ const savePendingAttendance = async () => {
         <div className="p-10 max-w-7xl mx-auto pb-40">
           {viewingStudent && (
              <PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />
+          )}
+          
+          {!viewingStudent && activeTab === 'monthlyStarsAdmin' && role === 'admin' && (
+              <div className="animate-in fade-in duration-500 font-bold">
+                  <div className="bg-white p-10 rounded-[3rem] border shadow-sm mb-8">
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                        <h3 className="text-3xl font-black">每月之星內容管理</h3>
+                        <input 
+                          type="month"
+                          value={selectedMonth}
+                          onChange={e => setSelectedMonth(e.target.value)}
+                          className="bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg font-bold"
+                        />
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Male Winner Form */}
+                      <div className="bg-slate-50/70 p-8 rounded-3xl border space-y-4">
+                        <h4 className="text-xl font-black text-blue-600">每月之星 (男)</h4>
+                        <div>
+                          <label className="text-xs font-bold text-slate-400 mb-2 block">選擇學員</label>
+                           <select 
+                             value={monthlyStarEditData.maleWinner?.studentId || ''}
+                             onChange={e => handleMonthlyStarStudentSelect('maleWinner', e.target.value)}
+                             className="w-full bg-white p-4 rounded-xl shadow-sm outline-none"
+                           >
+                             <option value="" disabled>請選擇一位男同學...</option>
+                             {students.sort((a,b) => a.class.localeCompare(b.class)).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
+                           </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-slate-400 mb-2 block">獲選原因</label>
+                          <textarea value={monthlyStarEditData.maleWinner?.reason || ''} onChange={e => handleMonthlyStarFieldChange('maleWinner', 'reason', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-slate-400 mb-2 block">本年度目標</label>
+                          <textarea value={monthlyStarEditData.maleWinner?.goals || ''} onChange={e => handleMonthlyStarFieldChange('maleWinner', 'goals', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-slate-400 mb-2 block">上傳全身照</label>
+                          <div className="w-full aspect-[3/4] bg-white rounded-xl shadow-sm flex items-center justify-center overflow-hidden">
+                             {malePhotoPreview ? <img src={malePhotoPreview} alt="Preview" className="w-full h-full object-cover"/> : <span className="text-slate-300"><ImageIcon size={48}/></span>}
+                          </div>
+                          <input type="file" accept="image/*" onChange={e => handleMonthlyStarPhotoUpload('maleWinner', e.target.files[0])} className="mt-2 text-xs"/>
+                        </div>
+                      </div>
+                      {/* Female Winner Form */}
+                      <div className="bg-slate-50/70 p-8 rounded-3xl border space-y-4">
+                        <h4 className="text-xl font-black text-pink-500">每月之星 (女)</h4>
+                        <div>
+                          <label className="text-xs font-bold text-slate-400 mb-2 block">選擇學員</label>
+                           <select 
+                             value={monthlyStarEditData.femaleWinner?.studentId || ''}
+                             onChange={e => handleMonthlyStarStudentSelect('femaleWinner', e.target.value)}
+                             className="w-full bg-white p-4 rounded-xl shadow-sm outline-none"
+                           >
+                             <option value="" disabled>請選擇一位女同學...</option>
+                             {students.sort((a,b) => a.class.localeCompare(b.class)).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
+                           </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-slate-400 mb-2 block">獲選原因</label>
+                          <textarea value={monthlyStarEditData.femaleWinner?.reason || ''} onChange={e => handleMonthlyStarFieldChange('femaleWinner', 'reason', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-slate-400 mb-2 block">本年度目標</label>
+                          <textarea value={monthlyStarEditData.femaleWinner?.goals || ''} onChange={e => handleMonthlyStarFieldChange('femaleWinner', 'goals', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-slate-400 mb-2 block">上傳全身照</label>
+                          <div className="w-full aspect-[3/4] bg-white rounded-xl shadow-sm flex items-center justify-center overflow-hidden">
+                             {femalePhotoPreview ? <img src={femalePhotoPreview} alt="Preview" className="w-full h-full object-cover"/> : <span className="text-slate-300"><ImageIcon size={48}/></span>}
+                          </div>
+                          <input type="file" accept="image/*" onChange={e => handleMonthlyStarPhotoUpload('femaleWinner', e.target.files[0])} className="mt-2 text-xs"/>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button onClick={handleSaveMonthlyStar} disabled={isUpdating} className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all font-black disabled:opacity-50">
+                        {isUpdating ? <Loader2 className="animate-spin" /> : <Save />}
+                        發佈 / 更新本月之星
+                    </button>
+                  </div>
+              </div>
           )}
 
           {!viewingStudent && activeTab === 'competitions' && (
