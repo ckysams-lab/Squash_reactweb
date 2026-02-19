@@ -75,7 +75,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "7.2.0"; 
+const CURRENT_VERSION = "7.2.1"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -1106,7 +1106,7 @@ const savePendingAttendance = async () => {
     
     const handleGenerateRoundRobinMatches = async () => {
         if (newTournamentName.trim() === '') {
-            alert('請輸入賽事名称。');
+            alert('請輸入賽事名稱。');
             return;
         }
         if (tournamentPlayers.length < 2) {
@@ -1702,7 +1702,7 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
         <div ref={ref} className="bg-white p-8" style={{ width: '827px', height: '1170px', fontFamily: 'sans-serif' }}>
             {/* Header */}
             <div className="flex justify-between items-center border-b-4 border-black pb-4">
-                {schoolLogo ? <img src={schoolLogo} alt="School Logo" className="h-24 object-contain"/> : <div className="w-24 h-24 bg-slate-200"></div>}
+                {schoolLogo ? <img src={schoolLogo} alt="School Logo" className="h-24 object-contain" crossOrigin="anonymous"/> : <div className="w-24 h-24 bg-slate-200"></div>}
                 <div className="text-center">
                     <h1 style={{ fontFamily: 'serif', fontSize: '48px', fontWeight: 'bold' }}>BCKLAS 壁球隊 每月之星</h1>
                     <p style={{ fontSize: '28px', fontWeight: '600' }}>{data.month.replace('-', ' 年 ')} 月</p>
