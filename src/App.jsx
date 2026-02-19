@@ -75,7 +75,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "7.2.1"; 
+const CURRENT_VERSION = "7.2.2"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -1476,36 +1476,54 @@ const savePendingAttendance = async () => {
     }
   }, [selectedMonthForAdmin, monthlyStars, activeTab]);
 
-  const handleGeneratePoster = async () => {
-      setIsGeneratingPoster(true);
-      const posterElement = posterRef.current;
-      if (!posterElement) {
-          alert("海報模板加載失敗，請稍後再試。");
-          setIsGeneratingPoster(false);
-          return;
-      }
+  const handleGeneratePoster = () => {
+    const posterElement = posterRef.current;
+    if (!posterElement) {
+        alert("海報模板加載失敗，請稍後再試。");
+        return;
+    }
 
-      try {
-          const canvas = await html2canvas(posterElement, {
-              scale: 2, // 提高分辨率
-              useCORS: true, // 允許加載跨域圖片
-              allowTaint: true,
-              backgroundColor: '#ffffff',
-          });
-          const image = canvas.toDataURL('image/png', 1.0);
-          const link = document.createElement('a');
-          link.href = image;
-          link.download = `Monthly_Star_Poster_${selectedMonthForAdmin}.png`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-      } catch (error) {
-          console.error('海報生成失敗:', error);
-          alert('海報生成失敗，請確認所有圖片均已成功上傳。');
-      } finally {
-          setIsGeneratingPoster(false);
-      }
-  };
+    setIsGeneratingPoster(true);
+
+    const images = Array.from(posterElement.getElementsByTagName('img'));
+    const imageLoadPromises = images.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+        });
+    });
+
+    Promise.all(imageLoadPromises).then(() => {
+        // Add a small delay to ensure rendering is complete after onload
+        setTimeout(async () => {
+            try {
+                const canvas = await html2canvas(posterElement, {
+                    scale: 2,
+                    useCORS: true,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff',
+                });
+                const image = canvas.toDataURL('image/png', 1.0);
+                const link = document.createElement('a');
+                link.href = image;
+                link.download = `Monthly_Star_Poster_${selectedMonthForAdmin}.png`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (error) {
+                console.error('海報生成失敗:', error);
+                alert('海報生成失敗，請確認所有圖片均已成功上傳。');
+            } finally {
+                setIsGeneratingPoster(false);
+            }
+        }, 500); // 500ms delay for safety
+    }).catch(error => {
+        console.error('海報圖片加載失敗:', error);
+        alert('海報圖片加載失敗，請檢查圖片連結或網絡。');
+        setIsGeneratingPoster(false);
+    });
+};
 
 
   const PlayerDashboard = ({ student, data, onClose }) => {
