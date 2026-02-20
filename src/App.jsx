@@ -9,7 +9,7 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
   Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-  Pencil, Percent, UserPlus, Printer
+  Pencil, Percent, UserPlus
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -24,9 +24,6 @@ import {
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
-import html2canvas from 'html2canvas';
-import QRCode from 'qrcode.react';
-
 
 // --- Firebase 初始化 ---
 let firebaseConfig;
@@ -75,7 +72,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "7.2.3"; 
+const CURRENT_VERSION = "7.1.0"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -147,9 +144,6 @@ export default function App() {
   });
   const [malePhotoPreview, setMalePhotoPreview] = useState(null);
   const [femalePhotoPreview, setFemalePhotoPreview] = useState(null);
-  const posterRef = useRef(null);
-  const [isGeneratingPoster, setIsGeneratingPoster] = useState(false);
-  const [posterData, setPosterData] = useState(null);
 
 
 const awardAchievement = async (badgeId, studentId) => {
@@ -1477,91 +1471,6 @@ const savePendingAttendance = async () => {
     }
   }, [selectedMonthForAdmin, monthlyStars, activeTab]);
 
-  const handleGeneratePoster = async () => {
-    setIsGeneratingPoster(true);
-
-    const dataToRender = { ...monthlyStarEditData };
-    const imageUrls = [
-        dataToRender.maleWinner.fullBodyPhotoUrl,
-        dataToRender.femaleWinner.fullBodyPhotoUrl,
-        systemConfig.schoolLogo,
-    ].filter(Boolean); // Filter out null/undefined URLs
-
-    // The "Image Sanitizer" function
-    const sanitizeImage = (url) => {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'Anonymous';
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                resolve(canvas.toDataURL('image/png'));
-            };
-            img.onerror = (err) => {
-                console.error("Image loading failed for sanitization:", url, err);
-                reject(new Error(`Failed to load image: ${url}`));
-            };
-            img.src = url;
-        });
-    };
-
-    try {
-        const sanitizedUrls = await Promise.all(imageUrls.map(url => sanitizeImage(url)));
-        
-        let urlIndex = 0;
-        if (dataToRender.maleWinner.fullBodyPhotoUrl) {
-            dataToRender.maleWinner.fullBodyPhotoUrl = sanitizedUrls[urlIndex++];
-        }
-        if (dataToRender.femaleWinner.fullBodyPhotoUrl) {
-            dataToRender.femaleWinner.fullBodyPhotoUrl = sanitizedUrls[urlIndex++];
-        }
-        const sanitizedSchoolLogo = systemConfig.schoolLogo ? sanitizedUrls[urlIndex] : null;
-
-        // Set the sanitized data for the poster to render and wait for the state to update
-        setPosterData({ ...dataToRender, schoolLogo: sanitizedSchoolLogo });
-        
-        // Wait for React to re-render the hidden poster with the new "clean" image URLs
-        setTimeout(async () => {
-            const posterElement = posterRef.current;
-            if (!posterElement) {
-                alert("海報模板加載失敗，請稍後再試。");
-                setIsGeneratingPoster(false);
-                return;
-            }
-            
-            try {
-                const canvas = await html2canvas(posterElement, {
-                    scale: 2,
-                    useCORS: true,
-                    allowTaint: true,
-                    backgroundColor: '#ffffff',
-                });
-                const image = canvas.toDataURL('image/png', 1.0);
-                const link = document.createElement('a');
-                link.href = image;
-                link.download = `Monthly_Star_Poster_${selectedMonthForAdmin}.png`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            } catch (canvasError) {
-                console.error('海報生成失敗 (html2canvas stage):', canvasError);
-                alert('海報生成失敗，請確認所有圖片均已成功上傳。');
-            } finally {
-                setIsGeneratingPoster(false);
-                setPosterData(null); // Clean up poster data
-            }
-        }, 500); // A small delay to ensure DOM update
-
-    } catch (preloadError) {
-        console.error('海報圖片預加載失敗:', preloadError);
-        alert('海報圖片預加載失敗，請檢查圖片連結或網絡。');
-        setIsGeneratingPoster(false);
-    }
-  };
-
 
   const PlayerDashboard = ({ student, data, onClose }) => {
     if (!student || !data) return null;
@@ -1751,78 +1660,9 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
     </div>
   );
 
-  const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
-    if (!data) return null;
-    return (
-        <div ref={ref} className="bg-white p-8" style={{ width: '827px', height: '1170px', fontFamily: 'sans-serif' }}>
-            {/* Header */}
-            <div className="flex justify-between items-center border-b-4 border-black pb-4">
-                {schoolLogo ? <img src={schoolLogo} alt="School Logo" className="h-24 object-contain" crossOrigin="anonymous"/> : <div className="w-24 h-24 bg-slate-200"></div>}
-                <div className="text-center">
-                    <h1 style={{ fontFamily: 'serif', fontSize: '48px', fontWeight: 'bold' }}>BCKLAS 壁球隊 每月之星</h1>
-                    <p style={{ fontSize: '28px', fontWeight: '600' }}>{data.month.replace('-', ' 年 ')} 月</p>
-                </div>
-                <div className="w-24 h-24 flex items-center justify-center text-slate-400"><TrophyIcon size={80}/></div>
-            </div>
-            {/* Body */}
-            <div className="flex mt-8 gap-8">
-                {/* Male */}
-                <div className="w-1/2">
-                    <h2 className="text-2xl font-bold text-blue-700 mb-4 text-center">PLAYER OF THE MONTH (MALE)</h2>
-                    <div className="w-full bg-slate-200" style={{ height: '500px' }}>
-                        {data.maleWinner.fullBodyPhotoUrl && <img src={data.maleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top" crossOrigin="anonymous"/>}
-                    </div>
-                    <h3 className="text-4xl font-bold mt-4">{data.maleWinner.studentName} <span className="text-2xl text-slate-500">({data.maleWinner.studentClass})</span></h3>
-                    <div className="mt-6 space-y-4">
-                        <div>
-                            <h4 className="text-xl font-bold border-b-2 border-blue-600 inline-block pb-1 mb-2">獲選原因</h4>
-                            <p className="text-lg">{data.maleWinner.reason}</p>
-                        </div>
-                        <div>
-                            <h4 className="text-xl font-bold border-b-2 border-blue-600 inline-block pb-1 mb-2">本年度目標</h4>
-                            <p className="text-lg italic">"{data.maleWinner.goals}"</p>
-                        </div>
-                    </div>
-                </div>
-                {/* Female */}
-                <div className="w-1/2">
-                    <h2 className="text-2xl font-bold text-pink-600 mb-4 text-center">PLAYER OF THE MONTH (FEMALE)</h2>
-                    <div className="w-full bg-slate-200" style={{ height: '500px' }}>
-                         {data.femaleWinner.fullBodyPhotoUrl && <img src={data.femaleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top" crossOrigin="anonymous"/>}
-                    </div>
-                    <h3 className="text-4xl font-bold mt-4">{data.femaleWinner.studentName} <span className="text-2xl text-slate-500">({data.femaleWinner.studentClass})</span></h3>
-                     <div className="mt-6 space-y-4">
-                        <div>
-                            <h4 className="text-xl font-bold border-b-2 border-pink-500 inline-block pb-1 mb-2">獲選原因</h4>
-                            <p className="text-lg">{data.femaleWinner.reason}</p>
-                        </div>
-                        <div>
-                            <h4 className="text-xl font-bold border-b-2 border-pink-500 inline-block pb-1 mb-2">本年度目標</h4>
-                            <p className="text-lg italic">"{data.femaleWinner.goals}"</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-             {/* Footer */}
-            <div className="absolute bottom-8 left-8 right-8 flex justify-between items-end">
-                <p className="text-lg font-semibold italic">汗水鑄就榮耀，目標定義未來</p>
-                <div className="text-center">
-                    <QRCode value={window.location.href} size={80} />
-                    <p className="text-xs font-bold mt-1">線上回顧歷屆每月之星</p>
-                </div>
-            </div>
-        </div>
-    )
-  });
-
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
       
-      {/* Hidden Poster for Rendering */}
-      <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100}}>
-          <PosterTemplate ref={posterRef} data={posterData} />
-      </div>
-
       <input 
         type="file" 
         ref={galleryInputRef} 
@@ -2202,14 +2042,10 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                       </div>
                     </div>
                   </div>
-                  <div className="flex justify-end gap-4">
-                     <button onClick={handleGeneratePoster} disabled={isGeneratingPoster || !monthlyStarEditData.maleWinner.studentId || !monthlyStarEditData.femaleWinner.studentId} className="flex items-center gap-3 px-8 py-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all font-black disabled:opacity-50 disabled:cursor-not-allowed">
-                        {isGeneratingPoster ? <Loader2 className="animate-spin" /> : <Printer />}
-                        下載本月海報
-                    </button>
+                  <div className="flex justify-end">
                     <button onClick={handleSaveMonthlyStar} disabled={isUpdating} className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all font-black disabled:opacity-50">
                         {isUpdating ? <Loader2 className="animate-spin" /> : <Save />}
-                        發佈 / 更新
+                        發佈 / 更新本月之星
                     </button>
                   </div>
               </div>
