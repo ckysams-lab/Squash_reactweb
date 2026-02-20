@@ -75,7 +75,7 @@ const ACHIEVEMENT_DATA = {
 
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "7.2.2"; 
+const CURRENT_VERSION = "7.2.3"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -149,6 +149,7 @@ export default function App() {
   const [femalePhotoPreview, setFemalePhotoPreview] = useState(null);
   const posterRef = useRef(null);
   const [isGeneratingPoster, setIsGeneratingPoster] = useState(false);
+  const [posterData, setPosterData] = useState(null);
 
 
 const awardAchievement = async (badgeId, studentId) => {
@@ -1476,27 +1477,61 @@ const savePendingAttendance = async () => {
     }
   }, [selectedMonthForAdmin, monthlyStars, activeTab]);
 
-  const handleGeneratePoster = () => {
-    const posterElement = posterRef.current;
-    if (!posterElement) {
-        alert("海報模板加載失敗，請稍後再試。");
-        return;
-    }
-
+  const handleGeneratePoster = async () => {
     setIsGeneratingPoster(true);
 
-    const images = Array.from(posterElement.getElementsByTagName('img'));
-    const imageLoadPromises = images.map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-        });
-    });
+    const dataToRender = { ...monthlyStarEditData };
+    const imageUrls = [
+        dataToRender.maleWinner.fullBodyPhotoUrl,
+        dataToRender.femaleWinner.fullBodyPhotoUrl,
+        systemConfig.schoolLogo,
+    ].filter(Boolean); // Filter out null/undefined URLs
 
-    Promise.all(imageLoadPromises).then(() => {
-        // Add a small delay to ensure rendering is complete after onload
+    // The "Image Sanitizer" function
+    const sanitizeImage = (url) => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.onerror = (err) => {
+                console.error("Image loading failed for sanitization:", url, err);
+                reject(new Error(`Failed to load image: ${url}`));
+            };
+            img.src = url;
+        });
+    };
+
+    try {
+        const sanitizedUrls = await Promise.all(imageUrls.map(url => sanitizeImage(url)));
+        
+        let urlIndex = 0;
+        if (dataToRender.maleWinner.fullBodyPhotoUrl) {
+            dataToRender.maleWinner.fullBodyPhotoUrl = sanitizedUrls[urlIndex++];
+        }
+        if (dataToRender.femaleWinner.fullBodyPhotoUrl) {
+            dataToRender.femaleWinner.fullBodyPhotoUrl = sanitizedUrls[urlIndex++];
+        }
+        const sanitizedSchoolLogo = systemConfig.schoolLogo ? sanitizedUrls[urlIndex] : null;
+
+        // Set the sanitized data for the poster to render and wait for the state to update
+        setPosterData({ ...dataToRender, schoolLogo: sanitizedSchoolLogo });
+        
+        // Wait for React to re-render the hidden poster with the new "clean" image URLs
         setTimeout(async () => {
+            const posterElement = posterRef.current;
+            if (!posterElement) {
+                alert("海報模板加載失敗，請稍後再試。");
+                setIsGeneratingPoster(false);
+                return;
+            }
+            
             try {
                 const canvas = await html2canvas(posterElement, {
                     scale: 2,
@@ -1511,19 +1546,21 @@ const savePendingAttendance = async () => {
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-            } catch (error) {
-                console.error('海報生成失敗:', error);
+            } catch (canvasError) {
+                console.error('海報生成失敗 (html2canvas stage):', canvasError);
                 alert('海報生成失敗，請確認所有圖片均已成功上傳。');
             } finally {
                 setIsGeneratingPoster(false);
+                setPosterData(null); // Clean up poster data
             }
-        }, 500); // 500ms delay for safety
-    }).catch(error => {
-        console.error('海報圖片加載失敗:', error);
-        alert('海報圖片加載失敗，請檢查圖片連結或網絡。');
+        }, 500); // A small delay to ensure DOM update
+
+    } catch (preloadError) {
+        console.error('海報圖片預加載失敗:', preloadError);
+        alert('海報圖片預加載失敗，請檢查圖片連結或網絡。');
         setIsGeneratingPoster(false);
-    });
-};
+    }
+  };
 
 
   const PlayerDashboard = ({ student, data, onClose }) => {
@@ -1783,7 +1820,7 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
       
       {/* Hidden Poster for Rendering */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100}}>
-          <PosterTemplate ref={posterRef} data={monthlyStarEditData} schoolLogo={systemConfig.schoolLogo} />
+          <PosterTemplate ref={posterRef} data={posterData} />
       </div>
 
       <input 
