@@ -140,7 +140,7 @@ const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
 PosterTemplate.displayName = 'PosterTemplate'; // Best practice for forwardRef
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "7.2.4"; 
+const CURRENT_VERSION = "8.0"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -159,6 +159,7 @@ export default function App() {
   const [downloadFiles, setDownloadFiles] = useState([]);
   const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
+  const [showPlayerCard, setShowPlayerCard] = useState(null);
   const [selectedTournament, setSelectedTournament] = useState('');
   
   const [showTournamentModal, setShowTournamentModal] = useState(false);
@@ -1616,6 +1617,165 @@ const savePendingAttendance = async () => {
   };
 
 
+  const PlayerCardModal = ({ student, onClose }) => {
+    const cardRef = useRef(null);
+    const [isDownloading, setIsDownloading] = useState(false);
+
+    if (!student) return null;
+
+    // 取得該學生在排行榜中的排名
+    const currentIndex = rankedStudents.findIndex(s => s.id === student.id);
+    const rank = currentIndex >= 0 ? currentIndex + 1 : '-';
+
+    // 上一位 / 下一位邏輯
+    const handlePrev = (e) => {
+      e.stopPropagation();
+      if (currentIndex > 0) setShowPlayerCard(rankedStudents[currentIndex - 1]);
+    };
+    const handleNext = (e) => {
+      e.stopPropagation();
+      if (currentIndex < rankedStudents.length - 1) setShowPlayerCard(rankedStudents[currentIndex + 1]);
+    };
+
+    // 計算相關數據 (勝率、比賽次數、巨人殺手)
+    const studentMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === student.id || m.player2Id === student.id));
+    const totalMatches = studentMatches.length;
+    const wins = studentMatches.filter(m => m.winnerId === student.id).length;
+    const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
+    
+    // 假設我們以參加過的賽事 (tournamentName) 數量作為 "出席比賽次數"
+    const competitionsCount = new Set(studentMatches.map(m => m.tournamentName)).size;
+    
+    // 計算巨人殺手次數 (簡易邏輯：獲勝且對手排名比自己高 5 名以上)
+    let giantKillsCount = 0;
+    studentMatches.filter(m => m.winnerId === student.id).forEach(match => {
+        const opponentId = match.player1Id === student.id ? match.player2Id : match.player1Id;
+        const opponentIndex = rankedStudents.findIndex(s => s.id === opponentId);
+        if (opponentIndex >= 0 && (currentIndex - opponentIndex) >= 5) giantKillsCount++;
+    });
+
+    const studentAchievements = achievements.filter(ach => ach.studentId === student.id);
+    const uniqueAchievements = [...new Set(studentAchievements.map(ach => ach.badgeId))];
+
+    // 下載卡片功能
+    const handleDownload = async (e) => {
+      e.stopPropagation();
+      if (!cardRef.current) return;
+      setIsDownloading(true);
+      try {
+        const canvas = await html2canvas(cardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const image = canvas.toDataURL('image/png', 1.0);
+        const link = document.createElement('a');
+        link.href = image;
+        link.download = `PlayerCard_${student.name}_${student.class}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (err) {
+        console.error("下載卡片失敗:", err);
+        alert("下載失敗，請稍後再試。");
+      } finally {
+        setIsDownloading(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 z-[300] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={onClose}>
+        <div className="relative max-w-md w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+          
+          {/* 卡片本體 */}
+          <div ref={cardRef} className="w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-100 relative">
+            {/* Header */}
+            <div className="bg-slate-50 border-b p-6 flex justify-between items-center relative">
+              <SchoolLogo size={24} />
+              <div className="text-center flex-1 z-10">
+                <h3 className="font-black text-slate-800 tracking-widest text-sm">BCKLAS SQUASH TEAM</h3>
+              </div>
+              <TrophyIcon size={32} className="text-slate-200 absolute right-4 opacity-50" />
+            </div>
+
+            {/* Profile & Navigation */}
+            <div className="p-8 pb-4 flex flex-col items-center relative">
+              <div className="w-32 h-32 rounded-full bg-slate-100 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center mb-4 relative z-10">
+                 {student.photo_url ? (
+                   <img src={student.photo_url} alt={student.name} className="w-full h-full object-cover" crossOrigin="anonymous"/>
+                 ) : (
+                   <span className="text-5xl font-black text-slate-300">{student.name[0]}</span>
+                 )}
+              </div>
+              
+              {/* Navigation Arrows */}
+              <button onClick={handlePrev} disabled={currentIndex <= 0} className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30 transition-all z-20"><ChevronRight className="rotate-180" size={24}/></button>
+              <button onClick={handleNext} disabled={currentIndex >= rankedStudents.length - 1} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30 transition-all z-20"><ChevronRight size={24}/></button>
+              
+              <h2 className="text-2xl font-black text-slate-800">{student.name} {student.eng_name ? `(${student.eng_name})` : ''}</h2>
+              <p className="text-sm font-bold text-slate-400 uppercase mt-1">CLASS: {student.class} ({student.classNo})</p>
+            </div>
+
+            {/* Highlights */}
+            <div className="grid grid-cols-3 gap-2 px-6 py-4">
+               <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
+                 <p className="text-xl font-black text-blue-600">{student.totalPoints}</p>
+                 <p className="text-[9px] font-black text-blue-400 uppercase tracking-wider mt-1">Points</p>
+               </div>
+               <div className={`border rounded-xl p-3 text-center ${BADGE_DATA[student.badge]?.bg || 'bg-slate-50'} ${BADGE_DATA[student.badge]?.border || 'border-slate-200'}`}>
+                 <p className="text-xl">{BADGE_DATA[student.badge]?.icon || '⚪'}</p>
+                 <p className={`text-[9px] font-black uppercase tracking-wider mt-1 ${BADGE_DATA[student.badge]?.color || 'text-slate-400'}`}>{student.badge || '無'}</p>
+               </div>
+               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                 <p className="text-xl font-black text-slate-700">#{rank}</p>
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1">Rank (Team)</p>
+               </div>
+            </div>
+
+            {/* Season Stats */}
+            <div className="px-8 py-4">
+               <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b pb-2">Season Stats (2024-25)</h4>
+               <ul className="space-y-2 text-sm font-bold text-slate-600">
+                 <li className="flex justify-between"><span>勝率 (Win Rate):</span> <span className="text-slate-800">{winRate}% ({wins}勝 {totalMatches - wins}負)</span></li>
+                 <li className="flex justify-between"><span>比賽次數 (Competitions):</span> <span className="text-slate-800">{student.competitions || competitionsCount} 次</span></li>
+                 <li className="flex justify-between"><span>巨人殺手 (Giant Kills):</span> <span className="text-slate-800">{student.giant_kills || giantKillsCount} 次</span></li>
+               </ul>
+            </div>
+
+            {/* Achievements */}
+            <div className="px-8 pb-8 pt-2">
+               <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b pb-2">Achievements</h4>
+               <div className="flex flex-wrap gap-2">
+                 {uniqueAchievements.length > 0 ? uniqueAchievements.map(badgeId => {
+                     const badge = ACHIEVEMENT_DATA[badgeId];
+                     if (!badge) return null;
+                     return (
+                         <div key={badgeId} className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500 shadow-sm border" title={badge.name}>
+                             {badge.icon}
+                         </div>
+                     );
+                 }) : <p className="text-xs text-slate-300">尚未獲得徽章</p>}
+               </div>
+            </div>
+            
+            {/* Download Watermark */}
+            <div className="bg-slate-800 text-slate-400 text-center py-2 text-[8px] font-black tracking-widest uppercase">
+              Generated by BCKLAS Squash System v{CURRENT_VERSION}
+            </div>
+          </div>
+
+          {/* Download Button */}
+          <button 
+            onClick={handleDownload} 
+            disabled={isDownloading}
+            className="mt-6 flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-full font-black shadow-xl shadow-blue-900/50 hover:bg-blue-500 transition-all disabled:opacity-50"
+          >
+            {isDownloading ? <Loader2 className="animate-spin" size={18}/> : <Download size={18}/>}
+            {isDownloading ? '生成圖片中...' : '下載卡片 (PNG)'}
+          </button>
+          
+          <button onClick={onClose} className="mt-4 text-white/50 hover:text-white text-sm font-bold transition-all">關閉 (Close)</button>
+        </div>
+      </div>
+    );
+  };
+
   const PlayerDashboard = ({ student, data, onClose }) => {
     if (!student || !data) return null;
 
@@ -2108,6 +2268,10 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
           </div>
         </header>
         <div className="p-10 max-w-7xl mx-auto pb-40">
+          {showPlayerCard && (
+             <PlayerCardModal student={showPlayerCard} onClose={() => setShowPlayerCard(null)} />
+          )}
+
           {viewingStudent && (
              <PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />
           )}
@@ -2311,7 +2475,7 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                     <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] bg-slate-50 border-b font-black"><tr><th className="px-8 py-6 text-center">排名</th><th className="px-8 py-6">隊員資料</th><th className="px-8 py-6">目前章別</th><th className="px-8 py-6 text-right">基礎分</th><th className="px-8 py-6 text-right">總分</th>{role === 'admin' && <th className="px-8 py-6 text-center">教練操作</th>}</tr></thead>
                     <tbody className="divide-y divide-slate-50">
                       {filteredStudents.map((s, i) => (
-                        <tr key={s.id} className="group hover:bg-blue-50/30 transition-all cursor-pointer" onClick={() => setViewingStudent(s)}>
+                        <tr key={s.id} className="group hover:bg-blue-50/30 transition-all cursor-pointer" onClick={() => setShowPlayerCard(s)}>
                           <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
                           <td className="px-8 py-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.name[0]}</div><div><div className="font-black text-lg text-slate-800">{s.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div></div></div></td>
                           <td className="px-8 py-8"><div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black">{s.badge}</span></div></td>
