@@ -140,7 +140,33 @@ const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
 PosterTemplate.displayName = 'PosterTemplate'; // Best practice for forwardRef
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "8.0"; 
+const CURRENT_VERSION = "8.1"; 
+
+// --- Helper function for preloading images ---
+const loadImage = (url) => {
+    return new Promise((resolve, reject) => {
+        if (!url) {
+            resolve(null); // Resolve with null if no URL is provided
+            return;
+        }
+        // If it's a data URL, it's already loaded.
+        if (url.startsWith('data:image')) {
+            resolve(url);
+            return;
+        }
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => resolve(url);
+        img.onerror = (err) => {
+            console.error("Image preload failed:", url, err);
+            // Don't reject, just resolve with null so the process can continue
+            // This prevents one broken image from stopping the whole download.
+            resolve(null); 
+        };
+        img.src = url;
+    });
+};
+
 
 export default function App() {
   // --- 狀態管理 ---
@@ -1546,44 +1572,26 @@ const savePendingAttendance = async () => {
   const handleGeneratePoster = async () => {
     setIsGeneratingPoster(true);
 
+    // Use a deep copy to avoid modifying state directly
     const dataToRender = JSON.parse(JSON.stringify(monthlyStarEditData));
 
-    const loadImageAsDataURL = (url) => {
-        return new Promise((resolve, reject) => {
-            if (!url) {
-                resolve(null);
-                return;
-            }
-            const img = new Image();
-            img.crossOrigin = 'Anonymous';
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                resolve(canvas.toDataURL('image/png'));
-            };
-            img.onerror = (err) => {
-                console.error("Image loading failed for sanitization:", url, err);
-                reject(new Error(`Failed to load image: ${url}`));
-            };
-            img.src = url;
-        });
-    };
-
     try {
-        const [malePhoto, femalePhoto, logo] = await Promise.all([
-            loadImageAsDataURL(dataToRender.maleWinner.fullBodyPhotoUrl),
-            loadImageAsDataURL(dataToRender.femaleWinner.fullBodyPhotoUrl),
-            loadImageAsDataURL(systemConfig.schoolLogo)
+        // Preload all images and get their data URLs
+        const [malePhotoData, femalePhotoData, logoData] = await Promise.all([
+            loadImage(dataToRender.maleWinner.fullBodyPhotoUrl),
+            loadImage(dataToRender.femaleWinner.fullBodyPhotoUrl),
+            loadImage(systemConfig.schoolLogo)
         ]);
-
-        dataToRender.maleWinner.fullBodyPhotoUrl = malePhoto;
-        dataToRender.femaleWinner.fullBodyPhotoUrl = femalePhoto;
         
-        setPosterData({ ...dataToRender, schoolLogo: logo });
+        // This is a temporary state for rendering the preloaded images.
+        setPosterData({ 
+            ...dataToRender, 
+            maleWinner: { ...dataToRender.maleWinner, fullBodyPhotoUrl: malePhotoData },
+            femaleWinner: { ...dataToRender.femaleWinner, fullBodyPhotoUrl: femalePhotoData },
+            schoolLogo: logoData
+        });
         
+        // Wait for the DOM to update with the new data before running html2canvas
         setTimeout(async () => {
             const posterElement = posterRef.current;
             if (!posterElement) {
@@ -1592,7 +1600,13 @@ const savePendingAttendance = async () => {
                 return;
             }
             try {
-                const canvas = await html2canvas(posterElement, { scale: 2, useCORS: true });
+                const canvas = await html2canvas(posterElement, { 
+                    scale: 2, 
+                    useCORS: true,
+                    // Allow images with CORS issues to be partially rendered (as blank)
+                    // This can help debug if a specific image is the problem
+                    allowTaint: true, 
+                });
                 const image = canvas.toDataURL('image/png', 1.0);
                 const link = document.createElement('a');
                 link.href = image;
@@ -1602,12 +1616,13 @@ const savePendingAttendance = async () => {
                 document.body.removeChild(link);
             } catch (canvasError) {
                 console.error('海報生成失敗 (html2canvas stage):', canvasError);
-                alert('海報生成失敗，請確認所有圖片均已成功上傳。');
+                alert('海報生成失敗，請確認所有圖片均已成功上傳且可被存取。');
             } finally {
+                // Clean up states
                 setIsGeneratingPoster(false);
                 setPosterData(null);
             }
-        }, 500);
+        }, 500); // 500ms delay to ensure DOM update
 
     } catch (preloadError) {
         console.error('海報圖片預加載失敗:', preloadError);
@@ -1623,11 +1638,11 @@ const savePendingAttendance = async () => {
 
     if (!student) return null;
 
-    // 取得該學生在排行榜中的排名
+    // Find the student's current index in the ranked list
     const currentIndex = rankedStudents.findIndex(s => s.id === student.id);
     const rank = currentIndex >= 0 ? currentIndex + 1 : '-';
 
-    // 上一位 / 下一位邏輯
+    // Navigation handlers
     const handlePrev = (e) => {
       e.stopPropagation();
       if (currentIndex > 0) setShowPlayerCard(rankedStudents[currentIndex - 1]);
@@ -1637,16 +1652,12 @@ const savePendingAttendance = async () => {
       if (currentIndex < rankedStudents.length - 1) setShowPlayerCard(rankedStudents[currentIndex + 1]);
     };
 
-    // 計算相關數據 (勝率、比賽次數、巨人殺手)
+    // Calculate stats
     const studentMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === student.id || m.player2Id === student.id));
     const totalMatches = studentMatches.length;
     const wins = studentMatches.filter(m => m.winnerId === student.id).length;
     const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
-    
-    // 假設我們以參加過的賽事 (tournamentName) 數量作為 "出席比賽次數"
     const competitionsCount = new Set(studentMatches.map(m => m.tournamentName)).size;
-    
-    // 計算巨人殺手次數 (簡易邏輯：獲勝且對手排名比自己高 5 名以上)
     let giantKillsCount = 0;
     studentMatches.filter(m => m.winnerId === student.id).forEach(match => {
         const opponentId = match.player1Id === student.id ? match.player2Id : match.player1Id;
@@ -1657,13 +1668,24 @@ const savePendingAttendance = async () => {
     const studentAchievements = achievements.filter(ach => ach.studentId === student.id);
     const uniqueAchievements = [...new Set(studentAchievements.map(ach => ach.badgeId))];
 
-    // 下載卡片功能
+    // Download handler
     const handleDownload = async (e) => {
       e.stopPropagation();
       if (!cardRef.current) return;
       setIsDownloading(true);
+
       try {
-        const canvas = await html2canvas(cardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        // Preload images before calling html2canvas
+        await Promise.all([
+          loadImage(student.photo_url),
+          loadImage(systemConfig.schoolLogo)
+        ]);
+
+        const canvas = await html2canvas(cardRef.current, { 
+          scale: 2, 
+          useCORS: true, 
+          backgroundColor: '#ffffff'
+        });
         const image = canvas.toDataURL('image/png', 1.0);
         const link = document.createElement('a');
         link.href = image;
@@ -1673,7 +1695,7 @@ const savePendingAttendance = async () => {
         document.body.removeChild(link);
       } catch (err) {
         console.error("下載卡片失敗:", err);
-        alert("下載失敗，請稍後再試。");
+        alert("下載卡片圖片失敗，請檢查網絡或圖片連結。");
       } finally {
         setIsDownloading(false);
       }
@@ -1683,9 +1705,7 @@ const savePendingAttendance = async () => {
       <div className="fixed inset-0 z-[300] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={onClose}>
         <div className="relative max-w-md w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
           
-          {/* 卡片本體 */}
           <div ref={cardRef} className="w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-100 relative">
-            {/* Header */}
             <div className="bg-slate-50 border-b p-6 flex justify-between items-center relative">
               <SchoolLogo size={24} />
               <div className="text-center flex-1 z-10">
@@ -1694,7 +1714,6 @@ const savePendingAttendance = async () => {
               <TrophyIcon size={32} className="text-slate-200 absolute right-4 opacity-50" />
             </div>
 
-            {/* Profile & Navigation */}
             <div className="p-8 pb-4 flex flex-col items-center relative">
               <div className="w-32 h-32 rounded-full bg-slate-100 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center mb-4 relative z-10">
                  {student.photo_url ? (
@@ -1704,7 +1723,6 @@ const savePendingAttendance = async () => {
                  )}
               </div>
               
-              {/* Navigation Arrows */}
               <button onClick={handlePrev} disabled={currentIndex <= 0} className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30 transition-all z-20"><ChevronRight className="rotate-180" size={24}/></button>
               <button onClick={handleNext} disabled={currentIndex >= rankedStudents.length - 1} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30 transition-all z-20"><ChevronRight size={24}/></button>
               
@@ -1712,7 +1730,6 @@ const savePendingAttendance = async () => {
               <p className="text-sm font-bold text-slate-400 uppercase mt-1">CLASS: {student.class} ({student.classNo})</p>
             </div>
 
-            {/* Highlights */}
             <div className="grid grid-cols-3 gap-2 px-6 py-4">
                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
                  <p className="text-xl font-black text-blue-600">{student.totalPoints}</p>
@@ -1728,7 +1745,6 @@ const savePendingAttendance = async () => {
                </div>
             </div>
 
-            {/* Season Stats */}
             <div className="px-8 py-4">
                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b pb-2">Season Stats (2024-25)</h4>
                <ul className="space-y-2 text-sm font-bold text-slate-600">
@@ -1738,7 +1754,6 @@ const savePendingAttendance = async () => {
                </ul>
             </div>
 
-            {/* Achievements */}
             <div className="px-8 pb-8 pt-2">
                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b pb-2">Achievements</h4>
                <div className="flex flex-wrap gap-2">
@@ -1754,20 +1769,18 @@ const savePendingAttendance = async () => {
                </div>
             </div>
             
-            {/* Download Watermark */}
             <div className="bg-slate-800 text-slate-400 text-center py-2 text-[8px] font-black tracking-widest uppercase">
               Generated by BCKLAS Squash System v{CURRENT_VERSION}
             </div>
           </div>
 
-          {/* Download Button */}
           <button 
             onClick={handleDownload} 
             disabled={isDownloading}
             className="mt-6 flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-full font-black shadow-xl shadow-blue-900/50 hover:bg-blue-500 transition-all disabled:opacity-50"
           >
             {isDownloading ? <Loader2 className="animate-spin" size={18}/> : <Download size={18}/>}
-            {isDownloading ? '生成圖片中...' : '下載卡片 (PNG)'}
+            {isDownloading ? '生成中...' : '下載卡片 (PNG)'}
           </button>
           
           <button onClick={onClose} className="mt-4 text-white/50 hover:text-white text-sm font-bold transition-all">關閉 (Close)</button>
