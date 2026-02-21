@@ -9,7 +9,7 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
   Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-  Pencil, Percent, UserPlus
+  Pencil, Percent, UserPlus, Printer
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -24,6 +24,9 @@ import {
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
+import html2canvas from 'html2canvas';
+import QRCode from 'qrcode.react';
+
 
 // --- Firebase 初始化 ---
 let firebaseConfig;
@@ -70,9 +73,74 @@ const ACHIEVEMENT_DATA = {
   'elite-player': { name: '年度壁球精英', desc: '賽季積分榜前八名', icon: <Sparkles size={24} /> },
 };
 
+// *** FIX: Moved PosterTemplate outside of the App component ***
+const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
+    if (!data) return null;
+    return (
+        <div ref={ref} className="bg-white p-8" style={{ width: '827px', height: '1170px', fontFamily: 'sans-serif', position: 'relative' }}>
+            {/* Header */}
+            <div className="flex justify-between items-center border-b-4 border-black pb-4">
+                {schoolLogo ? <img src={schoolLogo} alt="School Logo" className="h-24 object-contain" crossOrigin="anonymous"/> : <div className="w-24 h-24 bg-slate-200"></div>}
+                <div className="text-center">
+                    <h1 style={{ fontFamily: 'serif', fontSize: '48px', fontWeight: 'bold' }}>BCKLAS 壁球隊 每月之星</h1>
+                    <p style={{ fontSize: '28px', fontWeight: '600' }}>{data.month.replace('-', ' 年 ')} 月</p>
+                </div>
+                <div className="w-24 h-24 flex items-center justify-center text-slate-400"><TrophyIcon size={80}/></div>
+            </div>
+            {/* Body */}
+            <div className="flex mt-8 gap-8">
+                {/* Male */}
+                <div className="w-1/2">
+                    <h2 className="text-2xl font-bold text-blue-700 mb-4 text-center">PLAYER OF THE MONTH (MALE)</h2>
+                    <div className="w-full bg-slate-200" style={{ height: '500px' }}>
+                        {data.maleWinner.fullBodyPhotoUrl && <img src={data.maleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top" crossOrigin="anonymous"/>}
+                    </div>
+                    <h3 className="text-4xl font-bold mt-4">{data.maleWinner.studentName} <span className="text-2xl text-slate-500">({data.maleWinner.studentClass})</span></h3>
+                    <div className="mt-6 space-y-4">
+                        <div>
+                            <h4 className="text-xl font-bold border-b-2 border-blue-600 inline-block pb-1 mb-2">獲選原因</h4>
+                            <p className="text-lg">{data.maleWinner.reason}</p>
+                        </div>
+                        <div>
+                            <h4 className="text-xl font-bold border-b-2 border-blue-600 inline-block pb-1 mb-2">本年度目標</h4>
+                            <p className="text-lg italic">"{data.maleWinner.goals}"</p>
+                        </div>
+                    </div>
+                </div>
+                {/* Female */}
+                <div className="w-1/2">
+                    <h2 className="text-2xl font-bold text-pink-600 mb-4 text-center">PLAYER OF THE MONTH (FEMALE)</h2>
+                    <div className="w-full bg-slate-200" style={{ height: '500px' }}>
+                         {data.femaleWinner.fullBodyPhotoUrl && <img src={data.femaleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top" crossOrigin="anonymous"/>}
+                    </div>
+                    <h3 className="text-4xl font-bold mt-4">{data.femaleWinner.studentName} <span className="text-2xl text-slate-500">({data.femaleWinner.studentClass})</span></h3>
+                     <div className="mt-6 space-y-4">
+                        <div>
+                            <h4 className="text-xl font-bold border-b-2 border-pink-500 inline-block pb-1 mb-2">獲選原因</h4>
+                            <p className="text-lg">{data.femaleWinner.reason}</p>
+                        </div>
+                        <div>
+                            <h4 className="text-xl font-bold border-b-2 border-pink-500 inline-block pb-1 mb-2">本年度目標</h4>
+                            <p className="text-lg italic">"{data.femaleWinner.goals}"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+             {/* Footer */}
+            <div className="absolute bottom-8 left-8 right-8 flex justify-between items-end">
+                <p className="text-lg font-semibold italic">汗水鑄就榮耀，目標定義未來</p>
+                <div className="text-center">
+                    <QRCode value={window.location.href} size={80} />
+                    <p className="text-xs font-bold mt-1">線上回顧歷屆每月之星</p>
+                </div>
+            </div>
+        </div>
+    )
+  });
+PosterTemplate.displayName = 'PosterTemplate'; // Best practice for forwardRef
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "8.0.0"; 
+const CURRENT_VERSION = "7.2.4"; 
 
 export default function App() {
   // --- 狀態管理 ---
@@ -127,7 +195,6 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const galleryInputRef = useRef(null);
-  const avatarInputRef = useRef(null);
   
   const [financeConfig, setFinanceConfig] = useState({
     nTeam: 1, costTeam: 2750,
@@ -145,7 +212,9 @@ export default function App() {
   });
   const [malePhotoPreview, setMalePhotoPreview] = useState(null);
   const [femalePhotoPreview, setFemalePhotoPreview] = useState(null);
-  const [editingAvatarForStudent, setEditingAvatarForStudent] = useState(null);
+  const posterRef = useRef(null);
+  const [isGeneratingPoster, setIsGeneratingPoster] = useState(false);
+  const [posterData, setPosterData] = useState(null);
 
 
 const awardAchievement = async (badgeId, studentId) => {
@@ -1514,7 +1583,6 @@ const savePendingAttendance = async () => {
         
         setPosterData({ ...dataToRender, schoolLogo: logo });
         
-        // Use a timeout to ensure React has re-rendered the hidden component with the new data URLs
         setTimeout(async () => {
             const posterElement = posterRef.current;
             if (!posterElement) {
@@ -1557,9 +1625,7 @@ const savePendingAttendance = async () => {
                 <button onClick={onClose} className="p-4 bg-white text-slate-500 hover:text-blue-600 rounded-2xl transition-all border shadow-sm">
                     <ArrowLeft size={24}/>
                 </button>
-                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-4xl font-black text-slate-400 border-4 border-white shadow-inner uppercase">
-                   {student.avatarUrl ? <img src={student.avatarUrl} alt={student.name} className="w-full h-full object-cover rounded-full" /> : student.name[0]}
-                </div>
+                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-4xl font-black text-slate-400 border-4 border-white shadow-inner uppercase">{student.name[0]}</div>
                 <div>
                     <h3 className="text-4xl font-black text-slate-800">{student.name}</h3>
                     <p className="text-sm font-bold text-slate-400">{student.class} ({student.classNo}) - {student.squashClass}</p>
@@ -1741,33 +1807,11 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
       
-      <input 
-        type="file" 
-        ref={avatarInputRef} 
-        className="hidden" 
-        accept="image/*"
-        onChange={async (e) => {
-            if (e.target.files && e.target.files[0] && editingAvatarForStudent) {
-                const file = e.target.files[0];
-                setIsUpdating(true);
-                try {
-                    const compressedBase64 = await compressImage(file);
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', editingAvatarForStudent.id), {
-                        avatarUrl: compressedBase64
-                    });
-                    alert(`✅ ${editingAvatarForStudent.name} 的頭像已更新！`);
-                } catch (err) {
-                    console.error("Avatar upload failed:", err);
-                    alert("頭像上傳失敗。");
-                } finally {
-                    setIsUpdating(false);
-                    setEditingAvatarForStudent(null);
-                    e.target.value = null;
-                }
-            }
-        }}
-      />
-      
+      {/* Hidden Poster for Rendering */}
+      <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100}}>
+          <PosterTemplate ref={posterRef} data={posterData} />
+      </div>
+
       <input 
         type="file" 
         ref={galleryInputRef} 
@@ -2239,7 +2283,7 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                           </div>
                           <div className="relative z-10 p-8 w-full h-full flex flex-col items-center">
                               {i === 0 && (<div className="absolute -top-14 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg"><Crown size={64} fill="currentColor" strokeWidth={1.5} /></div>)}
-                              <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>{s.avatarUrl ? <img src={s.avatarUrl} alt={s.name} className="w-full h-full object-cover rounded-full" /> : s.name[0]}<div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>{label}</div></div>
+                              <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>{s.name[0]}<div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>{label}</div></div>
                               <div className="mt-4 w-full"><h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3><p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p><div className="my-6"><div className={`text-5xl font-black font-mono tracking-tight ${iconColor}`}>{s.totalPoints}</div><p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Points</p></div><div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 border border-white/50 backdrop-blur-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black text-slate-500">{s.badge}</span></div></div>
                           </div>
                       </div>
@@ -2269,7 +2313,7 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                       {filteredStudents.map((s, i) => (
                         <tr key={s.id} className="group hover:bg-blue-50/30 transition-all cursor-pointer" onClick={() => setViewingStudent(s)}>
                           <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
-                          <td className="px-8 py-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.avatarUrl ? <img src={s.avatarUrl} alt={s.name} className="w-full h-full object-cover rounded-2xl"/> : s.name[0]}</div><div><div className="font-black text-lg text-slate-800">{s.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div></div></div></td>
+                          <td className="px-8 py-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.name[0]}</div><div><div className="font-black text-lg text-slate-800">{s.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div></div></div></td>
                           <td className="px-8 py-8"><div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black">{s.badge}</span></div></td>
                           <td className="px-8 py-8 text-right font-mono text-slate-400">{s.points}</td>
                           <td className="px-8 py-8 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
@@ -2468,15 +2512,15 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                    {filteredStudents.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
                      <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative cursor-pointer" onClick={() => setViewingStudent(s)}>
                         <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>{s.badge}</div>
-                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">{s.avatarUrl ? <img src={s.avatarUrl} alt={s.name} className="w-full h-full object-cover rounded-[2rem]" /> : s.name[0]}</div>
+                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">{s.name[0]}</div>
                         <p className="text-xl font-black text-slate-800">{s.name}</p>
                         <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
                         {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
                         <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3" onClick={(e) => e.stopPropagation()}>
-                           <button onClick={() => { setEditingAvatarForStudent(s); avatarInputRef.current.click(); }} className="text-slate-300 hover:text-blue-500 hover:bg-blue-50 p-2 rounded-xl transition-all" title="上傳頭像"><Camera size={18}/></button>
                            <button onClick={() => handleManualAward(s)} className="text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 p-2 rounded-xl transition-all" title="授予徽章"><Award size={18}/></button>
                            <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={18}/></button>
+                           <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={18}/></button>
                            <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={18}/></button>
                         </div>
                      </div>
