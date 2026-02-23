@@ -26,6 +26,9 @@ import {
 } from 'firebase/auth';
 import html2canvas from 'html2canvas';
 import QRCode from 'qrcode.react';
+import { Calendar, momentLocalizer } from 'react-big-calendar';
+import moment from 'moment';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 
 // --- Firebase 初始化 ---
@@ -55,6 +58,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Calendar Localizer
+const localizer = momentLocalizer(moment);
+
 // 強制鎖定 App ID
 const appId = 'bcklas-squash-core-v1'; 
 const ACHIEVEMENT_DATA = {
@@ -74,21 +80,15 @@ const ACHIEVEMENT_DATA = {
 };
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "8.2"; 
+const CURRENT_VERSION = "9.0"; 
 
 // --- Helper function to convert any image URL to a Base64 Data URL ---
 const toDataURL = (url) => {
-    return new Promise((resolve, reject) => {
-        if (!url) {
-            resolve(null);
-            return;
-        }
-        // If it's already a Data URL, just return it.
-        if (url.startsWith('data:image')) {
+    return new Promise((resolve) => {
+        if (!url || url.startsWith('data:image')) {
             resolve(url);
             return;
         }
-
         const img = new Image();
         img.crossOrigin = 'Anonymous';
         img.onload = () => {
@@ -102,13 +102,11 @@ const toDataURL = (url) => {
               resolve(dataURL);
             } catch (e) {
               console.error("Canvas toDataURL failed:", e);
-              // This can happen if the image is tainted despite our best efforts
               resolve(null);
             }
         };
-        img.onerror = (err) => {
-            console.error("Image toDataURL conversion failed to load:", url, err);
-            // Resolve with null instead of rejecting to prevent total failure.
+        img.onerror = () => {
+            console.error("Image toDataURL conversion failed to load:", url);
             resolve(null);
         };
         img.src = url;
@@ -116,7 +114,6 @@ const toDataURL = (url) => {
 };
 
 
-// *** FIX: Moved PosterTemplate outside of the App component ***
 const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
     if (!data) return null;
     return (
@@ -180,7 +177,7 @@ const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
         </div>
     )
   });
-PosterTemplate.displayName = 'PosterTemplate'; // Best practice for forwardRef
+PosterTemplate.displayName = 'PosterTemplate';
 
 export default function App() {
   // --- 狀態管理 ---
@@ -206,6 +203,7 @@ export default function App() {
   const [newTournamentName, setNewTournamentName] = useState('');
   const [tournamentPlayers, setTournamentPlayers] = useState([]);
   const [numGroups, setNumGroups] = useState(1);
+  const [selectedSchedule, setSelectedSchedule] = useState(null); // For Calendar Modal
 
   
   const [systemConfig, setSystemConfig] = useState({ 
@@ -1046,15 +1044,28 @@ const savePendingAttendance = async () => {
   }, [schedules]);
 
   const uniqueTrainingClasses = useMemo(() => {
-    const classes = students.map(s => s.squashClass).filter(Boolean);
+    const classes = schedules.map(s => s.trainingClass).filter(Boolean);
     return ['ALL', ...new Set(classes)];
-  }, [students]);
+  }, [schedules]);
 
-  const filteredSchedules = useMemo(() => {
+  const calendarEvents = useMemo(() => {
     const filtered = selectedClassFilter === 'ALL' 
       ? schedules 
       : schedules.filter(s => s.trainingClass === selectedClassFilter);
-    return filtered.sort((a,b) => a.date.localeCompare(b.date));
+    
+    return filtered.map(s => {
+      // Basic parsing, assuming date is YYYY-MM-DD and time is HH:MM
+      const [year, month, day] = s.date.split('-').map(Number);
+      const startTime = s.time ? s.time.split(':').map(Number) : [16, 0]; // Default to 16:00
+      const endTime = s.time ? [startTime[0] + 2, startTime[1]] : [18, 0]; // Default to 2 hours duration
+
+      return {
+        title: `[${s.trainingClass}] ${s.time || ''}`,
+        start: new Date(year, month - 1, day, startTime[0], startTime[1]),
+        end: new Date(year, month - 1, day, endTime[0], endTime[1]),
+        resource: s, // Keep original data
+      };
+    });
   }, [schedules, selectedClassFilter]);
 
   const studentsInSelectedAttendanceClass = useMemo(() => {
@@ -1075,8 +1086,8 @@ const savePendingAttendance = async () => {
       csvContent += '陳小明,6A,1,銅章,120,A班,\n';
       fileName = 'student_template.csv';
     } else if (type === 'schedule') {
-      csvContent += '訓練班名稱,日期,地點,教練,備註\n';
-      csvContent += 'A班,2024-09-05,學校壁球場,徐教練,請準時出席\n';
+      csvContent += '訓練班名稱,日期,時間,地點,教練,備註\n';
+      csvContent += 'A班,2024-09-05,16:00,學校壁球場,徐教練,請準時出席\n';
       fileName = 'schedule_template.csv';
     } else {
       return;
@@ -1588,7 +1599,6 @@ const savePendingAttendance = async () => {
     const dataToRender = JSON.parse(JSON.stringify(monthlyStarEditData));
 
     try {
-        // Convert all images to Base64 to prevent CORS issues.
         const [malePhotoData, femalePhotoData, logoData] = await Promise.all([
             toDataURL(dataToRender.maleWinner.fullBodyPhotoUrl),
             toDataURL(dataToRender.femaleWinner.fullBodyPhotoUrl),
@@ -1602,7 +1612,6 @@ const savePendingAttendance = async () => {
             schoolLogo: logoData
         });
         
-        // Use a short timeout to allow React to re-render with the new Base64 image sources.
         setTimeout(async () => {
             const posterElement = posterRef.current;
             if (!posterElement) {
@@ -1611,10 +1620,7 @@ const savePendingAttendance = async () => {
                 return;
             }
             try {
-                const canvas = await html2canvas(posterElement, { 
-                    scale: 2, 
-                    useCORS: true, // This is still useful
-                });
+                const canvas = await html2canvas(posterElement, { scale: 2, useCORS: true });
                 const image = canvas.toDataURL('image/png', 1.0);
                 const link = document.createElement('a');
                 link.href = image;
@@ -1645,11 +1651,9 @@ const savePendingAttendance = async () => {
 
     if (!student) return null;
 
-    // Find the student's current index in the ranked list
     const currentIndex = rankedStudents.findIndex(s => s.id === student.id);
     const rank = currentIndex >= 0 ? currentIndex + 1 : '-';
 
-    // Navigation handlers
     const handlePrev = (e) => {
       e.stopPropagation();
       if (currentIndex > 0) setShowPlayerCard(rankedStudents[currentIndex - 1]);
@@ -1659,7 +1663,6 @@ const savePendingAttendance = async () => {
       if (currentIndex < rankedStudents.length - 1) setShowPlayerCard(rankedStudents[currentIndex + 1]);
     };
 
-    // Calculate stats
     const studentMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === student.id || m.player2Id === student.id));
     const totalMatches = studentMatches.length;
     const wins = studentMatches.filter(m => m.winnerId === student.id).length;
@@ -1675,56 +1678,18 @@ const savePendingAttendance = async () => {
     const studentAchievements = achievements.filter(ach => ach.studentId === student.id);
     const uniqueAchievements = [...new Set(studentAchievements.map(ach => ach.badgeId))];
 
-    // Download handler
     const handleDownload = async (e) => {
       e.stopPropagation();
-      if (!cardRef.current) return;
+      if (!cardRef.current || isDownloading) return;
       setIsDownloading(true);
 
-      // Create a temporary clone of the student data to avoid mutating state
-      const cardDataClone = JSON.parse(JSON.stringify(student));
-
       try {
-        // Convert all external images to Base64 data URLs before rendering
-        const [photoData, logoData] = await Promise.all([
-            toDataURL(cardDataClone.photo_url),
-            toDataURL(systemConfig.schoolLogo)
-        ]);
+        await Promise.all([toDataURL(student.photo_url), toDataURL(systemConfig.schoolLogo)]);
 
-        // Temporarily render a hidden version of the card with Base64 images for html2canvas
-        const tempContainer = document.createElement('div');
-        tempContainer.style.position = 'absolute';
-        tempContainer.style.left = '-9999px';
-
-        // A simplified card for canvas rendering
-        const canvasCard = (
-            <div ref={cardRef} className="w-[400px] bg-white rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-100 relative">
-                <div className="bg-slate-50 border-b p-6 flex justify-between items-center relative">
-                    {logoData && <img src={logoData} alt="logo" style={{height: '24px'}} crossOrigin="anonymous"/>}
-                    <h3 className="font-black text-slate-800 tracking-widest text-sm">BCKLAS SQUASH TEAM</h3>
-                    <TrophyIcon size={32} className="text-slate-200" />
-                </div>
-                <div className="p-8 pb-4 flex flex-col items-center">
-                    <div className="w-32 h-32 rounded-full bg-slate-100 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center mb-4">
-                        {photoData ? <img src={photoData} alt={student.name} className="w-full h-full object-cover" crossOrigin="anonymous"/> : <span className="text-5xl font-black text-slate-300">{student.name[0]}</span>}
-                    </div>
-                    <h2 className="text-2xl font-black text-slate-800">{student.name} {student.eng_name || ''}</h2>
-                    <p className="text-sm font-bold text-slate-400 uppercase mt-1">CLASS: {student.class} ({student.classNo})</p>
-                </div>
-                 {/* Simplified content for brevity... You'd replicate the full card here */}
-            </div>
-        );
-        
-        // This is a placeholder for the actual logic to render the component offscreen
-        // In a real app, you'd render this to the hidden div, then run canvas.
-        // For now, we'll try the direct approach with the main cardRef again, hoping `toDataURL` is enough
-        
         const canvas = await html2canvas(cardRef.current, { 
           scale: 2, 
           useCORS: true,
-          // We need to re-render the card with Base64, which is complex.
-          // Let's rely on the fact that the `img` tags are already in the DOM and might get picked up.
-          // The `toDataURL` pre-caching should help the browser allow the CORS request.
+          backgroundColor: '#ffffff'
         });
 
         const image = canvas.toDataURL('image/png', 1.0);
@@ -2326,6 +2291,26 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
              <PlayerCardModal student={showPlayerCard} onClose={() => setShowPlayerCard(null)} />
           )}
 
+          {selectedSchedule && (
+            <div className="fixed inset-0 z-[250] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelectedSchedule(null)}>
+              <div className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl animate-in fade-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3"><div className="w-3 h-3 rounded-full bg-blue-500"></div>{selectedSchedule.resource.trainingClass} 訓練詳情</h3>
+                <div className="space-y-4 text-lg">
+                  <div className="flex items-center gap-4"><CalendarIcon size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.resource.date}</span></div>
+                  <div className="flex items-center gap-4"><Clock size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.resource.time || 'N/A'}</span></div>
+                  <div className="flex items-center gap-4"><MapPin size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.resource.location}</span></div>
+                </div>
+                {role === 'admin' && moment(selectedSchedule.start).isSame(new Date(), 'day') && (
+                  <div className="mt-8 pt-6 border-t">
+                    <button onClick={() => { setActiveTab('attendance'); setSelectedSchedule(null); }} className="w-full text-center py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all">
+                      前往點名
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {viewingStudent && (
              <PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />
           )}
@@ -2754,7 +2739,20 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                   <div className="flex items-center gap-6"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div><div><h3 className="text-xl font-black">訓練班日程表</h3><p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p></div></div>
                   <div className="flex flex-wrap gap-4 w-full md:w-auto"><div className="relative flex-1 md:flex-none"><Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={18}/><select value={selectedClassFilter} onChange={(e)=>setSelectedClassFilter(e.target.value)} className="w-full md:w-60 bg-slate-50 border-none outline-none pl-12 pr-6 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner">{uniqueTrainingClasses.map(c => (<option key={c} value={c}>{c === 'ALL' ? '🌍 全部訓練班' : `🏸 ${c}`}</option>))}</select></div>{role === 'admin' && (<div className="flex gap-2"><button onClick={()=>downloadTemplate('schedule')} className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border transition-all" title="下載日程範本"><Download size={20}/></button><label className="bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm"><Upload size={18}/> 匯入 CSV 日程<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportSchedules}/></label></div>)}</div>
                </div>
-               {filteredSchedules.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><CalendarIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無訓練日程紀錄</p><p className="text-sm text-slate-300 mt-2">請點擊上方匯入按鈕上傳 CSV 檔案</p></div>) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{filteredSchedules.map(sc => {const isToday = new Date().toISOString().split('T')[0] === sc.date;return (<div key={sc.id} className={`bg-white p-10 rounded-[3.5rem] border-2 shadow-sm hover:scale-[1.02] transition-all relative overflow-hidden group ${isToday ? 'border-blue-500 shadow-xl shadow-blue-50' : 'border-slate-100'}`}>{isToday && (<div className="absolute top-0 right-0 bg-blue-600 text-white px-6 py-2 rounded-bl-3xl text-[10px] font-black uppercase tracking-widest animate-pulse">Today • 今日訓練</div>)}<div className="mb-8"><span className="text-[10px] bg-blue-50 text-blue-600 px-4 py-2 rounded-full font-black uppercase tracking-widest border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all">{sc.trainingClass}</span><h4 className="text-3xl font-black text-slate-800 mt-6">{sc.date}</h4><p className="text-[10px] text-slate-300 font-bold mt-1 uppercase tracking-[0.3em]">Training Session</p></div><div className="space-y-5"><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><MapPin size={18}/></div><span className="font-bold">{sc.location}</span></div><div className="flex items-center gap-4 text-sm text-slate-600"><div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500"><UserCheck size={18}/></div><span className="font-bold">{sc.coach} 教練</span></div>{role === 'admin' && (<button onClick={() => deleteItem('schedules', sc.id)} className="absolute top-8 right-8 w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all shadow-sm z-10" title="刪除課堂"><Trash2 size={20}/></button>)}{sc.notes && (<div className="p-6 bg-slate-50 rounded-[2rem] text-xs text-slate-400 leading-relaxed italic border border-slate-100">"{sc.notes}"</div>)}</div></div>);})}</div>)}
+               <div className="bg-white p-6 rounded-[3rem] shadow-sm border h-[70vh]">
+                  <Calendar
+                      localizer={localizer}
+                      events={calendarEvents}
+                      startAccessor="start"
+                      endAccessor="end"
+                      style={{ height: '100%' }}
+                      onSelectEvent={event => setSelectedSchedule(event)}
+                      eventPropGetter={(event) => {
+                          const className = event.resource.trainingClass === 'A班' ? 'bg-blue-500' : event.resource.trainingClass === 'B班' ? 'bg-green-500' : 'bg-yellow-500';
+                          return { className: `${className} border-none text-white p-1 text-xs rounded-lg` };
+                      }}
+                  />
+               </div>
             </div>
           )}
           {!viewingStudent && activeTab === 'attendance' && role === 'admin' && (
