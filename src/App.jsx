@@ -34,25 +34,47 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 // --- Firebase 初始化 ---
 let firebaseConfig;
 try {
+  // 優先從 Vite/CRA 的環境變數讀取
   const envConfig = import.meta.env?.VITE_FIREBASE_CONFIG;
   if (envConfig) {
     firebaseConfig = JSON.parse(envConfig);
-  } else if (typeof __firebase_config !== 'undefined') {
+  } 
+  // 其次，為兼容舊部署方式，嘗試從全域變數讀取
+  else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
     firebaseConfig = JSON.parse(__firebase_config);
-  } else {
-    throw new Error('No env config');
+  } 
+  // 如果都找不到，就拋出錯誤
+  else {
+    throw new Error("Firebase config not found. Please set VITE_FIREBASE_CONFIG in your .env.local file.");
   }
 } catch (e) {
-  firebaseConfig = {
-    apiKey: "AIzaSyAYm_63S9pKMZ51Qb2ZlCHRsfuGzy2gstw",
-    authDomain: "squashreact.firebaseapp.com",
-    projectId: "squashreact",
-    storageBucket: "squashreact.firebasestorage.app",
-    messagingSenderId: "342733564194",
-    appId: "1:342733564194:web:7345d90d7d22c0b605dd7b",
-    measurementId: "G-JRZ0QSFLLQ"
-  };
+  console.error("Firebase Initialization Failed:", e.message);
+  // 在開發環境中給予更清晰的提示
+  if (import.meta.env.DEV) {
+    document.body.innerHTML = `
+      <div style="padding: 2rem; font-family: sans-serif; background-color: #FFFBEB; color: #92400E; height: 100vh;">
+        <h1 style="font-size: 1.5rem; font-weight: bold;">Firebase 初始化失敗</h1>
+        <p>系統找不到 Firebase 的設定檔。請檢查以下步驟：</p>
+        <ol style="list-style-type: decimal; padding-left: 2rem;">
+          <li>確認專案根目錄下有名為 <code>.env.local</code> 的檔案。</li>
+          <li>確認 <code>.env.local</code> 檔案中已設定 <code>VITE_FIREBASE_CONFIG</code> 變數。</li>
+          <li>在修改 <code>.env.local</code> 檔案後，您可能需要<strong>重新啟動開發伺服器</strong>。</li>
+        </ol>
+        <p>錯誤詳情: ${e.message}</p>
+      </div>
+    `;
+  }
+  // 在生產環境中，可以只顯示一個通用錯誤
+  else {
+     document.body.innerText = "Application failed to load. Please contact the administrator.";
+  }
 }
+
+// 只有在 firebaseConfig 成功載入後才初始化
+const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
+const auth = firebaseConfig ? getAuth(app) : null;
+const db = firebaseConfig ? getFirestore(app) : null;
+
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
