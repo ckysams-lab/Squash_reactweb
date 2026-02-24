@@ -33,6 +33,10 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 // --- Firebase 初始化 ---
 let firebaseConfig;
+let app = null;
+let auth = null;
+let db = null;
+
 try {
   // 優先從 Vite/CRA 的環境變數讀取
   const envConfig = import.meta.env?.VITE_FIREBASE_CONFIG;
@@ -45,8 +49,19 @@ try {
   } 
   // 如果都找不到，就拋出錯誤
   else {
-    throw new Error("Firebase config not found. Please set VITE_FIREBASE_CONFIG in your .env.local file.");
+    throw new Error("Firebase config not found. Please set VITE_FIREBASE_CONFIG in your .env.local file or define __firebase_config globally.");
   }
+
+  // 只有在 firebaseConfig 成功載入後才初始化
+  if (firebaseConfig) {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } else {
+    // 雖然前面已經 throw new Error，但作為雙重保險
+    throw new Error("firebaseConfig object is empty or invalid after parsing.");
+  }
+
 } catch (e) {
   console.error("Firebase Initialization Failed:", e.message);
   // 在開發環境中給予更清晰的提示
@@ -64,21 +79,11 @@ try {
       </div>
     `;
   }
-  // 在生產環境中，可以只顯示一個通用錯誤
+  // 在生產環境中，只顯示一個通用錯誤
   else {
      document.body.innerText = "Application failed to load. Please contact the administrator.";
   }
 }
-
-// 只有在 firebaseConfig 成功載入後才初始化
-const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
-const auth = firebaseConfig ? getAuth(app) : null;
-const db = firebaseConfig ? getFirestore(app) : null;
-
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
 
 // Calendar Localizer
 const localizer = momentLocalizer(moment);
