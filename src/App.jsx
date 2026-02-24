@@ -9,7 +9,7 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
   Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-  Pencil, Percent, UserPlus, Printer
+  Pencil, Percent, UserPlus, Printer, Eye, Columns
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -30,6 +30,9 @@ import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
+
+// --- 版本控制 ---
+const CURRENT_VERSION = "10.0"; 
 
 // --- Firebase 初始化 ---
 let firebaseConfig;
@@ -106,8 +109,6 @@ const ACHIEVEMENT_DATA = {
   'elite-player': { name: '年度壁球精英', desc: '賽季積分榜前八名', icon: <Sparkles size={24} /> },
 };
 
-// --- 版本控制 ---
-const CURRENT_VERSION = "9.1"; 
 
 // --- Helper function to convert any image URL to a Base64 Data URL ---
 const toDataURL = (url) => {
@@ -231,7 +232,7 @@ export default function App() {
   const [tournamentPlayers, setTournamentPlayers] = useState([]);
   const [numGroups, setNumGroups] = useState(1);
   const [selectedSchedule, setSelectedSchedule] = useState(null); // For Calendar Modal
-
+  const [awardsViewMode, setAwardsViewMode] = useState('grid'); // 'grid' or 'timeline'
   
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
@@ -561,8 +562,8 @@ const savePendingAttendance = async () => {
       const unsubGallery = onSnapshot(galleryRef, (snap) => {
         setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
-      const unsubAwards = onSnapshot(awardsRef, (snap) => {
-        setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const unsubAwards = onSnapshot(query(awardsRef, orderBy("date", "desc")), (snap) => {
+          setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
       const unsubAchievements = onSnapshot(query(achievementsRef, orderBy("timestamp", "desc")), (snap) => {
         setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -1926,6 +1927,96 @@ const savePendingAttendance = async () => {
         </div>
     );
 };
+
+const AwardCard = ({ award, student, style }) => {
+    const rank = award.rank || '';
+    
+    const rankStyles = useMemo(() => {
+        if (rank.includes('冠軍')) {
+            return {
+                bg: 'bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-400',
+                text: 'text-yellow-900',
+                shadow: 'shadow-yellow-400/30 hover:shadow-yellow-300/50',
+                border: 'border-yellow-500/50',
+                ribbon: 'bg-yellow-500',
+                rankText: 'text-yellow-800'
+            };
+        }
+        if (rank.includes('亞軍')) {
+            return {
+                bg: 'bg-gradient-to-br from-slate-200 via-gray-300 to-slate-300',
+                text: 'text-slate-800',
+                shadow: 'shadow-slate-400/30 hover:shadow-slate-300/50',
+                border: 'border-gray-400/50',
+                ribbon: 'bg-slate-500',
+                rankText: 'text-slate-100'
+            };
+        }
+        if (rank.includes('季軍') || rank.includes('殿軍')) {
+            return {
+                bg: 'bg-gradient-to-br from-orange-300 via-amber-500 to-orange-400',
+                text: 'text-orange-900',
+                shadow: 'shadow-amber-600/30 hover:shadow-amber-500/50',
+                border: 'border-orange-500/50',
+                ribbon: 'bg-orange-600',
+                rankText: 'text-orange-100'
+            };
+        }
+        return {
+            bg: 'bg-gradient-to-br from-blue-300 via-sky-400 to-blue-400',
+            text: 'text-sky-900',
+            shadow: 'shadow-sky-400/30 hover:shadow-sky-300/50',
+            border: 'border-sky-500/50',
+            ribbon: 'bg-sky-500',
+            rankText: 'text-sky-100'
+        };
+    }, [rank]);
+
+    return (
+        <div style={style} className={`group relative flex flex-col ${rankStyles.bg} rounded-3xl p-1.5 shadow-lg ${rankStyles.shadow} transition-all duration-300 ease-in-out hover:scale-105`}>
+            <div className="absolute top-0 left-10 w-12 h-16 overflow-hidden z-20">
+                <div className={`absolute -top-2 left-0 w-full h-full rotate-45 transform-gpu ${rankStyles.ribbon} shadow-md`}></div>
+            </div>
+
+            <div className="bg-white/50 backdrop-blur-sm rounded-[1.35rem] h-full flex flex-col p-6">
+                <div className="w-full aspect-[4/3] rounded-2xl bg-white/50 overflow-hidden relative border border-white/50 shadow-inner">
+                    {award.photoUrl ? (
+                        <img src={award.photoUrl} alt={award.title} className="w-full h-full object-cover" />
+                    ) : (
+                        <div className={`w-full h-full flex items-center justify-center opacity-20 ${rankStyles.text}`}>
+                            <Trophy size={64}/>
+                        </div>
+                    )}
+                    <div className={`absolute bottom-3 right-3 px-4 py-1.5 rounded-full text-sm font-black shadow-lg ${rankStyles.ribbon} ${rankStyles.rankText}`}>
+                        {award.rank}
+                    </div>
+                </div>
+                <div className="flex-1 flex flex-col pt-5 px-1">
+                    <p className={`text-xs font-bold ${rankStyles.text} opacity-70`}>{award.date}</p>
+                    <h4 className={`text-xl font-black leading-tight mt-1 mb-3 ${rankStyles.text}`}>{award.title}</h4>
+                    <div className="mt-auto flex items-center gap-3">
+                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold bg-white/70 ${rankStyles.text} shadow-sm border-2 ${rankStyles.border}`}>
+                            {student ? student.name[0] : award.studentName[0]}
+                         </div>
+                         <div>
+                             <p className={`font-bold ${rankStyles.text}`}>{award.studentName}</p>
+                             {student && <p className={`text-xs font-semibold ${rankStyles.text} opacity-80`}>Class {student.class}</p>}
+                         </div>
+                    </div>
+                </div>
+            </div>
+            
+             {role === 'admin' && (
+                <button 
+                  onClick={() => deleteItem('awards', award.id)}
+                  className="absolute top-4 right-4 p-2 bg-black/20 backdrop-blur text-white/70 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100 z-30"
+                >
+                  <Trash2 size={16}/>
+                </button>
+             )}
+        </div>
+    );
+};
   
 const MonthlyStarsPage = ({ monthlyStarsData }) => {
     const [displayMonth, setDisplayMonth] = useState('');
@@ -2863,11 +2954,21 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                      </div>
                    </div>
                    
-                   {role === 'admin' && (
-                      <button onClick={handleAddAward} className="bg-yellow-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black text-sm">
-                        <PlusCircle size={18}/> 新增獎項
-                      </button>
-                   )}
+                   <div className="flex items-center gap-4">
+                     <div className="flex items-center p-1 bg-slate-100 rounded-2xl">
+                       <button onClick={() => setAwardsViewMode('grid')} className={`flex items-center gap-2 px-4 py-2 rounded-[1.2rem] text-sm font-bold transition-all ${awardsViewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>
+                         <Columns size={16}/> 榮譽牆
+                       </button>
+                       <button onClick={() => setAwardsViewMode('timeline')} className={`flex items-center gap-2 px-4 py-2 rounded-[1.2rem] text-sm font-bold transition-all ${awardsViewMode === 'timeline' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>
+                         <History size={16}/> 時間軸
+                       </button>
+                     </div>
+                     {role === 'admin' && (
+                        <button onClick={handleAddAward} className="bg-yellow-500 text-white p-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black">
+                          <PlusCircle size={18}/> <span className="hidden sm:inline">新增獎項</span>
+                        </button>
+                     )}
+                   </div>
                 </div>
  
                 {awards.length === 0 ? (
@@ -2877,56 +2978,39 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                      <p className="text-sm text-slate-300 mt-2">請教練新增比賽獲獎紀錄</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                     {awards.sort((a,b) => b.date.localeCompare(a.date)).map((award) => {
-                        const student = students.find(s => s.name === award.studentName);
-                        return (
-                          <div key={award.id} className="relative group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:scale-105 transition-all flex flex-col gap-4">
-                             <div className="w-full aspect-[4/3] rounded-2xl bg-slate-50 overflow-hidden relative border border-slate-100">
-                                 {award.photoUrl ? (
-                                     <img src={award.photoUrl} alt="Award" className="w-full h-full object-cover" />
-                                 ) : (
-                                     <div className="w-full h-full flex items-center justify-center text-yellow-200/50">
-                                         <Trophy size={64}/>
-                                     </div>
-                                 )}
-                                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black text-slate-500 shadow-sm">
-                                     {award.date}
-                                 </div>
-                                 <div className="absolute bottom-3 right-3 bg-yellow-400 text-white px-4 py-1 rounded-full text-xs font-black shadow-lg shadow-yellow-100">
-                                     {award.rank}
-                                 </div>
-                             </div>
-                             <div className="px-1">
-                                 <h4 className="text-lg font-black text-slate-800 line-clamp-2 leading-tight mb-2">{award.title}</h4>
-                                 <div className="flex items-center gap-2 text-slate-500 text-sm">
-                                    <User size={14} className="text-blue-500"/>
-                                    <span className="font-bold">{award.studentName}</span>
-                                    {student && (
-                                       <span className="bg-slate-100 text-slate-400 px-2 py-0.5 rounded-lg text-xs">
-                                         {student.class}
-                                       </span>
-                                    )}
-                                 </div>
-                                 {award.description && (
-                                   <p className="text-xs text-slate-400 mt-3 font-medium bg-slate-50 p-2 rounded-lg line-clamp-2">
-                                      {award.description}
-                                   </p>
-                                 )}
-                             </div>
-                             
-                             {role === 'admin' && (
-                                <button 
-                                  onClick={() => deleteItem('awards', award.id)}
-                                  className="absolute top-4 right-4 p-2 bg-white/50 backdrop-blur text-slate-400 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100"
-                                >
-                                  <Trash2 size={16}/>
-                                </button>
-                             )}
-                          </div>
-                        );
-                     })}
-                  </div>
+                  <>
+                  {awardsViewMode === 'grid' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                       {awards.map((award) => {
+                          const student = students.find(s => s.name === award.studentName);
+                          return <AwardCard key={award.id} award={award} student={student} />;
+                       })}
+                    </div>
+                  )}
+                  {awardsViewMode === 'timeline' && (
+                    <div className="relative pl-8 pr-4">
+                      <div className="absolute left-[3.25rem] top-0 h-full w-1 bg-slate-200 rounded-full"></div>
+                       {awards.map((award, index) => {
+                          const student = students.find(s => s.name === award.studentName);
+                          const year = award.date.split('-')[0];
+                          const prevYear = index > 0 ? awards[index-1].date.split('-')[0] : null;
+                          const showYear = year !== prevYear;
+                          return (
+                            <div key={award.id} className="relative mb-12">
+                              {showYear && (
+                                <div className="absolute -left-2 top-0 flex items-center justify-center w-24 h-24 bg-slate-800 text-white font-black text-2xl rounded-full border-8 border-[#F8FAFC] z-10">
+                                  {year}
+                                </div>
+                              )}
+                              <div className={`ml-20 md:ml-40 pl-10 pt-2 ${showYear ? 'mt-8' : ''}`}>
+                                 <AwardCard award={award} student={student} />
+                              </div>
+                            </div>
+                          );
+                       })}
+                    </div>
+                  )}
+                  </>
                 )}
              </div>
             )}
