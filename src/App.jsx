@@ -80,7 +80,7 @@ const ACHIEVEMENT_DATA = {
 };
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "9.0"; 
+const CURRENT_VERSION = "9.1"; 
 
 // --- Helper function to convert any image URL to a Base64 Data URL ---
 const toDataURL = (url) => {
@@ -666,11 +666,17 @@ const savePendingAttendance = async () => {
   }, [rankedStudents]);
 
   const filteredStudents = useMemo(() => {
-    return rankedStudents.filter(s => {
-      const matchSearch = s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
-      const matchYear = selectedYearFilter === 'ALL' || (s.dob && s.dob.startsWith(selectedYearFilter)) || (selectedYearFilter === '未知' && !s.dob);
-      return matchSearch && matchYear;
-    });
+    return rankedStudents
+      .filter(s => {
+        const matchSearch = searchTerm === '' || s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
+        const matchYear = selectedYearFilter === 'ALL' || (s.dob && s.dob.startsWith(selectedYearFilter)) || (selectedYearFilter === '未知' && !s.dob);
+        return matchSearch && matchYear;
+      })
+      .sort((a, b) => { // Re-sort after filtering
+        const rankA = rankedStudents.findIndex(rs => rs.id === a.id);
+        const rankB = rankedStudents.findIndex(rs => rs.id === b.id);
+        return rankA - rankB;
+      });
   }, [rankedStudents, searchTerm, selectedYearFilter]);
 
   const saveFinanceConfig = async () => {
