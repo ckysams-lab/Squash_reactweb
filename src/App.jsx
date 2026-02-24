@@ -31,7 +31,7 @@ import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "11.0"; 
+const CURRENT_VERSION = "11.1";
 
 // --- Firebase 初始化 ---
 let firebaseConfig;
@@ -43,9 +43,11 @@ try {
   const envConfig = import.meta.env?.VITE_FIREBASE_CONFIG;
   if (envConfig) {
     firebaseConfig = JSON.parse(envConfig);
-  } else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+  } 
+  else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
     firebaseConfig = JSON.parse(__firebase_config);
-  } else {
+  } 
+  else {
     throw new Error("Firebase config not found. Please set VITE_FIREBASE_CONFIG in your .env.local file or define __firebase_config globally.");
   }
 
@@ -60,19 +62,9 @@ try {
 } catch (e) {
   console.error("Firebase Initialization Failed:", e.message);
   if (import.meta.env.DEV) {
-    document.body.innerHTML = `
-      <div style="padding: 2rem; font-family: sans-serif; background-color: #FFFBEB; color: #92400E; height: 100vh;">
-        <h1 style="font-size: 1.5rem; font-weight: bold;">Firebase 初始化失敗</h1>
-        <p>系統找不到 Firebase 的設定檔。請檢查以下步驟：</p>
-        <ol style="list-style-type: decimal; padding-left: 2rem;">
-          <li>確認專案根目錄下有名為 <code>.env.local</code> 的檔案。</li>
-          <li>確認 <code>.env.local</code> 檔案中已設定 <code>VITE_FIREBASE_CONFIG</code> 變數。</li>
-          <li>在修改 <code>.env.local</code> 檔案後，您可能需要<strong>重新啟動開發伺服器</strong>。</li>
-        </ol>
-        <p>錯誤詳情: ${e.message}</p>
-      </div>
-    `;
-  } else {
+    document.body.innerHTML = `<div style="padding: 2rem; font-family: sans-serif; background-color: #FFFBEB; color: #92400E; height: 100vh;"><h1 style="font-size: 1.5rem; font-weight: bold;">Firebase 初始化失敗</h1><p>系統找不到 Firebase 的設定檔。請檢查以下步驟：</p><ol style="list-style-type: decimal; padding-left: 2rem;"><li>確認專案根目錄下有名為 <code>.env.local</code> 的檔案。</li><li>確認 <code>.env.local</code> 檔案中已設定 <code>VITE_FIREBASE_CONFIG</code> 變數。</li><li>在修改 <code>.env.local</code> 檔案後，您可能需要<strong>重新啟動開發伺服器</strong>。</li></ol><p>錯誤詳情: ${e.message}</p></div>`;
+  }
+  else {
      document.body.innerText = "Application failed to load. Please contact the administrator.";
   }
 }
@@ -80,7 +72,6 @@ try {
 // Calendar Localizer
 const localizer = momentLocalizer(moment);
 
-// 強制鎖定 App ID
 const appId = 'bcklas-squash-core-v1'; 
 const ACHIEVEMENT_DATA = {
   'ice-breaker': { name: '破蛋者', desc: '首次在內部聯賽中獲勝', icon: <Zap size={24} /> },
@@ -98,13 +89,11 @@ const ACHIEVEMENT_DATA = {
   'elite-player': { name: '年度壁球精英', desc: '賽季積分榜前八名', icon: <Sparkles size={24} /> },
 };
 
-// --- Helper function to convert any image URL to a Base64 Data URL ---
+
+// --- Helper function ---
 const toDataURL = (url) => {
     return new Promise((resolve) => {
-        if (!url || url.startsWith('data:image')) {
-            resolve(url);
-            return;
-        }
+        if (!url || url.startsWith('data:image')) { resolve(url); return; }
         const img = new Image();
         img.crossOrigin = 'Anonymous';
         img.onload = () => {
@@ -116,15 +105,9 @@ const toDataURL = (url) => {
             try {
               const dataURL = canvas.toDataURL('image/png');
               resolve(dataURL);
-            } catch (e) {
-              console.error("Canvas toDataURL failed:", e);
-              resolve(null);
-            }
+            } catch (e) { console.error("Canvas toDataURL failed:", e); resolve(null); }
         };
-        img.onerror = () => {
-            console.error("Image toDataURL conversion failed to load:", url);
-            resolve(null);
-        };
+        img.onerror = () => { console.error("Image toDataURL failed to load:", url); resolve(null); };
         img.src = url;
     });
 };
@@ -133,7 +116,6 @@ const getAcademicYear = (dateString) => {
     const date = new Date(dateString);
     const year = date.getFullYear();
     const month = date.getMonth(); // 0-11
-    // Academic year runs from September to August
     if (month >= 8) { // Sept (8) to Dec (11)
         return `${year}-${(year + 1).toString().slice(-2)}`;
     } else { // Jan (0) to Aug (7)
@@ -205,7 +187,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
-  const [activeTab, setActiveTab] = useState('rankings');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [students, setStudents] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
   const [competitions, setCompetitions] = useState([]);
@@ -225,9 +207,9 @@ export default function App() {
   const [newTournamentName, setNewTournamentName] = useState('');
   const [tournamentPlayers, setTournamentPlayers] = useState([]);
   const [numGroups, setNumGroups] = useState(1);
-  const [selectedSchedule, setSelectedSchedule] = useState(null); 
-  const [awardsViewMode, setAwardsViewMode] = useState('grid');
-  
+  const [selectedSchedule, setSelectedSchedule] = useState(null);
+  const [awardsViewMode, setAwardsViewMode] = useState('grid'); 
+
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
     announcements: [],
@@ -284,9 +266,78 @@ export default function App() {
     opponentSchool: '',
     opponentPlayerName: '',
     externalMatchScore: '',
-    isWin: null, 
+    isWin: null,
   });
+  
+  useEffect(() => {
+    const storedVersion = localStorage.getItem('app_version');
+    if (storedVersion !== CURRENT_VERSION) {
+      console.log(`[System] Detected new version: ${CURRENT_VERSION}. Cleaning cache...`);
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem('app_version', CURRENT_VERSION);
+      window.location.reload();
+    }
+  }, []);
 
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, u => {
+      setUser(u);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    try {
+      const listeners = [];
+      const collections = {
+        students: collection(db, 'artifacts', appId, 'public', 'data', 'students'),
+        attendance_logs: collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'),
+        competitions: collection(db, 'artifacts', appId, 'public', 'data', 'competitions'),
+        schedules: collection(db, 'artifacts', appId, 'public', 'data', 'schedules'),
+        downloadFiles: collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'),
+        gallery: collection(db, 'artifacts', appId, 'public', 'data', 'gallery'),
+        awards: collection(db, 'artifacts', appId, 'public', 'data', 'awards'),
+        achievements: collection(db, 'artifacts', appId, 'public', 'data', 'achievements'),
+        league_matches: collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'),
+        external_tournaments: collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'),
+        monthly_stars: collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars')
+      };
+
+      const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
+      const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
+
+      listeners.push(onSnapshot(systemConfigRef, (docSnap) => {
+        if (docSnap.exists()) setSystemConfig(docSnap.data());
+        else setDoc(systemConfigRef, { adminPassword: 'admin', announcements: [], seasonalTheme: 'default', schoolLogo: null });
+      }, (e) => console.error("Config err", e)));
+
+      listeners.push(onSnapshot(financeConfigRef, (docSnap) => {
+        if (docSnap.exists()) setFinanceConfig(prev => ({...prev, ...docSnap.data()}));
+        else setDoc(financeConfigRef, financeConfig);
+      }, (e) => console.error("Finance err", e)));
+      
+      listeners.push(onSnapshot(collections.students, (snap) => setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(collections.attendance_logs, (snap) => setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(collections.competitions, (snap) => setCompetitions(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(collections.schedules, (snap) => setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(collections.downloadFiles, (snap) => setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(collections.gallery, (snap) => setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(query(collections.awards, orderBy("date", "desc")), (snap) => setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(query(collections.achievements, orderBy("timestamp", "desc")), (snap) => setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() }))))); 
+      listeners.push(onSnapshot(query(collections.league_matches, orderBy("date", "desc")), (snap) => setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(query(collections.external_tournaments, orderBy("name", "asc")), (snap) => setExternalTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(query(collections.monthly_stars, orderBy("month", "desc")), (snap) => setMonthlyStars(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+
+      return () => listeners.forEach(unsub => unsub());
+
+    } catch (e) {
+      console.error("Firestore Init Error:", e);
+    }
+  }, [user]);
 
   const awardAchievement = async (badgeId, studentId) => {
     if (!badgeId || !studentId) return;
@@ -385,17 +436,6 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  useEffect(() => {
-    const storedVersion = localStorage.getItem('app_version');
-    if (storedVersion !== CURRENT_VERSION) {
-      console.log(`[System] Detected new version: ${CURRENT_VERSION}. Cleaning cache...`);
-      localStorage.clear();
-      sessionStorage.clear();
-      localStorage.setItem('app_version', CURRENT_VERSION);
-      window.location.reload();
-    }
-  }, []);
-
   const financialSummary = useMemo(() => {
     if (!financeConfig) return { revenue: 0, expense: 0, profit: 0 };
     const revenue = (Number(financeConfig.totalStudents) || 0) * (Number(financeConfig.feePerStudent) || 0);
@@ -490,92 +530,105 @@ export default function App() {
     } catch(e) { console.error("Favicon error", e); }
   }, [systemConfig?.schoolLogo]);
 
-  useEffect(() => {
-    const safetyTimeout = setTimeout(() => {
-      if (loading) setLoading(false);
-    }, 5000);
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        }
-      } catch (err) { 
-        console.error("Auth Error:", err);
-      }
-      setLoading(false);
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-      clearTimeout(safetyTimeout);
-    });
-    return () => {
-      unsubscribe();
-      clearTimeout(safetyTimeout);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    
-    try {
-      const listeners = [];
-      const collectionsToListen = {
-          students: setStudents,
-          attendance_logs: setAttendanceLogs,
-          competitions: setCompetitions,
-          schedules: setSchedules,
-          downloadFiles: setDownloadFiles,
-          gallery: setGalleryItems,
-          achievements: setAchievements,
+  const readCSVFile = (file, encoding) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const buffer = event.target.result;
+        const decoder = new TextDecoder(encoding === 'BIG5' ? 'big5' : 'utf-8');
+        const text = decoder.decode(new Uint8Array(buffer));
+        resolve(text);
       };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  };
 
-      Object.entries(collectionsToListen).forEach(([col, setter]) => {
-          const ref = collection(db, 'artifacts', appId, 'public', 'data', col);
-          const q = query(ref, orderBy("timestamp", "desc"));
-          const unsub = onSnapshot(q, (snap) => setter(snap.docs.map(d => ({ id: d.id, ...d.data() }))), (e) => console.error(`${col} err`, e));
-          listeners.push(unsub);
+  const handleCSVImportExternalTournaments = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsUpdating(true);
+    try {
+      const text = await readCSVFile(file, importEncoding);
+      const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
+      const batch = writeBatch(db);
+      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments');
+      let count = 0;
+      rows.forEach(row => {
+        const name = row.split(',')[0]?.trim();
+        if (name) {
+          batch.set(doc(colRef), { name, timestamp: serverTimestamp() });
+          count++;
+        }
       });
+      await batch.commit();
+      alert(`✅ 成功匯入 ${count} 個校外賽事名稱！`);
+    } catch (err) {
+      console.error("External tournament import failed:", err);
+      alert('匯入失敗，請確認 CSV 格式 (單欄，第一行為標題)。');
+    }
+    setIsUpdating(false);
+    e.target.value = null;
+  };
+  
+  const handleSaveExternalMatch = async () => {
+    const { player1Id, tournamentName, date, isWin, externalMatchScore, opponentSchool, opponentPlayerName } = newExternalMatch;
+    if (!player1Id || !tournamentName || !date || isWin === null) {
+      alert('請填寫所有必填欄位：賽事、日期、我方隊員及本場結果。');
+      return;
+    }
 
-      const unsubAwards = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'awards'), orderBy("date", "desc")), (snap) => {
-        setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      listeners.push(unsubAwards);
+    const player = students.find(s => s.id === player1Id);
+    if (!player) {
+      alert('找不到指定的學生資料！');
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const matchData = {
+        tournamentName,
+        date,
+        player1Id,
+        isWin,
+        externalMatchScore,
+        opponentSchool,
+        opponentPlayerName,
+        matchType: 'external',
+        player1Name: player.name,
+        player2Id: null, 
+        player2Name: opponentPlayerName || 'N/A', 
+        winnerId: isWin ? player1Id : null,
+        status: 'completed',
+        timestamp: serverTimestamp(),
+      };
       
-      const unsubLeagueMatches = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'), orderBy("date", "desc")), (snap) => {
-          setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      listeners.push(unsubLeagueMatches);
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'), matchData);
       
-      const unsubExternalTournaments = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'), orderBy("name", "asc")), (snap) => {
-          setExternalTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      alert('✅ 校外賽記錄已成功儲存！');
+      setNewExternalMatch({
+        tournamentName: '',
+        date: new Date().toISOString().split('T')[0],
+        player1Id: '',
+        opponentSchool: '',
+        opponentPlayerName: '',
+        externalMatchScore: '',
+        isWin: null,
       });
-      listeners.push(unsubExternalTournaments);
-
-      const unsubMonthlyStars = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars'), orderBy("month", "desc")), (snap) => {
-          setMonthlyStars(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      listeners.push(unsubMonthlyStars);
-
-      const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
-      const unsubSystemConfig = onSnapshot(systemConfigRef, (docSnap) => {
-          if (docSnap.exists()) setSystemConfig(docSnap.data());
-      }, (e) => console.error("Config err", e));
-      listeners.push(unsubSystemConfig);
-
-      const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
-      const unsubFinanceConfig = onSnapshot(financeConfigRef, (docSnap) => {
-          if (docSnap.exists()) setFinanceConfig(prev => ({ ...prev, ...docSnap.data() }));
-      }, (e) => console.error("Finance err", e));
-      listeners.push(unsubFinanceConfig);
-
-      return () => listeners.forEach(unsub => unsub());
 
     } catch (e) {
-      console.error("Firestore Init Error:", e);
+      console.error("Failed to save external match:", e);
+      alert('儲存失敗，請檢查網絡連線。');
     }
-  }, [user]);
+    setIsUpdating(false);
+  };
+    
+  const deleteItem = async (col, id) => {
+    if (role !== 'admin') return;
+    if (window.confirm('確定要永久刪除這個項目嗎？')) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
+    }
+  };
 
   const handleLogin = async (type) => {
     if (type === 'admin') {
@@ -657,9 +710,9 @@ export default function App() {
       totalPoints: Number(s.points) || 0 
     })).sort((a, b) => {
       if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
-      const timeA = a.lastUpdated?.seconds || Infinity;
-      const timeB = b.lastUpdated?.seconds || Infinity;
-      return timeA - timeB;
+      const timeA = a.lastUpdated?.seconds || 0;
+      const timeB = b.lastUpdated?.seconds || 0;
+      return timeB - timeA;
     });
   }, [students]);
 
@@ -977,20 +1030,6 @@ export default function App() {
       return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
   };
 
-  const readCSVFile = (file, encoding) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const buffer = event.target.result;
-        const decoder = new TextDecoder(encoding === 'BIG5' ? 'big5' : 'utf-8');
-        const text = decoder.decode(new Uint8Array(buffer));
-        resolve(text);
-      };
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    });
-  };
-
   const handleCSVImportSchedules = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1052,92 +1091,6 @@ export default function App() {
     } catch (err) { alert('匯入失敗'); }
     setIsUpdating(false);
     e.target.value = null;
-  };
-  
-  const handleCSVImportExternalTournaments = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setIsUpdating(true);
-    try {
-      const text = await readCSVFile(file, importEncoding);
-      const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-      const batch = writeBatch(db);
-      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments');
-      let count = 0;
-      rows.forEach(row => {
-        const name = row.split(',')[0]?.trim();
-        if (name) {
-          batch.set(doc(colRef), { name, timestamp: serverTimestamp() });
-          count++;
-        }
-      });
-      await batch.commit();
-      alert(`✅ 成功匯入 ${count} 個校外賽事名稱！`);
-    } catch (err) {
-      console.error("External tournament import failed:", err);
-      alert('匯入失敗，請確認 CSV 格式 (單欄，第一行為標題)。');
-    }
-    setIsUpdating(false);
-    e.target.value = null;
-  };
-  
-  const handleSaveExternalMatch = async () => {
-    const { player1Id, tournamentName, date, isWin, externalMatchScore, opponentSchool, opponentPlayerName } = newExternalMatch;
-    if (!player1Id || !tournamentName || !date || isWin === null) {
-      alert('請填寫所有必填欄位：賽事、日期、我方隊員及本場結果。');
-      return;
-    }
-
-    const player = students.find(s => s.id === player1Id);
-    if (!player) {
-      alert('找不到指定的學生資料！');
-      return;
-    }
-
-    setIsUpdating(true);
-    try {
-      const matchData = {
-        tournamentName,
-        date,
-        player1Id,
-        isWin,
-        externalMatchScore,
-        opponentSchool,
-        opponentPlayerName,
-        matchType: 'external',
-        player1Name: player.name,
-        player2Id: null, 
-        player2Name: opponentPlayerName || 'N/A', 
-        winnerId: isWin ? player1Id : null,
-        status: 'completed',
-        timestamp: serverTimestamp(),
-      };
-      
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'), matchData);
-      
-      alert('✅ 校外賽記錄已成功儲存！');
-      setNewExternalMatch({
-        tournamentName: '',
-        date: new Date().toISOString().split('T')[0],
-        player1Id: '',
-        opponentSchool: '',
-        opponentPlayerName: '',
-        externalMatchScore: '',
-        isWin: null,
-      });
-
-    } catch (e) {
-      console.error("Failed to save external match:", e);
-      alert('儲存失敗，請檢查網絡連線。');
-    }
-    setIsUpdating(false);
-  };
-
-  const deleteItem = async (col, id) => {
-    if (role !== 'admin') return;
-    if (window.confirm('確定要永久刪除這個項目嗎？')) {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
-    }
   };
   
   const todaySchedule = useMemo(() => {
@@ -2008,6 +1961,188 @@ export default function App() {
     );
   };
 
+  const PlayerDashboard = ({ student, data, onClose }) => {
+    if (!student || !data) return null;
+
+    return (
+        <div className="animate-in fade-in duration-500 font-bold">
+            <div className="flex items-center gap-6 mb-10">
+                <button onClick={onClose} className="p-4 bg-white text-slate-500 hover:text-blue-600 rounded-2xl transition-all border shadow-sm">
+                    <ArrowLeft size={24}/>
+                </button>
+                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-4xl font-black text-slate-400 border-4 border-white shadow-inner uppercase">{student.name[0]}</div>
+                <div>
+                    <h3 className="text-4xl font-black text-slate-800">{student.name}</h3>
+                    <p className="text-sm font-bold text-slate-400">{student.class} ({student.classNo}) - {student.squashClass}</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <TrophyIcon size={32} className="mx-auto text-yellow-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{student.totalPoints}</p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Total Points</p>
+                </div>
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <Swords size={32} className="mx-auto text-blue-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{data.winRate}<span className="text-2xl">%</span></p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Win Rate ({data.wins}/{data.totalPlayed})</p>
+                </div>
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <ClipboardCheck size={32} className="mx-auto text-emerald-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{data.attendanceRate}<span className="text-2xl">%</span></p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Attendance</p>
+                </div>
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <Award size={32} className="mx-auto text-orange-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{data.achievements.length}</p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Achievements</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div className="lg:col-span-2 bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <h4 className="text-2xl font-black mb-6">積分走勢圖</h4>
+                    <div className="h-80 bg-slate-50 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-400 text-center">
+                        <FileBarChart size={48} className="mb-4"/>
+                        <p className="font-bold">圖表即將在此顯示</p>
+                        <p className="text-xs mt-2">下一步我們將引入圖表庫來視覺化積分走勢。</p>
+                        <p className="text-xs font-mono mt-4 p-2 bg-slate-100 rounded">Data Points: {data.pointsHistory.length}</p>
+                    </div>
+                </div>
+
+                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <h4 className="text-2xl font-black mb-6">我的成就</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                        {data.achievements.length > 0 ? data.achievements.map(badgeId => {
+                            const badge = ACHIEVEMENT_DATA[badgeId];
+                            if (!badge) return null;
+                            return (
+                                <div key={badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
+                                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
+                                        {badge.icon}
+                                    </div>
+                                    <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{badge.name}</p>
+                                </div>
+                            );
+                        }) : <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章。</p>}
+                    </div>
+                </div>
+            </div>
+
+            <div className="mt-10 bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                <h4 className="text-2xl font-black mb-6">近期比賽記錄</h4>
+                <div className="space-y-4">
+                    {data.recentMatches.length > 0 ? data.recentMatches.map(match => {
+                        const isWinner = match.winnerId === student.id;
+                        const opponentName = match.player1Id === student.id ? match.player2Name : match.player1Name;
+                        const score = match.matchType === 'external' ? match.externalMatchScore : (match.player1Id === student.id ? `${match.score1} - ${match.score2}` : `${match.score2} - ${match.score1}`);
+                        return (
+                            <div key={match.id} className={`p-6 rounded-3xl flex items-center justify-between gap-4 ${isWinner ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-bold">{match.date} - {match.tournamentName}</p>
+                                    <p className="font-bold text-slate-700">vs. {opponentName}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className={`font-black text-2xl ${isWinner ? 'text-emerald-600' : 'text-rose-600'}`}>{score}</p>
+                                    <p className={`text-xs font-bold ${isWinner ? 'text-emerald-500' : 'text-rose-500'}`}>{isWinner ? '勝利' : '落敗'}</p>
+                                </div>
+                            </div>
+                        )
+                    }) : <p className="text-center text-slate-400 py-10">暫無比賽記錄</p>}
+                </div>
+            </div>
+        </div>
+    );
+  };
+
+  const MonthlyStarsPage = ({ monthlyStarsData }) => {
+    const [displayMonth, setDisplayMonth] = useState('');
+
+    useEffect(() => {
+        if (monthlyStarsData.length > 0) {
+            setDisplayMonth(monthlyStarsData[0].id);
+        }
+    }, [monthlyStarsData]);
+
+    const currentData = monthlyStarsData.find(ms => ms.id === displayMonth);
+
+    if (monthlyStarsData.length === 0) {
+        return (
+            <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
+               <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center text-yellow-300 mb-6"><Star size={40}/></div>
+               <p className="text-xl font-black text-slate-400">「每月之星」即將登場</p>
+               <p className="text-sm text-slate-300 mt-2">請教練在後台設定本月的得獎者。</p>
+            </div>
+        )
+    }
+
+    return (
+        <div className="animate-in fade-in duration-500 font-bold">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+                <h3 className="text-4xl font-black text-slate-800">每月之星 <span className="text-yellow-500">Player of the Month</span></h3>
+                <select 
+                    value={displayMonth} 
+                    onChange={e => setDisplayMonth(e.target.value)}
+                    className="bg-white border-2 border-slate-100 focus:border-blue-600 transition-all rounded-2xl p-4 outline-none text-lg font-bold shadow-sm"
+                >
+                    {monthlyStars.map(ms => <option key={ms.id} value={ms.id}>{ms.id.replace('-', ' 年 ')} 月</option>)}
+                </select>
+            </div>
+
+            {currentData && (
+                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                    <div className="bg-gradient-to-br from-blue-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
+                        <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
+                           {currentData.maleWinner.fullBodyPhotoUrl ? <img src={currentData.maleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
+                        </div>
+                        <h4 className="text-3xl font-black text-blue-800">{currentData.maleWinner.studentName}</h4>
+                        <p className="text-sm font-bold text-slate-400 mb-6">{currentData.maleWinner.studentClass}</p>
+                        <div className="space-y-6">
+                            <div>
+                                <h5 className="font-black text-slate-500 mb-2">獲選原因</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed">{currentData.maleWinner.reason}</p>
+                            </div>
+                             <div>
+                                <h5 className="font-black text-slate-500 mb-2">本年度目標</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed font-semibold italic">"{currentData.maleWinner.goals}"</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-gradient-to-br from-pink-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
+                        <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
+                            {currentData.femaleWinner.fullBodyPhotoUrl ? <img src={currentData.femaleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
+                        </div>
+                        <h4 className="text-3xl font-black text-pink-800">{currentData.femaleWinner.studentName}</h4>
+                        <p className="text-sm font-bold text-slate-400 mb-6">{currentData.femaleWinner.studentClass}</p>
+                        <div className="space-y-6">
+                            <div>
+                                <h5 className="font-black text-slate-500 mb-2">獲選原因</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed">{currentData.femaleWinner.reason}</p>
+                            </div>
+                             <div>
+                                <h5 className="font-black text-slate-500 mb-2">本年度目標</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed font-semibold italic">"{currentData.femaleWinner.goals}"</p>
+                            </div>
+                        </div>
+                    </div>
+                 </div>
+            )}
+        </div>
+    );
+  };
+
+  if (loading) return (
+    <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+      <div className="mb-8 animate-pulse">
+        <SchoolLogo size={96} />
+      </div>
+      <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
+      <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
+      <p className="text-xs text-slate-300 mt-2 font-mono">v{CURRENT_VERSION}</p>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
       
@@ -2018,7 +2153,7 @@ export default function App() {
 
       <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" multiple onChange={handleGalleryImageUpload} />
       
-    {showTournamentModal && (
+      {showTournamentModal && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowTournamentModal(false)}>
             <div className="bg-white rounded-[3rem] w-full max-w-2xl p-10 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setShowTournamentModal(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-800 transition-colors"><X size={24} /></button>
@@ -2051,7 +2186,7 @@ export default function App() {
                 </div>
             </div>
         </div>
-    )}
+      )}
 
       {viewingImage && (
         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setViewingImage(null)}>
@@ -2108,7 +2243,7 @@ export default function App() {
           </div>
         </div>
       )}
-      
+
       <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-white border-r transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
@@ -2145,8 +2280,9 @@ export default function App() {
               </>
             )}
           </nav>
+          
           <div className="pt-10 border-t">
-             <div className="bg-slate-50 rounded-3xl p-6 mb-4">
+            <div className="bg-slate-50 rounded-3xl p-6 mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-blue-600 shadow-sm">
                   {role === 'admin' ? <ShieldCheck size={20}/> : <User size={20}/>}
@@ -2167,10 +2303,12 @@ export default function App() {
       <main className="flex-1 h-screen overflow-y-auto relative bg-[#F8FAFC]">
         <header className="px-10 py-8 sticky top-0 bg-white/80 backdrop-blur-xl z-40 border-b flex justify-between items-center">
           <div className="flex items-center gap-6">
-            <button onClick={()=>setSidebarOpen(true)} className="md:hidden p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-blue-600 transition-all"><Menu size={24}/></button>
+            <button onClick={()=>setSidebarOpen(true)} className="md:hidden p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-blue-600 transition-all">
+              <Menu size={24}/>
+            </button>
             <div>
               <h1 className="text-3xl font-black tracking-tight text-slate-800">
-                {showPlayerCard && viewingStudent ? "👨‍🎓 球員儀表板" :
+                {viewingStudent ? "👨‍🎓 球員儀表板" :
                  activeTab === 'rankings' ? "🏆 積分排行榜" :
                  activeTab === 'dashboard' ? "📊 管理總結" :
                  activeTab === 'students' ? "👥 隊員檔案庫" :
@@ -2186,18 +2324,27 @@ export default function App() {
                  activeTab === 'monthlyStars' ? "🌟 每月之星" :
                  activeTab === 'externalMatches' ? "📝 校外賽記錄管理" : ""}
               </h1>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">BCKLAS SQUASH TEAM MANAGEMENT SYSTEM</p>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+                BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {role === 'admin' && isUpdating && (<div className="flex items-center gap-2 text-blue-600 text-xs font-black bg-blue-50 px-4 py-2 rounded-full animate-pulse"><Loader2 size={14} className="animate-spin"/> 同步中...</div>)}
+            {role === 'admin' && isUpdating && (
+              <div className="flex items-center gap-2 text-blue-600 text-xs font-black bg-blue-50 px-4 py-2 rounded-full animate-pulse">
+                <Loader2 size={14} className="animate-spin"/> 同步中...
+              </div>
+            )}
             <div className="hidden md:flex bg-slate-100 p-1.5 rounded-2xl items-center gap-2 font-black">
-              <div className="px-4 py-1.5 bg-white rounded-xl shadow-sm text-xs text-blue-600 flex items-center gap-2"><Clock size={14}/> {new Date().toLocaleDateString()}</div>
+              <div className="px-4 py-1.5 bg-white rounded-xl shadow-sm text-xs text-blue-600 flex items-center gap-2">
+                <Clock size={14}/> {new Date().toLocaleDateString()}
+              </div>
             </div>
           </div>
         </header>
-        
+
         <div className="p-10 max-w-7xl mx-auto pb-40">
+          
           {showPlayerCard && ( <PlayerCardModal student={showPlayerCard} onClose={() => setShowPlayerCard(null)} /> )}
 
           {selectedSchedule && (
@@ -2217,6 +2364,10 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {viewingStudent && (<PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />)}
+          
+          {!viewingStudent && activeTab === 'monthlyStars' && (<MonthlyStarsPage monthlyStarsData={monthlyStars} />)}
 
           {/* DASHBOARD TAB */}
           {!viewingStudent && activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
@@ -2399,51 +2550,193 @@ export default function App() {
               </div>
           )}
 
-          {/* MONTHLY STARS (PUBLIC) */}
-          {!viewingStudent && activeTab === 'monthlyStars' && (
-             <div className="animate-in fade-in duration-500 font-bold">
-                 {monthlyStars.length === 0 ? (
-                     <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
-                        <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center text-yellow-300 mb-6"><Star size={40}/></div>
-                        <p className="text-xl font-black text-slate-400">「每月之星」即將登場</p>
-                        <p className="text-sm text-slate-300 mt-2">請教練在後台設定本月的得獎者。</p>
-                     </div>
-                 ) : (
-                     <>
-                     <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
-                         <h3 className="text-4xl font-black text-slate-800">每月之星 <span className="text-yellow-500">Player of the Month</span></h3>
-                         <select value={monthlyStars[0]?.id || ''} onChange={e => {}} className="bg-white border-2 border-slate-100 focus:border-blue-600 transition-all rounded-2xl p-4 outline-none text-lg font-bold shadow-sm">
-                             {monthlyStars.map(ms => <option key={ms.id} value={ms.id}>{ms.id.replace('-', ' 年 ')} 月</option>)}
-                         </select>
-                     </div>
-                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                        <div className="bg-gradient-to-br from-blue-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
-                            <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
-                               {monthlyStars[0]?.maleWinner.fullBodyPhotoUrl ? <img src={monthlyStars[0].maleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
-                            </div>
-                            <h4 className="text-3xl font-black text-blue-800">{monthlyStars[0]?.maleWinner.studentName}</h4>
-                            <p className="text-sm font-bold text-slate-400 mb-6">{monthlyStars[0]?.maleWinner.studentClass}</p>
-                            <div className="space-y-6">
-                                <div><h5 className="font-black text-slate-500 mb-2">獲選原因</h5><p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed">{monthlyStars[0]?.maleWinner.reason}</p></div>
-                                <div><h5 className="font-black text-slate-500 mb-2">本年度目標</h5><p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed font-semibold italic">"{monthlyStars[0]?.maleWinner.goals}"</p></div>
-                            </div>
-                        </div>
-                        <div className="bg-gradient-to-br from-pink-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
-                            <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
-                                {monthlyStars[0]?.femaleWinner.fullBodyPhotoUrl ? <img src={monthlyStars[0].femaleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
-                            </div>
-                            <h4 className="text-3xl font-black text-pink-800">{monthlyStars[0]?.femaleWinner.studentName}</h4>
-                            <p className="text-sm font-bold text-slate-400 mb-6">{monthlyStars[0]?.femaleWinner.studentClass}</p>
-                            <div className="space-y-6">
-                                <div><h5 className="font-black text-slate-500 mb-2">獲選原因</h5><p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed">{monthlyStars[0]?.femaleWinner.reason}</p></div>
-                                <div><h5 className="font-black text-slate-500 mb-2">本年度目標</h5><p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed font-semibold italic">"{monthlyStars[0]?.femaleWinner.goals}"</p></div>
-                            </div>
-                        </div>
-                     </div>
-                     </>
-                 )}
+          {/* SCHEDULES TAB */}
+          {!viewingStudent && activeTab === 'schedules' && (
+            <div className="space-y-8 animate-in fade-in duration-500 font-bold">
+               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                  <div className="flex items-center gap-6"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div><div><h3 className="text-xl font-black">訓練班日程表</h3><p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p></div></div>
+                  <div className="flex flex-wrap gap-4 w-full md:w-auto"><div className="relative flex-1 md:flex-none"><Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={18}/><select value={selectedClassFilter} onChange={(e)=>setSelectedClassFilter(e.target.value)} className="w-full md:w-60 bg-slate-50 border-none outline-none pl-12 pr-6 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner">{uniqueTrainingClasses.map(c => (<option key={c} value={c}>{c === 'ALL' ? '🌍 全部訓練班' : `🏸 ${c}`}</option>))}</select></div>{role === 'admin' && (<div className="flex gap-2"><button onClick={()=>downloadTemplate('schedule')} className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border transition-all" title="下載日程範本"><Download size={20}/></button><label className="bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm"><Upload size={18}/> 匯入 CSV 日程<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportSchedules}/></label></div>)}</div>
+               </div>
+               <div className="bg-white p-6 rounded-[3rem] shadow-sm border h-[70vh]">
+                  <Calendar
+                      localizer={localizer}
+                      events={calendarEvents}
+                      startAccessor="start"
+                      endAccessor="end"
+                      style={{ height: '100%' }}
+                      onSelectEvent={event => setSelectedSchedule(event)}
+                      eventPropGetter={(event) => {
+                          const className = event.resource.trainingClass === 'A班' ? 'bg-blue-500' : event.resource.trainingClass === 'B班' ? 'bg-green-500' : 'bg-yellow-500';
+                          return { className: `${className} border-none text-white p-1 text-xs rounded-lg` };
+                      }}
+                  />
+               </div>
+            </div>
+          )}
+
+          {/* ATTENDANCE TAB */}
+          {!viewingStudent && activeTab === 'attendance' && role === 'admin' && (
+            <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
+               <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}><div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div><div className="relative z-10"><h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3><div className="flex flex-wrap gap-4">{todaySchedule ? (<><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><Star size={14} className="text-yellow-300 fill-yellow-300"/><span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span></div><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><MapPin size={14}/><span className="text-sm font-black">{todaySchedule.location}</span></div></>) : (<div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2"><Info size={14}/><span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span></div>)}</div></div><div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner"><p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p><p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p></div></div>
+               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8"><div className="flex items-center gap-4"><div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div><div><h4 className="font-black text-slate-800">出席率報表中心</h4><p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p></div></div><div className="flex gap-2"><button onClick={() => exportMatrixAttendanceCSV(attendanceClassFilter)} className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"><Download size={16}/> 匯出班級點名總表</button></div></div>
+               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6"><div className="flex items-center gap-3 text-slate-400 min-w-max"><Filter size={20} /><span>選擇點名班別：</span></div><div className="flex flex-wrap gap-2">{uniqueTrainingClasses.map(cls => (<button key={cls} onClick={() => setAttendanceClassFilter(cls)} className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${attendanceClassFilter === cls ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'}`}>{cls === 'ALL' ? '🌍 全部學員' : cls}</button>))}</div></div>
+               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                  {studentsInSelectedAttendanceClass.length > 0 ? (
+                    studentsInSelectedAttendanceClass.map(s => {
+                      const isAttended = todaySchedule && attendanceLogs.some(log => log.studentId === s.id && log.date === todaySchedule.date && log.trainingClass === todaySchedule.trainingClass);
+                      const isPending = pendingAttendance.includes(s.id);
+                      return (
+                        <button 
+                          key={s.id} 
+                          onClick={() => {
+                              if (!isAttended) {
+                                  togglePendingAttendance(s.id);
+                              }
+                          }}
+                          disabled={isAttended}
+                          className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden 
+                            ${isAttended 
+                              ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-not-allowed' 
+                              : isPending 
+                                ? 'border-blue-500 shadow-xl shadow-blue-50 ring-4 ring-blue-100' 
+                                : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-lg'
+                            }`}
+                        >
+                          <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase 
+                            ${isAttended 
+                              ? 'bg-emerald-200 text-white rotate-12' 
+                              : isPending 
+                                ? 'bg-blue-600 text-white rotate-6' 
+                                : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-100'
+                            }`}
+                          >
+                            {s.name[0]}
+                          </div>
+                          <p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : isPending ? 'text-blue-600' : 'text-slate-800'}`}>{s.name}</p>
+                          <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
+                          <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>{s.squashClass}</div>
+                          <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : isPending ? 'text-blue-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
+                            <CheckCircle2 size={24}/>
+                          </div>
+                          {isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">已出席</div>)}
+                          {isPending && !isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] py-1 font-black uppercase tracking-widest">待儲存</div>)}
+                        </button>
+                      );
+                    })
+                  ) : (<div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">此班別暫無學員資料</div>)}
+               </div>
+            </div>
+          )}
+
+          {/* FINANCIAL TAB */}
+          {!viewingStudent && activeTab === 'financial' && role === 'admin' && (
+             <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
+                <div className="flex justify-end">
+                  <button onClick={saveFinanceConfig} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-lg hover:bg-blue-700 transition-all active:scale-95"><Save size={20} /> 儲存財務設定</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center"><div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6"><TrendingUp size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總收入</p><h3 className="text-4xl font-black text-emerald-500">${financialSummary.revenue.toLocaleString()}</h3></div>
+                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center"><div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6"><Trash2 size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總支出</p><h3 className="text-4xl font-black text-rose-500">${financialSummary.expense.toLocaleString()}</h3></div>
+                  <div className={`p-10 rounded-[3.5rem] border shadow-sm flex flex-col justify-center items-center text-center ${financialSummary.profit >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}><div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${financialSummary.profit >= 0 ? 'bg-white text-blue-600 shadow-sm' : 'bg-white text-rose-600 shadow-sm'}`}><DollarSign size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計資助盈餘</p><h3 className={`text-4xl font-black ${financialSummary.profit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>${financialSummary.profit.toLocaleString()}</h3></div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-4 mb-10"><div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center shadow-sm"><Trash2 size={24}/></div><h4 className="text-2xl font-black text-slate-800">支出設定 (教練費)</h4></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {[ { label: '校隊教練次數', key: 'nTeam' }, { label: '單次校隊成本', key: 'costTeam' }, { label: '進階班次數', key: 'nTrain' }, { label: '單次進階成本', key: 'costTrain' }, { label: '趣味班次數', key: 'nHobby' }, { label: '單次趣味成本', key: 'costHobby' } ].map(item => (
+                        <div key={item.key}><label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">{item.label}</label><input type="number" className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-rose-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" value={financeConfig[item.key]} onChange={e => setFinanceConfig({...financeConfig, [item.key]: Number(e.target.value)})}/></div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-4 mb-10"><div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm"><DollarSign size={24}/></div><h4 className="text-2xl font-black text-slate-800">預計收入 (學費)</h4></div>
+                    <div className="space-y-10">
+                      <div><label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">預計總人數</label><input type="number" className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" value={financeConfig.totalStudents} onChange={e => setFinanceConfig({...financeConfig, totalStudents: Number(e.target.value)})}/></div>
+                      <div><label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">每位學員學費 ($)</label><input type="number" className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" value={financeConfig.feePerStudent} onChange={e => setFinanceConfig({...financeConfig, feePerStudent: Number(e.target.value)})}/></div>
+                    </div>
+                  </div>
+                </div>
              </div>
           )}
+
+          {/* COMPETITIONS TAB */}
+          {!viewingStudent && activeTab === 'competitions' && (
+             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                   <div className="absolute -right-10 -top-10 text-slate-50 rotate-12"><Megaphone size={120}/></div>
+                   <div className="flex justify-between items-center mb-10 relative z-10">
+                      <div>
+                        <h3 className="text-3xl font-black">最新比賽與公告</h3>
+                        <p className="text-slate-400 text-xs mt-1">追蹤校隊最新動態與賽程詳情</p>
+                      </div>
+                      {role === 'admin' && (
+                        <div className="flex gap-2">
+                          <button onClick={generateCompetitionRoster} className="p-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center gap-2" title="生成推薦名單">
+                            <ListChecks size={24}/>
+                            <span className="text-xs font-black">推薦名單</span>
+                          </button>
+                          <button onClick={()=>{
+                            const title = prompt('公告標題');
+                            const date = prompt('發佈日期 (YYYY-MM-DD)');
+                            const url = prompt('相關連結 (如報名表 Google Drive / 官網網址) - 可選:');
+                            if(title && date) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'competitions'), { title, date, url: url || '', createdAt: serverTimestamp() });
+                          }} className="p-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
+                            <Plus size={24}/>
+                          </button>
+                        </div>
+                      )}
+                   </div>
+                   <div className="space-y-4 relative z-10">
+                      {competitions.length === 0 && (
+                        <div className="text-center py-20 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
+                          <p className="text-slate-300 font-black">目前暫無公告發佈</p>
+                        </div>
+                      )}
+                      {competitions.sort((a,b)=>b.createdAt?.seconds - a.createdAt?.seconds).map(c => (
+                        <div key={c.id} className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-white hover:shadow-lg hover:shadow-slate-100 transition-all group">
+                           <div className="flex gap-6 items-center flex-1">
+                             <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm group-hover:scale-110 transition-all">
+                               <TrophyIcon size={24}/>
+                             </div>
+                             <div>
+                               <p className="font-black text-xl text-slate-800">{c.title}</p>
+                               <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">
+                                 <CalendarIcon size={12}/> {c.date}
+                               </div>
+                             </div>
+                           </div>
+                           <div className="flex items-center gap-3 w-full md:w-auto">
+                             <button 
+                                onClick={() => {
+                                    if (c.url) window.open(c.url, '_blank');
+                                    else alert('此公告暫無詳細連結');
+                                }}
+                                className={`flex-1 md:flex-none px-6 py-3 border rounded-xl text-xs font-black transition-all flex items-center gap-2 ${c.url ? 'bg-blue-600 text-white border-transparent hover:bg-blue-700' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`}
+                             >
+                                <ExternalLink size={14}/> 查看詳情
+                             </button>
+                             {role === 'admin' && <button onClick={()=>deleteItem('competitions', c.id)} className="p-3 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>}
+                           </div>
+                        </div>
+                      ))}
+                   </div>
+                </div>
+             </div>
+          )}
+
+          {/* GALLERY TAB */}
+          {!viewingStudent && activeTab === 'gallery' && (
+            <div className="space-y-10 animate-in fade-in duration-500 font-bold">
+               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                  <div className="flex items-center gap-6">
+                    {currentAlbum ? (<button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all"><ArrowLeft size={24}/></button>) : (<div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>)}
+                    <div><h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3><p className="text-xs text-slate-400 mt-1">{currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}</p></div>
+                  </div>
+                  {role === 'admin' && (<div className="flex items-center gap-3">{isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}<button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50"><PlusCircle size={18}/> 新增相片/影片</button></div>)}
+               </div>
+               {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
+            </div>
+           )}
 
           {/* AWARDS TAB */}
           {!viewingStudent && activeTab === 'awards' && (
@@ -2499,61 +2792,6 @@ export default function App() {
                 )}
              </div>
             )}
-            
-          {/* EXTERNAL MATCHES TAB */}
-          {!viewingStudent && activeTab === 'externalMatches' && role === 'admin' && (
-              <div className="max-w-2xl mx-auto space-y-10 animate-in fade-in duration-500 font-bold">
-                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
-                   <h3 className="text-3xl font-black mb-2 text-center">新增校外賽記錄</h3>
-                   <p className="text-center text-slate-400 mb-10">請在此逐一記錄每場校外賽的賽果。</p>
-                   <div className="space-y-6">
-                      <div>
-                        <label className="text-sm font-bold text-slate-500 mb-2 block">1. 選擇賽事</label>
-                        <select value={newExternalMatch.tournamentName} onChange={e => setNewExternalMatch({...newExternalMatch, tournamentName: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none">
-                          <option value="" disabled>-- 請選擇一個已匯入的賽事 --</option>
-                          {externalTournaments.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-                        </select>
-                        <p className="text-xs text-slate-400 mt-2 px-2">如清單中沒有所需賽事，請先到「系統設定」頁面匯入。</p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-bold text-slate-500 mb-2 block">2. 比賽日期</label>
-                        <input type="date" value={newExternalMatch.date} onChange={e => setNewExternalMatch({...newExternalMatch, date: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none"/>
-                      </div>
-                      <div>
-                        <label className="text-sm font-bold text-slate-500 mb-2 block">3. 我方隊員</label>
-                        <select value={newExternalMatch.player1Id} onChange={e => setNewExternalMatch({...newExternalMatch, player1Id: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none">
-                          <option value="" disabled>-- 請選擇一位隊員 --</option>
-                          {students.sort((a,b) => a.name.localeCompare(b.name, 'zh-Hant')).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-sm font-bold text-slate-500 mb-2 block">4. 對手學校 (可選)</label>
-                          <input type="text" value={newExternalMatch.opponentSchool} onChange={e => setNewExternalMatch({...newExternalMatch, opponentSchool: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none" placeholder="例如: 喇沙書院"/>
-                        </div>
-                        <div>
-                          <label className="text-sm font-bold text-slate-500 mb-2 block">5. 對手球員 (可選)</label>
-                          <input type="text" value={newExternalMatch.opponentPlayerName} onChange={e => setNewExternalMatch({...newExternalMatch, opponentPlayerName: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none" placeholder="例如: 王小虎"/>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-sm font-bold text-slate-500 mb-2 block">6. 賽果 (文字)</label>
-                        <input type="text" value={newExternalMatch.externalMatchScore} onChange={e => setNewExternalMatch({...newExternalMatch, externalMatchScore: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none" placeholder="例如: 2-1"/>
-                      </div>
-                      <div>
-                        <label className="text-sm font-bold text-slate-500 mb-2 block">7. 本場結果</label>
-                        <div className="grid grid-cols-2 gap-4">
-                            <button onClick={() => setNewExternalMatch({...newExternalMatch, isWin: true})} className={`p-4 rounded-2xl text-lg font-black transition-all ${newExternalMatch.isWin === true ? 'bg-emerald-500 text-white ring-4 ring-emerald-200' : 'bg-slate-100 hover:bg-slate-200'}`}>勝利</button>
-                            <button onClick={() => setNewExternalMatch({...newExternalMatch, isWin: false})} className={`p-4 rounded-2xl text-lg font-black transition-all ${newExternalMatch.isWin === false ? 'bg-rose-500 text-white ring-4 ring-rose-200' : 'bg-slate-100 hover:bg-slate-200'}`}>落敗</button>
-                        </div>
-                      </div>
-                      <div className="pt-6 border-t">
-                        <button onClick={handleSaveExternalMatch} disabled={isUpdating} className="w-full flex items-center justify-center gap-3 py-5 bg-blue-600 text-white font-black text-xl rounded-2xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:opacity-50">{isUpdating ? <Loader2 className="animate-spin" /> : <Save />} 儲存賽果</button>
-                      </div>
-                   </div>
-                 </div>
-              </div>
-            )}
 
           {/* LEAGUE TAB */}
           {!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
@@ -2565,13 +2803,8 @@ export default function App() {
                               <p className="text-slate-400">查看賽程、賽果及歷史賽事</p>
                           </div>
                            <div className="flex w-full md:w-auto items-center gap-3">
-                               <select 
-                                   value={selectedTournament} 
-                                   onChange={(e) => setSelectedTournament(e.target.value)} 
-                                   className="flex-grow w-full md:w-72 bg-slate-50 border-none outline-none pl-6 pr-10 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner"
-                               >
-                                   {tournamentList.length === 0 ? <option value="">暫無賽事</option> :
-                                   tournamentList.map(t => <option key={t} value={t}>{t}</option>)}
+                               <select value={selectedTournament} onChange={(e) => setSelectedTournament(e.target.value)} className="flex-grow w-full md:w-72 bg-slate-50 border-none outline-none pl-6 pr-10 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner">
+                                   {tournamentList.length === 0 ? <option value="">暫無賽事</option> : tournamentList.map(t => <option key={t} value={t}>{t}</option>)}
                                </select>
                                {role === 'admin' && (
                                 <div className="flex gap-2">
@@ -2704,128 +2937,60 @@ export default function App() {
               </div>
            )}
 
-          {/* GALLERY TAB */}
-          {!viewingStudent && activeTab === 'gallery' && (
-            <div className="space-y-10 animate-in fade-in duration-500 font-bold">
-               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-6">
-                    {currentAlbum ? (<button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all"><ArrowLeft size={24}/></button>) : (<div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>)}
-                    <div><h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3><p className="text-xs text-slate-400 mt-1">{currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}</p></div>
-                  </div>
-                  {role === 'admin' && (<div className="flex items-center gap-3">{isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}<button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50"><PlusCircle size={18}/> 新增相片/影片</button></div>)}
-               </div>
-               {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
-            </div>
-           )}
-
-          {/* SCHEDULES TAB */}
-          {!viewingStudent && activeTab === 'schedules' && (
-            <div className="space-y-8 animate-in fade-in duration-500 font-bold">
-               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-6"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div><div><h3 className="text-xl font-black">訓練班日程表</h3><p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p></div></div>
-                  <div className="flex flex-wrap gap-4 w-full md:w-auto"><div className="relative flex-1 md:flex-none"><Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={18}/><select value={selectedClassFilter} onChange={(e)=>setSelectedClassFilter(e.target.value)} className="w-full md:w-60 bg-slate-50 border-none outline-none pl-12 pr-6 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner">{uniqueTrainingClasses.map(c => (<option key={c} value={c}>{c === 'ALL' ? '🌍 全部訓練班' : `🏸 ${c}`}</option>))}</select></div>{role === 'admin' && (<div className="flex gap-2"><button onClick={()=>downloadTemplate('schedule')} className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border transition-all" title="下載日程範本"><Download size={20}/></button><label className="bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm"><Upload size={18}/> 匯入 CSV 日程<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportSchedules}/></label></div>)}</div>
-               </div>
-               <div className="bg-white p-6 rounded-[3rem] shadow-sm border h-[70vh]">
-                  <Calendar
-                      localizer={localizer}
-                      events={calendarEvents}
-                      startAccessor="start"
-                      endAccessor="end"
-                      style={{ height: '100%' }}
-                      onSelectEvent={event => setSelectedSchedule(event)}
-                      eventPropGetter={(event) => {
-                          const className = event.resource.trainingClass === 'A班' ? 'bg-blue-500' : event.resource.trainingClass === 'B班' ? 'bg-green-500' : 'bg-yellow-500';
-                          return { className: `${className} border-none text-white p-1 text-xs rounded-lg` };
-                      }}
-                  />
-               </div>
-            </div>
-          )}
-
-          {/* ATTENDANCE TAB */}
-          {!viewingStudent && activeTab === 'attendance' && role === 'admin' && (
-            <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
-               <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}><div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div><div className="relative z-10"><h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3><div className="flex flex-wrap gap-4">{todaySchedule ? (<><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><Star size={14} className="text-yellow-300 fill-yellow-300"/><span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span></div><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><MapPin size={14}/><span className="text-sm font-black">{todaySchedule.location}</span></div></>) : (<div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2"><Info size={14}/><span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span></div>)}</div></div><div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner"><p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p><p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p></div></div>
-               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8"><div className="flex items-center gap-4"><div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div><div><h4 className="font-black text-slate-800">出席率報表中心</h4><p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p></div></div><div className="flex gap-2"><button onClick={() => exportMatrixAttendanceCSV(attendanceClassFilter)} className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"><Download size={16}/> 匯出班級點名總表</button></div></div>
-               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6"><div className="flex items-center gap-3 text-slate-400 min-w-max"><Filter size={20} /><span>選擇點名班別：</span></div><div className="flex flex-wrap gap-2">{uniqueTrainingClasses.map(cls => (<button key={cls} onClick={() => setAttendanceClassFilter(cls)} className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${attendanceClassFilter === cls ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'}`}>{cls === 'ALL' ? '🌍 全部學員' : cls}</button>))}</div></div>
-               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                  {studentsInSelectedAttendanceClass.length > 0 ? (
-                    studentsInSelectedAttendanceClass.map(s => {
-                      const isAttended = todaySchedule && attendanceLogs.some(log => log.studentId === s.id && log.date === todaySchedule.date && log.trainingClass === todaySchedule.trainingClass);
-                      const isPending = pendingAttendance.includes(s.id);
-                      return (
-                        <button 
-                          key={s.id} 
-                          onClick={() => {
-                              if (!isAttended) {
-                                  togglePendingAttendance(s.id);
-                              }
-                          }}
-                          disabled={isAttended}
-                          className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden 
-                            ${isAttended 
-                              ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-not-allowed' 
-                              : isPending 
-                                ? 'border-blue-500 shadow-xl shadow-blue-50 ring-4 ring-blue-100' 
-                                : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-lg'
-                            }`}
-                        >
-                          <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase 
-                            ${isAttended 
-                              ? 'bg-emerald-200 text-white rotate-12' 
-                              : isPending 
-                                ? 'bg-blue-600 text-white rotate-6' 
-                                : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-100'
-                            }`}
-                          >
-                            {s.name[0]}
-                          </div>
-                          <p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : isPending ? 'text-blue-600' : 'text-slate-800'}`}>{s.name}</p>
-                          <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
-                          <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>{s.squashClass}</div>
-                          <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : isPending ? 'text-blue-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
-                            <CheckCircle2 size={24}/>
-                          </div>
-                          {isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">已出席</div>)}
-                          {isPending && !isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] py-1 font-black uppercase tracking-widest">待儲存</div>)}
-                        </button>
-                      );
-                    })
-                  ) : (<div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">此班別暫無學員資料</div>)}
-               </div>
-            </div>
-          )}
-
-          {/* FINANCIAL TAB */}
-          {!viewingStudent && activeTab === 'financial' && role === 'admin' && (
-             <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
-                <div className="flex justify-end">
-                  <button onClick={saveFinanceConfig} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-lg hover:bg-blue-700 transition-all active:scale-95"><Save size={20} /> 儲存財務設定</button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center"><div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6"><TrendingUp size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總收入</p><h3 className="text-4xl font-black text-emerald-500">${financialSummary.revenue.toLocaleString()}</h3></div>
-                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center"><div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6"><Trash2 size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總支出</p><h3 className="text-4xl font-black text-rose-500">${financialSummary.expense.toLocaleString()}</h3></div>
-                  <div className={`p-10 rounded-[3.5rem] border shadow-sm flex flex-col justify-center items-center text-center ${financialSummary.profit >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}><div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${financialSummary.profit >= 0 ? 'bg-white text-blue-600 shadow-sm' : 'bg-white text-rose-600 shadow-sm'}`}><DollarSign size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計資助盈餘</p><h3 className={`text-4xl font-black ${financialSummary.profit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>${financialSummary.profit.toLocaleString()}</h3></div>
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-4 mb-10"><div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center shadow-sm"><Trash2 size={24}/></div><h4 className="text-2xl font-black text-slate-800">支出設定 (教練費)</h4></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      {[ { label: '校隊教練次數', key: 'nTeam' }, { label: '單次校隊成本', key: 'costTeam' }, { label: '進階班次數', key: 'nTrain' }, { label: '單次進階成本', key: 'costTrain' }, { label: '趣味班次數', key: 'nHobby' }, { label: '單次趣味成本', key: 'costHobby' } ].map(item => (
-                        <div key={item.key}><label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">{item.label}</label><input type="number" className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-rose-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" value={financeConfig[item.key]} onChange={e => setFinanceConfig({...financeConfig, [item.key]: Number(e.target.value)})}/></div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-4 mb-10"><div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm"><DollarSign size={24}/></div><h4 className="text-2xl font-black text-slate-800">預計收入 (學費)</h4></div>
-                    <div className="space-y-10">
-                      <div><label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">預計總人數</label><input type="number" className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" value={financeConfig.totalStudents} onChange={e => setFinanceConfig({...financeConfig, totalStudents: Number(e.target.value)})}/></div>
-                      <div><label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">每位學員學費 ($)</label><input type="number" className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" value={financeConfig.feePerStudent} onChange={e => setFinanceConfig({...financeConfig, feePerStudent: Number(e.target.value)})}/></div>
-                    </div>
-                  </div>
-                </div>
-             </div>
-          )}
+          {/* EXTERNAL MATCHES TAB */}
+          {!viewingStudent && activeTab === 'externalMatches' && role === 'admin' && (
+              <div className="max-w-2xl mx-auto space-y-10 animate-in fade-in duration-500 font-bold">
+                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                   <h3 className="text-3xl font-black mb-2 text-center">新增校外賽記錄</h3>
+                   <p className="text-center text-slate-400 mb-10">請在此逐一記錄每場校外賽的賽果。</p>
+                   <div className="space-y-6">
+                      <div>
+                        <label className="text-sm font-bold text-slate-500 mb-2 block">1. 選擇賽事</label>
+                        <select value={newExternalMatch.tournamentName} onChange={e => setNewExternalMatch({...newExternalMatch, tournamentName: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none">
+                          <option value="" disabled>-- 請選擇一個已匯入的賽事 --</option>
+                          {externalTournaments.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                        </select>
+                        <p className="text-xs text-slate-400 mt-2 px-2">如清單中沒有所需賽事，請先到「系統設定」頁面匯入。</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-bold text-slate-500 mb-2 block">2. 比賽日期</label>
+                        <input type="date" value={newExternalMatch.date} onChange={e => setNewExternalMatch({...newExternalMatch, date: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none"/>
+                      </div>
+                      <div>
+                        <label className="text-sm font-bold text-slate-500 mb-2 block">3. 我方隊員</label>
+                        <select value={newExternalMatch.player1Id} onChange={e => setNewExternalMatch({...newExternalMatch, player1Id: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none">
+                          <option value="" disabled>-- 請選擇一位隊員 --</option>
+                          {students.sort((a,b) => a.name.localeCompare(b.name, 'zh-Hant')).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-bold text-slate-500 mb-2 block">4. 對手學校 (可選)</label>
+                          <input type="text" value={newExternalMatch.opponentSchool} onChange={e => setNewExternalMatch({...newExternalMatch, opponentSchool: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none" placeholder="例如: 喇沙書院"/>
+                        </div>
+                        <div>
+                          <label className="text-sm font-bold text-slate-500 mb-2 block">5. 對手球員 (可選)</label>
+                          <input type="text" value={newExternalMatch.opponentPlayerName} onChange={e => setNewExternalMatch({...newExternalMatch, opponentPlayerName: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none" placeholder="例如: 王小虎"/>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm font-bold text-slate-500 mb-2 block">6. 賽果 (文字)</label>
+                        <input type="text" value={newExternalMatch.externalMatchScore} onChange={e => setNewExternalMatch({...newExternalMatch, externalMatchScore: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none" placeholder="例如: 2-1"/>
+                      </div>
+                      <div>
+                        <label className="text-sm font-bold text-slate-500 mb-2 block">7. 本場結果</label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <button onClick={() => setNewExternalMatch({...newExternalMatch, isWin: true})} className={`p-4 rounded-2xl text-lg font-black transition-all ${newExternalMatch.isWin === true ? 'bg-emerald-500 text-white ring-4 ring-emerald-200' : 'bg-slate-100 hover:bg-slate-200'}`}>勝利</button>
+                            <button onClick={() => setNewExternalMatch({...newExternalMatch, isWin: false})} className={`p-4 rounded-2xl text-lg font-black transition-all ${newExternalMatch.isWin === false ? 'bg-rose-500 text-white ring-4 ring-rose-200' : 'bg-slate-100 hover:bg-slate-200'}`}>落敗</button>
+                        </div>
+                      </div>
+                      <div className="pt-6 border-t">
+                        <button onClick={handleSaveExternalMatch} disabled={isUpdating} className="w-full flex items-center justify-center gap-3 py-5 bg-blue-600 text-white font-black text-xl rounded-2xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:opacity-50">{isUpdating ? <Loader2 className="animate-spin" /> : <Save />} 儲存賽果</button>
+                      </div>
+                   </div>
+                 </div>
+              </div>
+            )}
 
           {/* SETTINGS TAB */}
           {!viewingStudent && activeTab === 'settings' && role === 'admin' && (
@@ -2900,17 +3065,6 @@ export default function App() {
           
         </div>
       </main>
-
-      {activeTab === 'attendance' && pendingAttendance.length > 0 && role === 'admin' && (
-        <div className="fixed bottom-12 right-12 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <button onClick={savePendingAttendance} disabled={isUpdating} className="flex items-center gap-4 px-8 py-5 bg-blue-600 text-white rounded-[2rem] shadow-2xl shadow-blue-200 hover:bg-blue-700 transition-all text-lg font-black disabled:opacity-50">
-            <Save size={24} />
-            <span>儲存 {pendingAttendance.length} 筆點名紀錄</span>
-            {isUpdating && <Loader2 className="animate-spin" size={20} />}
-          </button>
-        </div>
-      )}
-
     </div>
   );
 }
