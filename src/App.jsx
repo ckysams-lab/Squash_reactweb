@@ -2558,6 +2558,12 @@ const myDashboardData = useMemo(() => {
           )}
 
           {viewingStudent && (<PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />)}
+
+          {!viewingStudent && activeTab === 'myDashboard' && role === 'student' && (
+              <PlayerDashboard student={currentUserInfo} data={myDashboardData} onClose={null} />
+          )}
+
+          {!viewingStudent && activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
           
           {!viewingStudent && activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
              <div className="space-y-10 animate-in fade-in duration-700 font-bold">
