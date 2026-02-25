@@ -724,7 +724,7 @@ export default function App() {
         }
         setRole('student'); 
         setShowLoginModal(false); 
-        setActiveTab('competitions');
+        setActiveTab('myDashboard');
       } catch (error) {
         console.error("Student Login failed", error);
         alert('登入失敗：\n(請確認班別、班號和密碼是否正確)');
@@ -1535,6 +1535,55 @@ export default function App() {
 
         // 版本 11.3：修正球員儀表板在輸入體測數據後無法即時更新的問題
 const playerDashboardData = useMemo(() => {
+  if (role !== 'student' || !currentUserInfo) return null;
+    
+    // 直接複用 playerDashboardData 的計算邏輯，但數據源鎖定為 currentUserInfo
+    const studentData = rankedStudents.find(s => s.id === currentUserInfo.id);
+    if (!studentData) return null; // 如果在排名列表中找不到學生，則返回 null
+
+    const studentMatches = leagueMatches.filter(m => m.player1Id === studentData.id || m.player2Id === studentData.id);
+    const completedMatches = studentMatches.filter(m => m.status === 'completed');
+    const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
+    const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
+    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => b.date.localeCompare(a.date));
+
+    const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
+    const totalPlayed = completedMatches.length;
+    const winRate = totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : 0;
+
+    const totalScheduledSessions = schedules.filter(s => studentData.squashClass && s.trainingClass === studentData.squashClass).length;
+    const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
+    const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
+
+    const dynamicPointsHistory = [
+        { date: '初始積分', points: BADGE_DATA[studentData.badge]?.basePoints || 0 },
+        { date: '目前', points: studentData.totalPoints }
+    ];
+
+    const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
+    
+    let radarData = [];
+    if (latestAssessment) {
+        const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
+        radarData = [
+            { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 25), fullMark: 10 },
+            { subject: '力量 (仰臥/握力)', A: calcScore(((latestAssessment.situps || 0) + (latestAssessment.gripStrength || 0))/2, 50), fullMark: 10 },
+            { subject: '柔軟度', A: calcScore(latestAssessment.flexibility, 40), fullMark: 10 },
+            { subject: '正手技術', A: calcScore(((latestAssessment.fhDrive || 0) + (latestAssessment.fhVolley || 0))/2, 50), fullMark: 10 },
+            { subject: '反手技術', A: calcScore(((latestAssessment.bhDrive || 0) + (latestAssessment.bhVolley || 0))/2, 50), fullMark: 10 },
+        ];
+    }
+
+    const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+
+    return {
+        winRate, wins, totalPlayed,
+        attendanceRate, attendedSessions, totalScheduledSessions,
+        pointsHistory: dynamicPointsHistory,
+        recentMatches, latestAssessment, radarData,
+        achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
+    };
+}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
     if (!viewingStudent) return null;
 
     // --- 核心修正 #1: 確保所有數據來源都被正確監聽 ---
@@ -2403,6 +2452,7 @@ const playerDashboardData = useMemo(() => {
             <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
             {(role === 'admin' || role === 'student') && (
               <>
+                <button onClick={() => {setActiveTab('myDashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'myDashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><UserCheck size={20}/> 我的表現</button>
                 <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><LayoutDashboard size={20}/> 管理概況</button>
                 <button onClick={() => {setActiveTab('monthlyStars'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStars' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Star size={20}/> 每月之星</button>
                 <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Trophy size={20}/> 積分排行</button>
@@ -2455,6 +2505,7 @@ const playerDashboardData = useMemo(() => {
             <div>
               <h1 className="text-3xl font-black tracking-tight text-slate-800">
                 {viewingStudent ? "👨‍🎓 球員儀表板" :
+                 activeTab === 'myDashboard' ? "📊 我的儀表板" :
                  activeTab === 'rankings' ? "🏆 積分排行榜" :
                  activeTab === 'dashboard' ? "📊 管理總結" :
                  activeTab === 'students' ? "👥 隊員檔案庫" :
