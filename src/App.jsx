@@ -62,20 +62,16 @@ try {
   } else {
     throw new Error("firebaseConfig object is empty or invalid after parsing.");
   }
-
 } catch (e) {
   console.error("Firebase Initialization Failed:", e.message);
   if (import.meta.env.DEV) {
     document.body.innerHTML = `<div style="padding: 2rem; font-family: sans-serif; background-color: #FFFBEB; color: #92400E; height: 100vh;"><h1 style="font-size: 1.5rem; font-weight: bold;">Firebase 初始化失敗</h1><p>系統找不到 Firebase 的設定檔。請檢查以下步驟：</p><ol style="list-style-type: decimal; padding-left: 2rem;"><li>確認專案根目錄下有名為 <code>.env.local</code> 的檔案。</li><li>確認 <code>.env.local</code> 檔案中已設定 <code>VITE_FIREBASE_CONFIG</code> 變數。</li><li>在修改 <code>.env.local</code> 檔案後，您可能需要<strong>重新啟動開發伺服器</strong>。</li></ol><p>錯誤詳情: ${e.message}</p></div>`;
-  }
-  else {
+  } else {
      document.body.innerText = "Application failed to load. Please contact the administrator.";
   }
 }
 
-// Calendar Localizer
 const localizer = momentLocalizer(moment);
-
 const appId = 'bcklas-squash-core-v1'; 
 const ACHIEVEMENT_DATA = {
   'ice-breaker': { name: '破蛋者', desc: '首次在內部聯賽中獲勝', icon: <Zap size={24} /> },
@@ -93,8 +89,6 @@ const ACHIEVEMENT_DATA = {
   'elite-player': { name: '年度壁球精英', desc: '賽季積分榜前八名', icon: <Sparkles size={24} /> },
 };
 
-
-// --- Helper function ---
 const toDataURL = (url) => {
     return new Promise((resolve) => {
         if (!url || url.startsWith('data:image')) { resolve(url); return; }
@@ -120,10 +114,10 @@ const getAcademicYear = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     const year = date.getFullYear();
-    const month = date.getMonth(); // 0-11
-    if (month >= 8) { // Sept (8) to Dec (11)
+    const month = date.getMonth(); 
+    if (month >= 8) { 
         return `${year}-${(year + 1).toString().slice(-2)}`;
-    } else { // Jan (0) to Aug (7)
+    } else { 
         return `${year - 1}-${year.toString().slice(-2)}`;
     }
 };
@@ -1569,7 +1563,6 @@ export default function App() {
         let radarData = [];
         if (latestAssessment) {
             const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
-            
             radarData = [
                 { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 25), fullMark: 10 }, 
                 { subject: '力量 (仰臥/握力)', A: calcScore((latestAssessment.situps + latestAssessment.gripStrength)/2, 50), fullMark: 10 },
@@ -1705,20 +1698,6 @@ export default function App() {
       setIsUpdating(false);
   };
 
-  useEffect(() => {
-    if(activeTab === 'monthlyStarsAdmin') {
-      const dataForMonth = monthlyStars.find(ms => ms.id === selectedMonthForAdmin);
-      const emptyData = {
-          month: selectedMonthForAdmin,
-          maleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
-          femaleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
-      };
-      setMonthlyStarEditData(dataForMonth || emptyData);
-      setMalePhotoPreview(dataForMonth?.maleWinner?.fullBodyPhotoUrl || null);
-      setFemalePhotoPreview(dataForMonth?.femaleWinner?.fullBodyPhotoUrl || null);
-    }
-  }, [selectedMonthForAdmin, monthlyStars, activeTab]);
-
   const handleGeneratePoster = async () => {
     setIsGeneratingPoster(true);
     const dataToRender = JSON.parse(JSON.stringify(monthlyStarEditData));
@@ -1771,7 +1750,8 @@ export default function App() {
 
   const AwardCard = ({ award, student, style }) => {
       const rank = award.rank || '';
-      
+      const displayStudentChar = student?.name?.[0] || award.studentName?.[0] || '🏆';
+
       const rankStyles = useMemo(() => {
           if (rank.includes('冠軍')) {
               return {
@@ -1837,7 +1817,7 @@ export default function App() {
                       <h4 className={`text-xl font-black leading-tight mt-1 mb-3 ${rankStyles.text}`}>{award.title}</h4>
                       <div className="mt-auto flex items-center gap-3">
                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold bg-white/70 ${rankStyles.text} shadow-sm border-2 ${rankStyles.border}`}>
-                              {student ? student.name[0] : award.studentName[0]}
+                              {displayStudentChar}
                            </div>
                            <div>
                                <p className={`font-bold ${rankStyles.text}`}>{award.studentName}</p>
@@ -2271,17 +2251,6 @@ export default function App() {
     );
   };
 
-  if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
-      <div className="mb-8 animate-pulse">
-        <SchoolLogo size={96} />
-      </div>
-      <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
-      <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
-      <p className="text-xs text-slate-300 mt-2 font-mono">v{CURRENT_VERSION}</p>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
       
@@ -2448,7 +2417,7 @@ export default function App() {
             </button>
             <div>
               <h1 className="text-3xl font-black tracking-tight text-slate-800">
-                {showPlayerCard && viewingStudent ? "👨‍🎓 球員儀表板" :
+                {viewingStudent ? "👨‍🎓 球員儀表板" :
                  activeTab === 'rankings' ? "🏆 積分排行榜" :
                  activeTab === 'dashboard' ? "📊 管理總結" :
                  activeTab === 'students' ? "👥 隊員檔案庫" :
@@ -2626,6 +2595,7 @@ export default function App() {
                         <input type="month" value={selectedMonthForAdmin} onChange={e => setSelectedMonthForAdmin(e.target.value)} className="bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg font-bold"/>
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Male Winner Form */}
                       <div className="bg-slate-50/70 p-8 rounded-3xl border space-y-4">
                         <h4 className="text-xl font-black text-blue-600">每月之星 (男)</h4>
                         <div>
@@ -2645,6 +2615,7 @@ export default function App() {
                           <input type="file" accept="image/*" onChange={e => handleMonthlyStarPhotoUpload('maleWinner', e.target.files[0])} className="mt-2 text-xs"/>
                         </div>
                       </div>
+                      {/* Female Winner Form */}
                       <div className="bg-slate-50/70 p-8 rounded-3xl border space-y-4">
                         <h4 className="text-xl font-black text-pink-500">每月之星 (女)</h4>
                         <div>
@@ -2952,7 +2923,7 @@ export default function App() {
                  <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">Copyright © 2026 正覺壁球. All Rights Reserved.</div>
              </div>
           )}
-          
+
         </div>
       </main>
 
