@@ -9,7 +9,7 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
   Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-  Pencil, Percent, UserPlus, Printer, Eye, Columns, BookMarked
+  Pencil, Percent, UserPlus, Printer, Eye, Columns, BookMarked, Activity
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -29,9 +29,13 @@ import QRCode from 'qrcode.react';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
+} from 'recharts';
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "11.1";
+const CURRENT_VERSION = "11.2";
 
 // --- Firebase 初始化 ---
 let firebaseConfig;
@@ -197,6 +201,22 @@ export default function App() {
   const [achievements, setAchievements] = useState([]); 
   const [leagueMatches, setLeagueMatches] = useState([]);
   const [externalTournaments, setExternalTournaments] = useState([]);
+  const [assessments, setAssessments] = useState([]); // <- 新增
+  const [newAssessment, setNewAssessment] = useState({  // <- 新增
+    studentId: '',
+    date: new Date().toISOString().split('T')[0],
+    situps: '',
+    shuttleRun: '',
+    enduranceRun: '',
+    gripStrength: '',
+    flexibility: '',
+    fhDrive: '',
+    bhDrive: '',
+    fhVolley: '',
+    bhVolley: '',
+    notes: ''
+  });
+
   const [downloadFiles, setDownloadFiles] = useState([]);
   const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
@@ -331,6 +351,10 @@ export default function App() {
       listeners.push(onSnapshot(query(collections.league_matches, orderBy("date", "desc")), (snap) => setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(query(collections.external_tournaments, orderBy("name", "asc")), (snap) => setExternalTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(query(collections.monthly_stars, orderBy("month", "desc")), (snap) => setMonthlyStars(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => { // <- 新增
+        setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }));
+
 
       return () => listeners.forEach(unsub => unsub());
 
@@ -570,6 +594,38 @@ export default function App() {
     setIsUpdating(false);
     e.target.value = null;
   };
+
+    const handleSaveAssessment = async () => {
+    const { studentId, date, situps, shuttleRun, enduranceRun, gripStrength, flexibility, fhDrive, bhDrive, fhVolley, bhVolley } = newAssessment;
+    if (!studentId || !date) {
+      alert("請選擇學員並填寫評估日期！"); return;
+    }
+    setIsUpdating(true);
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assessments'), {
+        ...newAssessment,
+        situps: Number(situps) || 0,
+        shuttleRun: Number(shuttleRun) || 0,
+        enduranceRun: Number(enduranceRun) || 0,
+        gripStrength: Number(gripStrength) || 0,
+        flexibility: Number(flexibility) || 0,
+        fhDrive: Number(fhDrive) || 0,
+        bhDrive: Number(bhDrive) || 0,
+        fhVolley: Number(fhVolley) || 0,
+        bhVolley: Number(bhVolley) || 0,
+        timestamp: serverTimestamp()
+      });
+      alert('✅ 綜合能力評估儲存成功！');
+      setNewAssessment({
+        studentId: '', date: new Date().toISOString().split('T')[0], situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', fhDrive: '', bhDrive: '', fhVolley: '', bhVolley: '', notes: ''
+      });
+    } catch (e) {
+      console.error("Failed to save assessment", e);
+      alert('儲存失敗，請檢查網絡連線。');
+    }
+    setIsUpdating(false);
+  };
+
   
   const handleSaveExternalMatch = async () => {
     const { player1Id, tournamentName, date, isWin, externalMatchScore, opponentSchool, opponentPlayerName } = newExternalMatch;
@@ -1474,7 +1530,7 @@ export default function App() {
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
-    const playerDashboardData = useMemo(() => {
+        const playerDashboardData = useMemo(() => {
         if (!viewingStudent) return null;
 
         const studentMatches = leagueMatches.filter(m => m.player1Id === viewingStudent.id || m.player2Id === viewingStudent.id);
@@ -1490,19 +1546,39 @@ export default function App() {
         const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
         const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
 
-        const pointsHistory = [{ date: viewingStudent.createdAt?.toDate().toISOString().split('T')[0] || 'N/A', points: BADGE_DATA[viewingStudent.badge]?.basePoints || 0 }];
+        let currentPoints = BADGE_DATA[viewingStudent.badge]?.basePoints || 0;
+        const dynamicPointsHistory = [{ 
+            date: viewingStudent.createdAt?.toDate ? viewingStudent.createdAt.toDate().toISOString().split('T')[0] : '初始', 
+            points: currentPoints 
+        }];
+
         completedMatches
             .sort((a,b) => a.date.localeCompare(b.date))
             .forEach(match => {
-                const lastPoint = pointsHistory[pointsHistory.length - 1].points;
                 if (match.winnerId === viewingStudent.id && match.matchType !== 'external') {
                     const winnerRank = rankedStudents.findIndex(s => s.id === match.winnerId) + 1;
                     const loserRank = rankedStudents.findIndex(s => s.id === (match.winnerId === match.player1Id ? match.player2Id : match.player1Id)) + 1;
                     const isGiantKiller = winnerRank > 0 && loserRank > 0 && (winnerRank - loserRank) >= 5;
                     const pointsToAdd = isGiantKiller ? 20 : 10;
-                    pointsHistory.push({ date: match.date, points: lastPoint + pointsToAdd });
+                    currentPoints += pointsToAdd;
+                    dynamicPointsHistory.push({ date: match.date, points: currentPoints });
                 }
         });
+
+        const studentAssessments = assessments.filter(a => a.studentId === viewingStudent.id).sort((a, b) => b.date.localeCompare(a.date));
+        const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
+        
+        let radarData = [];
+        if (latestAssessment) {
+            const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
+            radarData = [
+                { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 25), fullMark: 10 }, 
+                { subject: '力量 (仰臥/握力)', A: calcScore((latestAssessment.situps + latestAssessment.gripStrength)/2, 50), fullMark: 10 },
+                { subject: '柔軟度', A: calcScore(latestAssessment.flexibility, 40), fullMark: 10 },
+                { subject: '正手技術', A: calcScore((latestAssessment.fhDrive + latestAssessment.fhVolley)/2, 50), fullMark: 10 },
+                { subject: '反手技術', A: calcScore((latestAssessment.bhDrive + latestAssessment.bhVolley)/2, 50), fullMark: 10 },
+            ];
+        }
 
         const recentMatches = studentMatches
             .sort((a, b) => b.date.localeCompare(a.date))
@@ -1515,11 +1591,14 @@ export default function App() {
             attendanceRate,
             attendedSessions,
             totalScheduledSessions,
-            pointsHistory,
+            pointsHistory: dynamicPointsHistory,
             recentMatches,
+            latestAssessment,
+            radarData,
             achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
         };
-    }, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents]);
+    }, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments]);
+
 
 
   const SchoolLogo = ({ size = 48, className = "" }) => {
@@ -2271,6 +2350,7 @@ export default function App() {
             {role === 'admin' && (
               <>
                 <div className="text-[10px] text-slate-300 uppercase tracking-widest my-6 px-6 pt-6 border-t">教練工具</div>
+                <button onClick={() => {setActiveTab('assessments'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'assessments' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Activity size={20}/> 綜合能力評估</button>
                 <button onClick={() => {setActiveTab('monthlyStarsAdmin'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStarsAdmin' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Crown size={20}/> 每月之星管理</button>
                 <button onClick={() => {setActiveTab('students'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'students' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Users size={20}/> 隊員管理</button>
                 <button onClick={() => {setActiveTab('externalMatches'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'externalMatches' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><BookMarked size={20}/> 校外賽管理</button>
