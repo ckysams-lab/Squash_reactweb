@@ -9,7 +9,7 @@ import {
   FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
   Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
   Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-  Pencil, Percent, UserPlus, Printer, Eye, Columns
+  Pencil, Percent, UserPlus, Printer, Eye, Columns, BookMarked
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -30,9 +30,8 @@ import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-
 // --- 版本控制 ---
-const CURRENT_VERSION = "10.0"; 
+const CURRENT_VERSION = "11.1";
 
 // --- Firebase 初始化 ---
 let firebaseConfig;
@@ -41,48 +40,30 @@ let auth = null;
 let db = null;
 
 try {
-  // 優先從 Vite/CRA 的環境變數讀取
   const envConfig = import.meta.env?.VITE_FIREBASE_CONFIG;
   if (envConfig) {
     firebaseConfig = JSON.parse(envConfig);
   } 
-  // 其次，為兼容舊部署方式，嘗試從全域變數讀取
   else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
     firebaseConfig = JSON.parse(__firebase_config);
   } 
-  // 如果都找不到，就拋出錯誤
   else {
     throw new Error("Firebase config not found. Please set VITE_FIREBASE_CONFIG in your .env.local file or define __firebase_config globally.");
   }
 
-  // 只有在 firebaseConfig 成功載入後才初始化
   if (firebaseConfig) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
   } else {
-    // 雖然前面已經 throw new Error，但作為雙重保險
     throw new Error("firebaseConfig object is empty or invalid after parsing.");
   }
 
 } catch (e) {
   console.error("Firebase Initialization Failed:", e.message);
-  // 在開發環境中給予更清晰的提示
   if (import.meta.env.DEV) {
-    document.body.innerHTML = `
-      <div style="padding: 2rem; font-family: sans-serif; background-color: #FFFBEB; color: #92400E; height: 100vh;">
-        <h1 style="font-size: 1.5rem; font-weight: bold;">Firebase 初始化失敗</h1>
-        <p>系統找不到 Firebase 的設定檔。請檢查以下步驟：</p>
-        <ol style="list-style-type: decimal; padding-left: 2rem;">
-          <li>確認專案根目錄下有名為 <code>.env.local</code> 的檔案。</li>
-          <li>確認 <code>.env.local</code> 檔案中已設定 <code>VITE_FIREBASE_CONFIG</code> 變數。</li>
-          <li>在修改 <code>.env.local</code> 檔案後，您可能需要<strong>重新啟動開發伺服器</strong>。</li>
-        </ol>
-        <p>錯誤詳情: ${e.message}</p>
-      </div>
-    `;
+    document.body.innerHTML = `<div style="padding: 2rem; font-family: sans-serif; background-color: #FFFBEB; color: #92400E; height: 100vh;"><h1 style="font-size: 1.5rem; font-weight: bold;">Firebase 初始化失敗</h1><p>系統找不到 Firebase 的設定檔。請檢查以下步驟：</p><ol style="list-style-type: decimal; padding-left: 2rem;"><li>確認專案根目錄下有名為 <code>.env.local</code> 的檔案。</li><li>確認 <code>.env.local</code> 檔案中已設定 <code>VITE_FIREBASE_CONFIG</code> 變數。</li><li>在修改 <code>.env.local</code> 檔案後，您可能需要<strong>重新啟動開發伺服器</strong>。</li></ol><p>錯誤詳情: ${e.message}</p></div>`;
   }
-  // 在生產環境中，只顯示一個通用錯誤
   else {
      document.body.innerText = "Application failed to load. Please contact the administrator.";
   }
@@ -91,7 +72,6 @@ try {
 // Calendar Localizer
 const localizer = momentLocalizer(moment);
 
-// 強制鎖定 App ID
 const appId = 'bcklas-squash-core-v1'; 
 const ACHIEVEMENT_DATA = {
   'ice-breaker': { name: '破蛋者', desc: '首次在內部聯賽中獲勝', icon: <Zap size={24} /> },
@@ -110,13 +90,10 @@ const ACHIEVEMENT_DATA = {
 };
 
 
-// --- Helper function to convert any image URL to a Base64 Data URL ---
+// --- Helper function ---
 const toDataURL = (url) => {
     return new Promise((resolve) => {
-        if (!url || url.startsWith('data:image')) {
-            resolve(url);
-            return;
-        }
+        if (!url || url.startsWith('data:image')) { resolve(url); return; }
         const img = new Image();
         img.crossOrigin = 'Anonymous';
         img.onload = () => {
@@ -128,25 +105,28 @@ const toDataURL = (url) => {
             try {
               const dataURL = canvas.toDataURL('image/png');
               resolve(dataURL);
-            } catch (e) {
-              console.error("Canvas toDataURL failed:", e);
-              resolve(null);
-            }
+            } catch (e) { console.error("Canvas toDataURL failed:", e); resolve(null); }
         };
-        img.onerror = () => {
-            console.error("Image toDataURL conversion failed to load:", url);
-            resolve(null);
-        };
+        img.onerror = () => { console.error("Image toDataURL failed to load:", url); resolve(null); };
         img.src = url;
     });
 };
 
+const getAcademicYear = (dateString) => {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = date.getMonth(); // 0-11
+    if (month >= 8) { // Sept (8) to Dec (11)
+        return `${year}-${(year + 1).toString().slice(-2)}`;
+    } else { // Jan (0) to Aug (7)
+        return `${year - 1}-${year.toString().slice(-2)}`;
+    }
+};
 
 const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
     if (!data) return null;
     return (
         <div ref={ref} className="bg-white p-8" style={{ width: '827px', height: '1170px', fontFamily: 'sans-serif', position: 'relative' }}>
-            {/* Header */}
             <div className="flex justify-between items-center border-b-4 border-black pb-4">
                 {schoolLogo ? <img src={schoolLogo} alt="School Logo" className="h-24 object-contain" crossOrigin="anonymous"/> : <div className="w-24 h-24 bg-slate-200"></div>}
                 <div className="text-center">
@@ -155,9 +135,7 @@ const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
                 </div>
                 <div className="w-24 h-24 flex items-center justify-center text-slate-400"><TrophyIcon size={80}/></div>
             </div>
-            {/* Body */}
             <div className="flex mt-8 gap-8">
-                {/* Male */}
                 <div className="w-1/2">
                     <h2 className="text-2xl font-bold text-blue-700 mb-4 text-center">PLAYER OF THE MONTH (MALE)</h2>
                     <div className="w-full bg-slate-200" style={{ height: '500px' }}>
@@ -175,7 +153,6 @@ const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
                         </div>
                     </div>
                 </div>
-                {/* Female */}
                 <div className="w-1/2">
                     <h2 className="text-2xl font-bold text-pink-600 mb-4 text-center">PLAYER OF THE MONTH (FEMALE)</h2>
                     <div className="w-full bg-slate-200" style={{ height: '500px' }}>
@@ -194,7 +171,6 @@ const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
                     </div>
                 </div>
             </div>
-             {/* Footer */}
             <div className="absolute bottom-8 left-8 right-8 flex justify-between items-end">
                 <p className="text-lg font-semibold italic">汗水鑄就榮耀，目標定義未來</p>
                 <div className="text-center">
@@ -208,11 +184,10 @@ const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
 PosterTemplate.displayName = 'PosterTemplate';
 
 export default function App() {
-  // --- 狀態管理 ---
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
-  const [activeTab, setActiveTab] = useState('rankings');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [students, setStudents] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
   const [competitions, setCompetitions] = useState([]);
@@ -221,6 +196,7 @@ export default function App() {
   const [awards, setAwards] = useState([]); 
   const [achievements, setAchievements] = useState([]); 
   const [leagueMatches, setLeagueMatches] = useState([]);
+  const [externalTournaments, setExternalTournaments] = useState([]);
   const [downloadFiles, setDownloadFiles] = useState([]);
   const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
@@ -231,9 +207,9 @@ export default function App() {
   const [newTournamentName, setNewTournamentName] = useState('');
   const [tournamentPlayers, setTournamentPlayers] = useState([]);
   const [numGroups, setNumGroups] = useState(1);
-  const [selectedSchedule, setSelectedSchedule] = useState(null); // For Calendar Modal
-  const [awardsViewMode, setAwardsViewMode] = useState('grid'); // 'grid' or 'timeline'
-  
+  const [selectedSchedule, setSelectedSchedule] = useState(null);
+  const [awardsViewMode, setAwardsViewMode] = useState('grid'); 
+
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
     announcements: [],
@@ -283,105 +259,16 @@ export default function App() {
   const [isGeneratingPoster, setIsGeneratingPoster] = useState(false);
   const [posterData, setPosterData] = useState(null);
 
-
-const awardAchievement = async (badgeId, studentId) => {
-  if (!badgeId || !studentId) return;
-  const alreadyHasBadge = achievements.some(ach => ach.studentId === studentId && ach.badgeId === badgeId);
-  if (alreadyHasBadge) {
-    alert("該學員已擁有此徽章，無需重複授予。");
-    return;
-  }
-  try {
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'), {
-      studentId,
-      badgeId,
-      timestamp: serverTimestamp()
-    });
-    const student = students.find(s => s.id === studentId);
-    const badge = ACHIEVEMENT_DATA[badgeId];
-    alert(`✅ 成功授予 ${student?.name || '學員'} 「${badge.name}」 徽章！`);
-  } catch (e) {
-    console.error("Failed to award achievement:", e);
-    alert("授予失敗，請檢查網絡連線。");
-  }
-};
-
-const handleManualAward = (student) => {
-  const allBadges = Object.entries(ACHIEVEMENT_DATA);
-  let promptMsg = `請為 ${student.name} 選擇要授予的徽章 (輸入代號):\n\n`;
-  allBadges.forEach(([id, data], index) => {
-      promptMsg += `${index + 1}. ${data.name}\n`;
+  const [newExternalMatch, setNewExternalMatch] = useState({
+    tournamentName: '',
+    date: new Date().toISOString().split('T')[0],
+    player1Id: '',
+    opponentSchool: '',
+    opponentPlayerName: '',
+    externalMatchScore: '',
+    isWin: null,
   });
-  const choice = prompt(promptMsg);
-  if (choice && !isNaN(choice)) {
-      const selectedIndex = parseInt(choice, 10) - 1;
-      if (selectedIndex >= 0 && selectedIndex < allBadges.length) {
-          const [badgeId, badgeData] = allBadges[selectedIndex];
-          if (confirm(`確定要授予 ${student.name} 「${badgeData.name}」徽章嗎？`)) {
-              awardAchievement(badgeId, student.id);
-          }
-      } else {
-          alert("無效的選擇。");
-      }
-  }
-};
-
-const togglePendingAttendance = (studentId) => {
-  setPendingAttendance(prev => 
-    prev.includes(studentId) 
-      ? prev.filter(id => id !== studentId)
-      : [...prev, studentId]
-  );
-};
-
-const savePendingAttendance = async () => {
-  if (pendingAttendance.length === 0) {
-    alert('沒有需要儲存的點名紀錄。');
-    return;
-  }
   
-  let scheduleToUse = todaySchedule;
-  if (!scheduleToUse) {
-    // If no schedule today, create a generic one for logging purposes
-    scheduleToUse = {
-      trainingClass: '一般練習',
-      date: new Date().toISOString().split('T')[0],
-      location: '學校壁球場',
-    };
-  }
-
-  setIsUpdating(true);
-  try {
-    const batch = writeBatch(db);
-    const attendanceCollection = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs');
-    
-    pendingAttendance.forEach(studentId => {
-      const student = students.find(s => s.id === studentId);
-      if (student) {
-        const newLogRef = doc(attendanceCollection);
-        batch.set(newLogRef, {
-          studentId: student.id,
-          name: student.name,
-          class: student.class,
-          classNo: student.classNo,
-          trainingClass: scheduleToUse.trainingClass,
-          date: scheduleToUse.date,
-          location: scheduleToUse.location,
-          timestamp: serverTimestamp()
-        });
-      }
-    });
-    
-    await batch.commit();
-    alert(`✅ 成功儲存 ${pendingAttendance.length} 筆點名紀錄！`);
-    setPendingAttendance([]);
-  } catch (e) {
-    console.error("Batch attendance save failed:", e);
-    alert("儲存失敗，請檢查網絡或聯絡管理員。");
-  }
-  setIsUpdating(false);
-};
-
   useEffect(() => {
     const storedVersion = localStorage.getItem('app_version');
     if (storedVersion !== CURRENT_VERSION) {
@@ -392,6 +279,162 @@ const savePendingAttendance = async () => {
       window.location.reload();
     }
   }, []);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, u => {
+      setUser(u);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    try {
+      const listeners = [];
+      const collections = {
+        students: collection(db, 'artifacts', appId, 'public', 'data', 'students'),
+        attendance_logs: collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'),
+        competitions: collection(db, 'artifacts', appId, 'public', 'data', 'competitions'),
+        schedules: collection(db, 'artifacts', appId, 'public', 'data', 'schedules'),
+        downloadFiles: collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'),
+        gallery: collection(db, 'artifacts', appId, 'public', 'data', 'gallery'),
+        awards: collection(db, 'artifacts', appId, 'public', 'data', 'awards'),
+        achievements: collection(db, 'artifacts', appId, 'public', 'data', 'achievements'),
+        league_matches: collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'),
+        external_tournaments: collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'),
+        monthly_stars: collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars')
+      };
+
+      const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
+      const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
+
+      listeners.push(onSnapshot(systemConfigRef, (docSnap) => {
+        if (docSnap.exists()) setSystemConfig(docSnap.data());
+        else setDoc(systemConfigRef, { adminPassword: 'admin', announcements: [], seasonalTheme: 'default', schoolLogo: null });
+      }, (e) => console.error("Config err", e)));
+
+      listeners.push(onSnapshot(financeConfigRef, (docSnap) => {
+        if (docSnap.exists()) setFinanceConfig(prev => ({...prev, ...docSnap.data()}));
+        else setDoc(financeConfigRef, financeConfig);
+      }, (e) => console.error("Finance err", e)));
+      
+      listeners.push(onSnapshot(collections.students, (snap) => setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(collections.attendance_logs, (snap) => setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(collections.competitions, (snap) => setCompetitions(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(collections.schedules, (snap) => setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(collections.downloadFiles, (snap) => setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(collections.gallery, (snap) => setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(query(collections.awards, orderBy("date", "desc")), (snap) => setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(query(collections.achievements, orderBy("timestamp", "desc")), (snap) => setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() }))))); 
+      listeners.push(onSnapshot(query(collections.league_matches, orderBy("date", "desc")), (snap) => setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(query(collections.external_tournaments, orderBy("name", "asc")), (snap) => setExternalTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+      listeners.push(onSnapshot(query(collections.monthly_stars, orderBy("month", "desc")), (snap) => setMonthlyStars(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
+
+      return () => listeners.forEach(unsub => unsub());
+
+    } catch (e) {
+      console.error("Firestore Init Error:", e);
+    }
+  }, [user]);
+
+  const awardAchievement = async (badgeId, studentId) => {
+    if (!badgeId || !studentId) return;
+    const alreadyHasBadge = achievements.some(ach => ach.studentId === studentId && ach.badgeId === badgeId);
+    if (alreadyHasBadge) {
+      alert("該學員已擁有此徽章，無需重複授予。");
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'), {
+        studentId,
+        badgeId,
+        timestamp: serverTimestamp()
+      });
+      const student = students.find(s => s.id === studentId);
+      const badge = ACHIEVEMENT_DATA[badgeId];
+      alert(`✅ 成功授予 ${student?.name || '學員'} 「${badge.name}」 徽章！`);
+    } catch (e) {
+      console.error("Failed to award achievement:", e);
+      alert("授予失敗，請檢查網絡連線。");
+    }
+  };
+
+  const handleManualAward = (student) => {
+    const allBadges = Object.entries(ACHIEVEMENT_DATA);
+    let promptMsg = `請為 ${student.name} 選擇要授予的徽章 (輸入代號):\n\n`;
+    allBadges.forEach(([id, data], index) => {
+        promptMsg += `${index + 1}. ${data.name}\n`;
+    });
+    const choice = prompt(promptMsg);
+    if (choice && !isNaN(choice)) {
+        const selectedIndex = parseInt(choice, 10) - 1;
+        if (selectedIndex >= 0 && selectedIndex < allBadges.length) {
+            const [badgeId, badgeData] = allBadges[selectedIndex];
+            if (confirm(`確定要授予 ${student.name} 「${badgeData.name}」徽章嗎？`)) {
+                awardAchievement(badgeId, student.id);
+            }
+        } else {
+            alert("無效的選擇。");
+        }
+    }
+  };
+
+  const togglePendingAttendance = (studentId) => {
+    setPendingAttendance(prev => 
+      prev.includes(studentId) 
+        ? prev.filter(id => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
+  const savePendingAttendance = async () => {
+    if (pendingAttendance.length === 0) {
+      alert('沒有需要儲存的點名紀錄。');
+      return;
+    }
+    
+    let scheduleToUse = todaySchedule;
+    if (!scheduleToUse) {
+      scheduleToUse = {
+        trainingClass: '一般練習',
+        date: new Date().toISOString().split('T')[0],
+        location: '學校壁球場',
+      };
+    }
+
+    setIsUpdating(true);
+    try {
+      const batch = writeBatch(db);
+      const attendanceCollection = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs');
+      
+      pendingAttendance.forEach(studentId => {
+        const student = students.find(s => s.id === studentId);
+        if (student) {
+          const newLogRef = doc(attendanceCollection);
+          batch.set(newLogRef, {
+            studentId: student.id,
+            name: student.name,
+            class: student.class,
+            classNo: student.classNo,
+            trainingClass: scheduleToUse.trainingClass,
+            date: scheduleToUse.date,
+            location: scheduleToUse.location,
+            timestamp: serverTimestamp()
+          });
+        }
+      });
+      
+      await batch.commit();
+      alert(`✅ 成功儲存 ${pendingAttendance.length} 筆點名紀錄！`);
+      setPendingAttendance([]);
+    } catch (e) {
+      console.error("Batch attendance save failed:", e);
+      alert("儲存失敗，請檢查網絡或聯絡管理員。");
+    }
+    setIsUpdating(false);
+  };
 
   const financialSummary = useMemo(() => {
     if (!financeConfig) return { revenue: 0, expense: 0, profit: 0 };
@@ -487,105 +530,105 @@ const savePendingAttendance = async () => {
     } catch(e) { console.error("Favicon error", e); }
   }, [systemConfig?.schoolLogo]);
 
-  useEffect(() => {
-    const safetyTimeout = setTimeout(() => {
-      if (loading) setLoading(false);
-    }, 5000);
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        }
-      } catch (err) { 
-        console.error("Auth Error:", err);
-      }
-      setLoading(false);
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-      clearTimeout(safetyTimeout);
-    });
-    return () => {
-      unsubscribe();
-      clearTimeout(safetyTimeout);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    
-    try {
-      const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
-      const attendanceLogsRef = collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs');
-      const competitionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
-      const schedulesRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
-      const filesRef = collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles');
-      const galleryRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery'); 
-      const awardsRef = collection(db, 'artifacts', appId, 'public', 'data', 'awards');
-      const achievementsRef = collection(db, 'artifacts', appId, 'public', 'data', 'achievements');
-      const leagueMatchesRef = collection(db, 'artifacts', appId, 'public', 'data', 'league_matches');
-      const monthlyStarsRef = collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars');
-      const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
-      const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
-
-      const unsubSystemConfig = onSnapshot(systemConfigRef, (docSnap) => {
-        if (docSnap.exists()) setSystemConfig(docSnap.data());
-        else setDoc(systemConfigRef, { adminPassword: 'admin', announcements: [], seasonalTheme: 'default', schoolLogo: null });
-      }, (e) => console.error("Config err", e));
-
-      const unsubFinanceConfig = onSnapshot(financeConfigRef, (docSnap) => {
-        if (docSnap.exists()) {
-          setFinanceConfig(prev => ({...prev, ...docSnap.data()}));
-        } else {
-          setDoc(financeConfigRef, financeConfig);
-        }
-      }, (e) => console.error("Finance err", e));
-      
-      const unsubStudents = onSnapshot(studentsRef, (snap) => {
-        setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-
-      const unsubAttendanceLogs = onSnapshot(attendanceLogsRef, (snap) => {
-        setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubCompetitions = onSnapshot(competitionsRef, (snap) => {
-        setCompetitions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubSchedules = onSnapshot(schedulesRef, (snap) => {
-        setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubFiles = onSnapshot(filesRef, (snap) => {
-        setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubGallery = onSnapshot(galleryRef, (snap) => {
-        setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubAwards = onSnapshot(query(awardsRef, orderBy("date", "desc")), (snap) => {
-          setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubAchievements = onSnapshot(query(achievementsRef, orderBy("timestamp", "desc")), (snap) => {
-        setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      }); 
-      const unsubLeagueMatches = onSnapshot(query(leagueMatchesRef, orderBy("date", "desc")), (snap) => {
-          setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-      const unsubMonthlyStars = onSnapshot(query(monthlyStarsRef, orderBy("month", "desc")), (snap) => {
-          setMonthlyStars(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-
-      return () => { 
-        unsubSystemConfig(); unsubFinanceConfig(); unsubStudents(); unsubAttendanceLogs(); unsubCompetitions(); unsubSchedules(); unsubFiles(); unsubGallery(); unsubAwards();
-        unsubAchievements();
-        unsubLeagueMatches();
-        unsubMonthlyStars();
+  const readCSVFile = (file, encoding) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const buffer = event.target.result;
+        const decoder = new TextDecoder(encoding === 'BIG5' ? 'big5' : 'utf-8');
+        const text = decoder.decode(new Uint8Array(buffer));
+        resolve(text);
       };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  const handleCSVImportExternalTournaments = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsUpdating(true);
+    try {
+      const text = await readCSVFile(file, importEncoding);
+      const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
+      const batch = writeBatch(db);
+      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments');
+      let count = 0;
+      rows.forEach(row => {
+        const name = row.split(',')[0]?.trim();
+        if (name) {
+          batch.set(doc(colRef), { name, timestamp: serverTimestamp() });
+          count++;
+        }
+      });
+      await batch.commit();
+      alert(`✅ 成功匯入 ${count} 個校外賽事名稱！`);
+    } catch (err) {
+      console.error("External tournament import failed:", err);
+      alert('匯入失敗，請確認 CSV 格式 (單欄，第一行為標題)。');
+    }
+    setIsUpdating(false);
+    e.target.value = null;
+  };
+  
+  const handleSaveExternalMatch = async () => {
+    const { player1Id, tournamentName, date, isWin, externalMatchScore, opponentSchool, opponentPlayerName } = newExternalMatch;
+    if (!player1Id || !tournamentName || !date || isWin === null) {
+      alert('請填寫所有必填欄位：賽事、日期、我方隊員及本場結果。');
+      return;
+    }
+
+    const player = students.find(s => s.id === player1Id);
+    if (!player) {
+      alert('找不到指定的學生資料！');
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const matchData = {
+        tournamentName,
+        date,
+        player1Id,
+        isWin,
+        externalMatchScore,
+        opponentSchool,
+        opponentPlayerName,
+        matchType: 'external',
+        player1Name: player.name,
+        player2Id: null, 
+        player2Name: opponentPlayerName || 'N/A', 
+        winnerId: isWin ? player1Id : null,
+        status: 'completed',
+        timestamp: serverTimestamp(),
+      };
+      
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'), matchData);
+      
+      alert('✅ 校外賽記錄已成功儲存！');
+      setNewExternalMatch({
+        tournamentName: '',
+        date: new Date().toISOString().split('T')[0],
+        player1Id: '',
+        opponentSchool: '',
+        opponentPlayerName: '',
+        externalMatchScore: '',
+        isWin: null,
+      });
 
     } catch (e) {
-      console.error("Firestore Init Error:", e);
+      console.error("Failed to save external match:", e);
+      alert('儲存失敗，請檢查網絡連線。');
     }
-  }, [user]);
+    setIsUpdating(false);
+  };
+    
+  const deleteItem = async (col, id) => {
+    if (role !== 'admin') return;
+    if (window.confirm('確定要永久刪除這個項目嗎？')) {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
+    }
+  };
 
   const handleLogin = async (type) => {
     if (type === 'admin') {
@@ -612,8 +655,7 @@ const savePendingAttendance = async () => {
       const studentAuthEmail = `${loginClass.toLowerCase().trim()}${loginClassNo.trim()}@bcklas.squash`;
 
       try {
-        const userCredential = await signInWithEmailAndPassword(auth, studentAuthEmail, loginPassword);
-        
+        await signInWithEmailAndPassword(auth, studentAuthEmail, loginPassword);
         const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
         
         if (matchedStudent) {
@@ -668,9 +710,9 @@ const savePendingAttendance = async () => {
       totalPoints: Number(s.points) || 0 
     })).sort((a, b) => {
       if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
-      const timeA = a.lastUpdated?.seconds || Infinity;
-      const timeB = b.lastUpdated?.seconds || Infinity;
-      return timeA - timeB;
+      const timeA = a.lastUpdated?.seconds || 0;
+      const timeB = b.lastUpdated?.seconds || 0;
+      return timeB - timeA;
     });
   }, [students]);
 
@@ -700,7 +742,7 @@ const savePendingAttendance = async () => {
         const matchYear = selectedYearFilter === 'ALL' || (s.dob && s.dob.startsWith(selectedYearFilter)) || (selectedYearFilter === '未知' && !s.dob);
         return matchSearch && matchYear;
       })
-      .sort((a, b) => { // Re-sort after filtering
+      .sort((a, b) => {
         const rankA = rankedStudents.findIndex(rs => rs.id === a.id);
         const rankB = rankedStudents.findIndex(rs => rs.id === b.id);
         return rankA - rankB;
@@ -988,20 +1030,6 @@ const savePendingAttendance = async () => {
       return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
   };
 
-  const readCSVFile = (file, encoding) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const buffer = event.target.result;
-        const decoder = new TextDecoder(encoding === 'BIG5' ? 'big5' : 'utf-8');
-        const text = decoder.decode(new Uint8Array(buffer));
-        resolve(text);
-      };
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    });
-  };
-
   const handleCSVImportSchedules = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1064,13 +1092,6 @@ const savePendingAttendance = async () => {
     setIsUpdating(false);
     e.target.value = null;
   };
-
-  const deleteItem = async (col, id) => {
-    if (role !== 'admin') return;
-    if (window.confirm('確定要永久刪除這個項目嗎？')) {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
-    }
-  };
   
   const todaySchedule = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -1088,16 +1109,14 @@ const savePendingAttendance = async () => {
       : schedules.filter(s => s.trainingClass === selectedClassFilter);
     
     return filtered.map(s => {
-      // Basic parsing, assuming date is YYYY-MM-DD and time is HH:MM
       const [year, month, day] = s.date.split('-').map(Number);
-      const startTime = s.time ? s.time.split(':').map(Number) : [16, 0]; // Default to 16:00
-      const endTime = s.time ? [startTime[0] + 2, startTime[1]] : [18, 0]; // Default to 2 hours duration
-
+      const startTime = s.time ? s.time.split(':').map(Number) : [16, 0];
+      const endTime = s.time ? [startTime[0] + 2, startTime[1]] : [18, 0];
       return {
         title: `[${s.trainingClass}] ${s.time || ''}`,
         start: new Date(year, month - 1, day, startTime[0], startTime[1]),
         end: new Date(year, month - 1, day, endTime[0], endTime[1]),
-        resource: s, // Keep original data
+        resource: s,
       };
     });
   }, [schedules, selectedClassFilter]);
@@ -1112,7 +1131,7 @@ const savePendingAttendance = async () => {
   }, [students, attendanceClassFilter]);
 
   const downloadTemplate = (type) => {
-    let csvContent = "\uFEFF"; // BOM for Excel
+    let csvContent = "\uFEFF";
     let fileName = '';
 
     if (type === 'students') {
@@ -1376,7 +1395,7 @@ const savePendingAttendance = async () => {
     const playerIdsInTournament = new Set();
     filteredMatches.forEach(match => {
         playerIdsInTournament.add(match.player1Id);
-        playerIdsInTournament.add(match.player2Id);
+        if (match.player2Id) playerIdsInTournament.add(match.player2Id);
     });
 
     playerIdsInTournament.forEach(playerId => {
@@ -1401,7 +1420,7 @@ const savePendingAttendance = async () => {
         }
     });
 
-    filteredMatches.filter(m => m.status === 'completed').forEach(match => {
+    filteredMatches.filter(m => m.status === 'completed' && m.matchType !== 'external').forEach(match => {
         const groupKey = match.groupName || '所有比賽';
         const p1Stats = standings[groupKey]?.[match.player1Id];
         const p2Stats = standings[groupKey]?.[match.player2Id];
@@ -1409,16 +1428,16 @@ const savePendingAttendance = async () => {
         if (p1Stats && p2Stats) {
             p1Stats.played += 1;
             p2Stats.played += 1;
-            p1Stats.pointsFor += match.score1;
-            p1Stats.pointsAgainst += match.score2;
-            p2Stats.pointsFor += match.score2;
-            p2Stats.pointsAgainst += match.score1;
+            p1Stats.pointsFor += match.score1 || 0;
+            p1Stats.pointsAgainst += match.score2 || 0;
+            p2Stats.pointsFor += match.score2 || 0;
+            p2Stats.pointsAgainst += match.score1 || 0;
 
             if (match.winnerId === match.player1Id) {
                 p1Stats.wins += 1;
                 p1Stats.leaguePoints += 3;
                 p2Stats.losses += 1;
-            } else {
+            } else if (match.winnerId === match.player2Id) {
                 p2Stats.wins += 1;
                 p2Stats.leaguePoints += 3;
                 p1Stats.losses += 1;
@@ -1458,13 +1477,11 @@ const savePendingAttendance = async () => {
     const playerDashboardData = useMemo(() => {
         if (!viewingStudent) return null;
 
-        // 1. Filter data for the selected student
         const studentMatches = leagueMatches.filter(m => m.player1Id === viewingStudent.id || m.player2Id === viewingStudent.id);
         const completedMatches = studentMatches.filter(m => m.status === 'completed');
         const studentAttendance = attendanceLogs.filter(log => log.studentId === viewingStudent.id);
         const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
 
-        // 2. Calculate statistics
         const wins = completedMatches.filter(m => m.winnerId === viewingStudent.id).length;
         const totalPlayed = completedMatches.length;
         const winRate = totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : 0;
@@ -1473,14 +1490,12 @@ const savePendingAttendance = async () => {
         const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
         const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
 
-        // 3. Prepare data for charts and lists
         const pointsHistory = [{ date: viewingStudent.createdAt?.toDate().toISOString().split('T')[0] || 'N/A', points: BADGE_DATA[viewingStudent.badge]?.basePoints || 0 }];
-        // This is a simplified logic. A more robust solution would track points chronologically from all sources.
         completedMatches
             .sort((a,b) => a.date.localeCompare(b.date))
             .forEach(match => {
                 const lastPoint = pointsHistory[pointsHistory.length - 1].points;
-                if (match.winnerId === viewingStudent.id) {
+                if (match.winnerId === viewingStudent.id && match.matchType !== 'external') {
                     const winnerRank = rankedStudents.findIndex(s => s.id === match.winnerId) + 1;
                     const loserRank = rankedStudents.findIndex(s => s.id === (match.winnerId === match.player1Id ? match.player2Id : match.player1Id)) + 1;
                     const isGiantKiller = winnerRank > 0 && loserRank > 0 && (winnerRank - loserRank) >= 5;
@@ -1679,6 +1694,96 @@ const savePendingAttendance = async () => {
   };
 
 
+  const AwardCard = ({ award, student, style }) => {
+      const rank = award.rank || '';
+      
+      const rankStyles = useMemo(() => {
+          if (rank.includes('冠軍')) {
+              return {
+                  bg: 'bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-400',
+                  text: 'text-yellow-900',
+                  shadow: 'shadow-yellow-400/30 hover:shadow-yellow-300/50',
+                  border: 'border-yellow-500/50',
+                  ribbon: 'bg-yellow-500',
+                  rankText: 'text-yellow-800'
+              };
+          }
+          if (rank.includes('亞軍')) {
+              return {
+                  bg: 'bg-gradient-to-br from-slate-200 via-gray-300 to-slate-300',
+                  text: 'text-slate-800',
+                  shadow: 'shadow-slate-400/30 hover:shadow-slate-300/50',
+                  border: 'border-gray-400/50',
+                  ribbon: 'bg-slate-500',
+                  rankText: 'text-slate-100'
+              };
+          }
+          if (rank.includes('季軍') || rank.includes('殿軍')) {
+              return {
+                  bg: 'bg-gradient-to-br from-orange-300 via-amber-500 to-orange-400',
+                  text: 'text-orange-900',
+                  shadow: 'shadow-amber-600/30 hover:shadow-amber-500/50',
+                  border: 'border-orange-500/50',
+                  ribbon: 'bg-orange-600',
+                  rankText: 'text-orange-100'
+              };
+          }
+          return {
+              bg: 'bg-gradient-to-br from-blue-300 via-sky-400 to-blue-400',
+              text: 'text-sky-900',
+              shadow: 'shadow-sky-400/30 hover:shadow-sky-300/50',
+              border: 'border-sky-500/50',
+              ribbon: 'bg-sky-500',
+              rankText: 'text-sky-100'
+          };
+      }, [rank]);
+
+      return (
+          <div style={style} className={`group relative flex flex-col ${rankStyles.bg} rounded-3xl p-1.5 shadow-lg ${rankStyles.shadow} transition-all duration-300 ease-in-out hover:scale-105`}>
+              <div className="absolute top-0 left-10 w-12 h-16 overflow-hidden z-20">
+                  <div className={`absolute -top-2 left-0 w-full h-full rotate-45 transform-gpu ${rankStyles.ribbon} shadow-md`}></div>
+              </div>
+
+              <div className="bg-white/50 backdrop-blur-sm rounded-[1.35rem] h-full flex flex-col p-6">
+                  <div className="w-full aspect-[4/3] rounded-2xl bg-white/50 overflow-hidden relative border border-white/50 shadow-inner">
+                      {award.photoUrl ? (
+                          <img src={award.photoUrl} alt={award.title} className="w-full h-full object-cover" />
+                      ) : (
+                          <div className={`w-full h-full flex items-center justify-center opacity-20 ${rankStyles.text}`}>
+                              <Trophy size={64}/>
+                          </div>
+                      )}
+                      <div className={`absolute bottom-3 right-3 px-4 py-1.5 rounded-full text-sm font-black shadow-lg ${rankStyles.ribbon} ${rankStyles.rankText}`}>
+                          {award.rank}
+                      </div>
+                  </div>
+                  <div className="flex-1 flex flex-col pt-5 px-1">
+                      <p className={`text-xs font-bold ${rankStyles.text} opacity-70`}>{award.date}</p>
+                      <h4 className={`text-xl font-black leading-tight mt-1 mb-3 ${rankStyles.text}`}>{award.title}</h4>
+                      <div className="mt-auto flex items-center gap-3">
+                           <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold bg-white/70 ${rankStyles.text} shadow-sm border-2 ${rankStyles.border}`}>
+                              {student ? student.name[0] : award.studentName[0]}
+                           </div>
+                           <div>
+                               <p className={`font-bold ${rankStyles.text}`}>{award.studentName}</p>
+                               {student && <p className={`text-xs font-semibold ${rankStyles.text} opacity-80`}>Class {student.class}</p>}
+                           </div>
+                      </div>
+                  </div>
+              </div>
+              
+               {role === 'admin' && (
+                  <button 
+                    onClick={() => deleteItem('awards', award.id)}
+                    className="absolute top-4 right-4 p-2 bg-black/20 backdrop-blur text-white/70 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100 z-30"
+                  >
+                    <Trash2 size={16}/>
+                  </button>
+               )}
+          </div>
+      );
+  };
+  
   const PlayerCardModal = ({ student, onClose }) => {
     const cardRef = useRef(null);
     const [isDownloading, setIsDownloading] = useState(false);
@@ -1696,18 +1801,46 @@ const savePendingAttendance = async () => {
       e.stopPropagation();
       if (currentIndex < rankedStudents.length - 1) setShowPlayerCard(rankedStudents[currentIndex + 1]);
     };
+    
+    const { internalStats, externalStatsByYear } = useMemo(() => {
+        const studentMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === student.id || m.player2Id === student.id));
+        
+        const internalMatches = studentMatches.filter(m => m.matchType !== 'external');
+        const internalTotal = internalMatches.length;
+        const internalWins = internalMatches.filter(m => m.winnerId === student.id).length;
+        const internalWinRate = internalTotal > 0 ? Math.round((internalWins / internalTotal) * 100) : 0;
+        let giantKillsCount = 0;
+        internalMatches.filter(m => m.winnerId === student.id).forEach(match => {
+            const opponentId = match.player1Id === student.id ? match.player2Id : match.player1Id;
+            const opponentIndex = rankedStudents.findIndex(s => s.id === opponentId);
+            if (opponentIndex >= 0 && (currentIndex - opponentIndex) >= 5) giantKillsCount++;
+        });
 
-    const studentMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === student.id || m.player2Id === student.id));
-    const totalMatches = studentMatches.length;
-    const wins = studentMatches.filter(m => m.winnerId === student.id).length;
-    const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
-    const competitionsCount = new Set(studentMatches.map(m => m.tournamentName)).size;
-    let giantKillsCount = 0;
-    studentMatches.filter(m => m.winnerId === student.id).forEach(match => {
-        const opponentId = match.player1Id === student.id ? match.player2Id : match.player1Id;
-        const opponentIndex = rankedStudents.findIndex(s => s.id === opponentId);
-        if (opponentIndex >= 0 && (currentIndex - opponentIndex) >= 5) giantKillsCount++;
-    });
+        const externalMatches = studentMatches.filter(m => m.matchType === 'external' && m.player1Id === student.id);
+        const statsByYear = externalMatches.reduce((acc, match) => {
+            const year = getAcademicYear(match.date);
+            if (!acc[year]) {
+                acc[year] = { played: 0, wins: 0, losses: 0 };
+            }
+            acc[year].played += 1;
+            if (match.winnerId === student.id) {
+                acc[year].wins += 1;
+            } else {
+                acc[year].losses += 1;
+            }
+            return acc;
+        }, {});
+
+        return {
+            internalStats: {
+                winRate: internalWinRate,
+                wins: internalWins,
+                losses: internalTotal - internalWins,
+                giantKills: giantKillsCount
+            },
+            externalStatsByYear: Object.entries(statsByYear).sort((a,b) => b[0].localeCompare(a[0]))
+        };
+    }, [leagueMatches, student, rankedStudents, currentIndex]);
 
     const studentAchievements = achievements.filter(ach => ach.studentId === student.id);
     const uniqueAchievements = [...new Set(studentAchievements.map(ach => ach.badgeId))];
@@ -1716,16 +1849,9 @@ const savePendingAttendance = async () => {
       e.stopPropagation();
       if (!cardRef.current || isDownloading) return;
       setIsDownloading(true);
-
       try {
         await Promise.all([toDataURL(student.photo_url), toDataURL(systemConfig.schoolLogo)]);
-
-        const canvas = await html2canvas(cardRef.current, { 
-          scale: 2, 
-          useCORS: true,
-          backgroundColor: '#ffffff'
-        });
-
+        const canvas = await html2canvas(cardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff'});
         const image = canvas.toDataURL('image/png', 1.0);
         const link = document.createElement('a');
         link.href = image;
@@ -1744,7 +1870,6 @@ const savePendingAttendance = async () => {
     return (
       <div className="fixed inset-0 z-[300] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={onClose}>
         <div className="relative max-w-md w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-          
           <div ref={cardRef} className="w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-100 relative">
             <div className="bg-slate-50 border-b p-6 flex justify-between items-center relative">
               <SchoolLogo size={24} />
@@ -1753,7 +1878,6 @@ const savePendingAttendance = async () => {
               </div>
               <TrophyIcon size={32} className="text-slate-200 absolute right-4 opacity-50" />
             </div>
-
             <div className="p-8 pb-4 flex flex-col items-center relative">
               <div className="w-32 h-32 rounded-full bg-slate-100 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center mb-4 relative z-10">
                  {student.photo_url ? (
@@ -1762,14 +1886,11 @@ const savePendingAttendance = async () => {
                    <span className="text-5xl font-black text-slate-300">{student.name[0]}</span>
                  )}
               </div>
-              
               <button onClick={handlePrev} disabled={currentIndex <= 0} className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30 transition-all z-20"><ChevronRight className="rotate-180" size={24}/></button>
               <button onClick={handleNext} disabled={currentIndex >= rankedStudents.length - 1} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30 transition-all z-20"><ChevronRight size={24}/></button>
-              
               <h2 className="text-2xl font-black text-slate-800">{student.name} {student.eng_name ? `(${student.eng_name})` : ''}</h2>
               <p className="text-sm font-bold text-slate-400 uppercase mt-1">CLASS: {student.class} ({student.classNo})</p>
             </div>
-
             <div className="grid grid-cols-3 gap-2 px-6 py-4">
                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
                  <p className="text-xl font-black text-blue-600">{student.totalPoints}</p>
@@ -1784,16 +1905,30 @@ const savePendingAttendance = async () => {
                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1">Rank (Team)</p>
                </div>
             </div>
-
-            <div className="px-8 py-4">
-               <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b pb-2">Season Stats (2024-25)</h4>
-               <ul className="space-y-2 text-sm font-bold text-slate-600">
-                 <li className="flex justify-between"><span>勝率 (Win Rate):</span> <span className="text-slate-800">{winRate}% ({wins}勝 {totalMatches - wins}負)</span></li>
-                 <li className="flex justify-between"><span>比賽次數 (Competitions):</span> <span className="text-slate-800">{student.competitions || competitionsCount} 次</span></li>
-                 <li className="flex justify-between"><span>巨人殺手 (Giant Kills):</span> <span className="text-slate-800">{student.giant_kills || giantKillsCount} 次</span></li>
-               </ul>
+            <div className="px-6 py-4 space-y-4">
+               <div>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 border-b pb-2">內部聯賽表現 (Internal League)</h4>
+                  <ul className="space-y-1.5 text-sm font-bold text-slate-600">
+                    <li className="flex justify-between"><span>勝率 (Win Rate):</span> <span className="text-slate-800">{internalStats.winRate}% ({internalStats.wins}勝 {internalStats.losses}負)</span></li>
+                    <li className="flex justify-between"><span>巨人殺手 (Giant Kills):</span> <span className="text-slate-800">{internalStats.giantKills} 次</span></li>
+                  </ul>
+               </div>
+               <div>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 border-b pb-2">代表學校出賽 (School Team)</h4>
+                  {externalStatsByYear.length > 0 ? (
+                    <ul className="space-y-1.5 text-sm font-bold text-slate-600">
+                      {externalStatsByYear.map(([year, stats]) => (
+                        <li key={year} className="flex justify-between">
+                          <span>{year} 學年:</span> 
+                          <span className="text-slate-800">{stats.played}場 {stats.wins}勝 {stats.losses}負 ({Math.round(stats.wins/stats.played * 100)}%)</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-slate-400 text-center py-2">暫無校外賽記錄</p>
+                  )}
+               </div>
             </div>
-
             <div className="px-8 pb-8 pt-2">
                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b pb-2">Achievements</h4>
                <div className="flex flex-wrap gap-2">
@@ -1808,12 +1943,10 @@ const savePendingAttendance = async () => {
                  }) : <p className="text-xs text-slate-300">尚未獲得徽章</p>}
                </div>
             </div>
-            
             <div className="bg-slate-800 text-slate-400 text-center py-2 text-[8px] font-black tracking-widest uppercase">
               Generated by BCKLAS Squash System v{CURRENT_VERSION}
             </div>
           </div>
-
           <button 
             onClick={handleDownload} 
             disabled={isDownloading}
@@ -1822,7 +1955,6 @@ const savePendingAttendance = async () => {
             {isDownloading ? <Loader2 className="animate-spin" size={18}/> : <Download size={18}/>}
             {isDownloading ? '生成中...' : '下載卡片 (PNG)'}
           </button>
-          
           <button onClick={onClose} className="mt-4 text-white/50 hover:text-white text-sm font-bold transition-all">關閉 (Close)</button>
         </div>
       </div>
@@ -1845,7 +1977,6 @@ const savePendingAttendance = async () => {
                 </div>
             </div>
 
-            {/* Key Stat Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
                 <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
                     <TrophyIcon size={32} className="mx-auto text-yellow-500 mb-4"/>
@@ -1870,7 +2001,6 @@ const savePendingAttendance = async () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                {/* Points Trend Chart Placeholder */}
                 <div className="lg:col-span-2 bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
                     <h4 className="text-2xl font-black mb-6">積分走勢圖</h4>
                     <div className="h-80 bg-slate-50 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-400 text-center">
@@ -1881,7 +2011,6 @@ const savePendingAttendance = async () => {
                     </div>
                 </div>
 
-                {/* Achievements */}
                 <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
                     <h4 className="text-2xl font-black mb-6">我的成就</h4>
                     <div className="grid grid-cols-3 gap-4">
@@ -1901,14 +2030,13 @@ const savePendingAttendance = async () => {
                 </div>
             </div>
 
-            {/* Recent Match History */}
             <div className="mt-10 bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
                 <h4 className="text-2xl font-black mb-6">近期比賽記錄</h4>
                 <div className="space-y-4">
                     {data.recentMatches.length > 0 ? data.recentMatches.map(match => {
                         const isWinner = match.winnerId === student.id;
                         const opponentName = match.player1Id === student.id ? match.player2Name : match.player1Name;
-                        const score = match.player1Id === student.id ? `${match.score1} - ${match.score2}` : `${match.score2} - ${match.score1}`;
+                        const score = match.matchType === 'external' ? match.externalMatchScore : (match.player1Id === student.id ? `${match.score1} - ${match.score2}` : `${match.score2} - ${match.score1}`);
                         return (
                             <div key={match.id} className={`p-6 rounded-3xl flex items-center justify-between gap-4 ${isWinner ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
                                 <div>
@@ -1926,99 +2054,9 @@ const savePendingAttendance = async () => {
             </div>
         </div>
     );
-};
+  };
 
-const AwardCard = ({ award, student, style }) => {
-    const rank = award.rank || '';
-    
-    const rankStyles = useMemo(() => {
-        if (rank.includes('冠軍')) {
-            return {
-                bg: 'bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-400',
-                text: 'text-yellow-900',
-                shadow: 'shadow-yellow-400/30 hover:shadow-yellow-300/50',
-                border: 'border-yellow-500/50',
-                ribbon: 'bg-yellow-500',
-                rankText: 'text-yellow-800'
-            };
-        }
-        if (rank.includes('亞軍')) {
-            return {
-                bg: 'bg-gradient-to-br from-slate-200 via-gray-300 to-slate-300',
-                text: 'text-slate-800',
-                shadow: 'shadow-slate-400/30 hover:shadow-slate-300/50',
-                border: 'border-gray-400/50',
-                ribbon: 'bg-slate-500',
-                rankText: 'text-slate-100'
-            };
-        }
-        if (rank.includes('季軍') || rank.includes('殿軍')) {
-            return {
-                bg: 'bg-gradient-to-br from-orange-300 via-amber-500 to-orange-400',
-                text: 'text-orange-900',
-                shadow: 'shadow-amber-600/30 hover:shadow-amber-500/50',
-                border: 'border-orange-500/50',
-                ribbon: 'bg-orange-600',
-                rankText: 'text-orange-100'
-            };
-        }
-        return {
-            bg: 'bg-gradient-to-br from-blue-300 via-sky-400 to-blue-400',
-            text: 'text-sky-900',
-            shadow: 'shadow-sky-400/30 hover:shadow-sky-300/50',
-            border: 'border-sky-500/50',
-            ribbon: 'bg-sky-500',
-            rankText: 'text-sky-100'
-        };
-    }, [rank]);
-
-    return (
-        <div style={style} className={`group relative flex flex-col ${rankStyles.bg} rounded-3xl p-1.5 shadow-lg ${rankStyles.shadow} transition-all duration-300 ease-in-out hover:scale-105`}>
-            <div className="absolute top-0 left-10 w-12 h-16 overflow-hidden z-20">
-                <div className={`absolute -top-2 left-0 w-full h-full rotate-45 transform-gpu ${rankStyles.ribbon} shadow-md`}></div>
-            </div>
-
-            <div className="bg-white/50 backdrop-blur-sm rounded-[1.35rem] h-full flex flex-col p-6">
-                <div className="w-full aspect-[4/3] rounded-2xl bg-white/50 overflow-hidden relative border border-white/50 shadow-inner">
-                    {award.photoUrl ? (
-                        <img src={award.photoUrl} alt={award.title} className="w-full h-full object-cover" />
-                    ) : (
-                        <div className={`w-full h-full flex items-center justify-center opacity-20 ${rankStyles.text}`}>
-                            <Trophy size={64}/>
-                        </div>
-                    )}
-                    <div className={`absolute bottom-3 right-3 px-4 py-1.5 rounded-full text-sm font-black shadow-lg ${rankStyles.ribbon} ${rankStyles.rankText}`}>
-                        {award.rank}
-                    </div>
-                </div>
-                <div className="flex-1 flex flex-col pt-5 px-1">
-                    <p className={`text-xs font-bold ${rankStyles.text} opacity-70`}>{award.date}</p>
-                    <h4 className={`text-xl font-black leading-tight mt-1 mb-3 ${rankStyles.text}`}>{award.title}</h4>
-                    <div className="mt-auto flex items-center gap-3">
-                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold bg-white/70 ${rankStyles.text} shadow-sm border-2 ${rankStyles.border}`}>
-                            {student ? student.name[0] : award.studentName[0]}
-                         </div>
-                         <div>
-                             <p className={`font-bold ${rankStyles.text}`}>{award.studentName}</p>
-                             {student && <p className={`text-xs font-semibold ${rankStyles.text} opacity-80`}>Class {student.class}</p>}
-                         </div>
-                    </div>
-                </div>
-            </div>
-            
-             {role === 'admin' && (
-                <button 
-                  onClick={() => deleteItem('awards', award.id)}
-                  className="absolute top-4 right-4 p-2 bg-black/20 backdrop-blur text-white/70 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100 z-30"
-                >
-                  <Trash2 size={16}/>
-                </button>
-             )}
-        </div>
-    );
-};
-  
-const MonthlyStarsPage = ({ monthlyStarsData }) => {
+  const MonthlyStarsPage = ({ monthlyStarsData }) => {
     const [displayMonth, setDisplayMonth] = useState('');
 
     useEffect(() => {
@@ -2054,7 +2092,6 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
 
             {currentData && (
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                    {/* Male Winner Display */}
                     <div className="bg-gradient-to-br from-blue-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
                         <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
                            {currentData.maleWinner.fullBodyPhotoUrl ? <img src={currentData.maleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
@@ -2072,7 +2109,6 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                             </div>
                         </div>
                     </div>
-                     {/* Female Winner Display */}
                     <div className="bg-gradient-to-br from-pink-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
                         <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
                             {currentData.femaleWinner.fullBodyPhotoUrl ? <img src={currentData.femaleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
@@ -2094,7 +2130,7 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
             )}
         </div>
     );
-};
+  };
 
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -2115,45 +2151,24 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
           <PosterTemplate ref={posterRef} data={posterData} />
       </div>
 
-      <input 
-        type="file" 
-        ref={galleryInputRef} 
-        className="hidden" 
-        accept="image/*"
-        multiple 
-        onChange={handleGalleryImageUpload}
-      />
+      <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" multiple onChange={handleGalleryImageUpload} />
       
-    {showTournamentModal && (
+      {showTournamentModal && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowTournamentModal(false)}>
             <div className="bg-white rounded-[3rem] w-full max-w-2xl p-10 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => setShowTournamentModal(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-800 transition-colors"><X size={24} /></button>
                 <h3 className="text-3xl font-black text-slate-800 mb-8">建立新的循環賽事</h3>
-                
                 <div className="space-y-6">
                     <div>
                         <label className="text-sm font-bold text-slate-500 mb-2 block">1. 賽事名稱</label>
-                        <input 
-                            type="text"
-                            value={newTournamentName}
-                            onChange={(e) => setNewTournamentName(e.target.value)}
-                            className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg" 
-                            placeholder="例如：2024-25 上學期循環賽"
-                        />
+                        <input type="text" value={newTournamentName} onChange={(e) => setNewTournamentName(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg" placeholder="例如：2024-25 上學期循環賽"/>
                     </div>
                     <div>
                         <label className="text-sm font-bold text-slate-500 mb-2 block">2. 選擇參賽球員 (已選 {tournamentPlayers.length} 人)</label>
                         <div className="max-h-60 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border">
                             {students.sort((a,b) => a.class.localeCompare(b.class) || a.classNo.localeCompare(b.classNo)).map(s => (
                                 <label key={s.id} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${tournamentPlayers.includes(s.id) ? 'bg-blue-600 text-white' : 'hover:bg-slate-200'}`}>
-                                    <input
-                                        type="checkbox"
-                                        checked={tournamentPlayers.includes(s.id)}
-                                        onChange={() => {
-                                            setTournamentPlayers(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])
-                                        }}
-                                        className="w-5 h-5 rounded-md accent-blue-200"
-                                    />
+                                    <input type="checkbox" checked={tournamentPlayers.includes(s.id)} onChange={() => {setTournamentPlayers(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])}} className="w-5 h-5 rounded-md accent-blue-200"/>
                                     <span className="font-bold text-sm">{s.name} ({s.class})</span>
                                 </label>
                             ))}
@@ -2161,39 +2176,21 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                     </div>
                     <div>
                         <label className="text-sm font-bold text-slate-500 mb-2 block">3. 分組數量 (自動平均分配)</label>
-                        <input 
-                            type="number"
-                            min="1"
-                            value={numGroups}
-                            onChange={(e) => setNumGroups(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                            className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg" 
-                        />
+                        <input type="number" min="1" value={numGroups} onChange={(e) => setNumGroups(Math.max(1, parseInt(e.target.value, 10) || 1))} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg"/>
                     </div>
                 </div>
-
                 <div className="mt-10 flex justify-end">
-                    <button 
-                        onClick={handleGenerateRoundRobinMatches}
-                        disabled={isUpdating}
-                        className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all font-black disabled:opacity-50"
-                    >
-                        {isUpdating ? <Loader2 className="animate-spin" /> : <Swords/>}
-                        自動生成賽程
+                    <button onClick={handleGenerateRoundRobinMatches} disabled={isUpdating} className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all font-black disabled:opacity-50">
+                        {isUpdating ? <Loader2 className="animate-spin" /> : <Swords/>} 自動生成賽程
                     </button>
                 </div>
             </div>
         </div>
-    )}
+      )}
 
-      
       {viewingImage && (
-        <div 
-          className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300" 
-          onClick={() => setViewingImage(null)}
-        >
-          <button onClick={() => setViewingImage(null)} className="absolute top-6 right-6 p-2 bg-white/10 rounded-full text-white/70 hover:bg-white/20 hover:text-white transition-all z-50">
-            <X size={32} />
-          </button>
+        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setViewingImage(null)}>
+          <button onClick={() => setViewingImage(null)} className="absolute top-6 right-6 p-2 bg-white/10 rounded-full text-white/70 hover:bg-white/20 hover:text-white transition-all z-50"><X size={32} /></button>
           <div className="relative max-w-full max-h-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
              <img src={viewingImage.url} alt={viewingImage.title} className="max-w-[90vw] max-h-[80vh] object-contain rounded-lg shadow-2xl"/>
              <div className="mt-6 text-center text-white">
@@ -2203,79 +2200,42 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
           </div>
         </div>
       )}
+
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 backdrop-blur-sm">
           <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/50 transform transition-all duration-700">
-            <div className="flex justify-center mb-10">
-              <SchoolLogo className="text-white" size={80} />
-            </div>
+            <div className="flex justify-center mb-10"><SchoolLogo className="text-white" size={80} /></div>
             <h2 className="text-4xl font-black text-center text-slate-800 mb-2">正覺壁球</h2>
             <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
             <div className="space-y-6">
-              
               <div className="bg-slate-50 p-1 rounded-[2rem] flex mb-4 relative">
                  <div className={`absolute top-1 bottom-1 w-1/2 bg-white rounded-[1.8rem] shadow-sm transition-all duration-300 ease-out ${loginTab === 'admin' ? 'left-1/2' : 'left-1'}`}></div>
                  <button onClick={() => setLoginTab('student')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'student' ? 'text-blue-600' : 'text-slate-400'}`}>學員入口</button>
                  <button onClick={() => setLoginTab('admin')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'admin' ? 'text-blue-600' : 'text-slate-400'}`}>教練登入</button>
               </div>
-              
               {loginTab === 'student' ? (
                   <div className="space-y-3 font-bold animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="flex gap-3">
-                      <input 
-                        type="text" 
-                        value={loginClass}
-                        onChange={(e) => setLoginClass(e.target.value)}
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" 
-                        placeholder="班別 (如 6A)" 
-                      />
-                      <input 
-                        type="text" 
-                        value={loginClassNo}
-                        onChange={(e) => setLoginClassNo(e.target.value)}
-                        className="w-1/2 bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" 
-                        placeholder="班號 (如 01)" 
-                      />
+                      <input type="text" value={loginClass} onChange={(e) => setLoginClass(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" placeholder="班別 (如 6A)" />
+                      <input type="text" value={loginClassNo} onChange={(e) => setLoginClassNo(e.target.value)} className="w-1/2 bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" placeholder="班號 (如 01)" />
                     </div>
                     <div className="relative">
                       <span className="absolute left-5 top-5 text-slate-300"><Lock size={18}/></span>
-                      <input 
-                        type="password"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" 
-                        placeholder="學生密碼" 
-                      />
+                      <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" placeholder="學生密碼" />
                     </div>
-                    <button onClick={() => handleLogin('student')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">
-                      進入系統
-                    </button>
+                    <button onClick={() => handleLogin('student')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">進入系統</button>
                   </div>
               ) : (
                   <div className="space-y-3 font-bold animate-in fade-in slide-in-from-left-4 duration-300">
                     <div className="relative">
                       <span className="absolute left-5 top-5 text-slate-300"><Mail size={18}/></span>
-                      <input 
-                        type="email" 
-                        value={loginEmail}
-                        onChange={(e) => setLoginEmail(e.target.value)}
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" 
-                        placeholder="教練電郵" 
-                      />
+                      <input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" placeholder="教練電郵" />
                     </div>
                     <div className="relative">
                       <span className="absolute left-5 top-5 text-slate-300"><Lock size={18}/></span>
-                      <input 
-                        type="password"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" 
-                        placeholder="教練密碼" 
-                      />
+                      <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" placeholder="教練密碼" />
                     </div>
-                    <button onClick={() => handleLogin('admin')} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-slate-200 transition-all active:scale-[0.98]">
-                      管理員登入
-                    </button>
+                    <button onClick={() => handleLogin('admin')} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-slate-200 transition-all active:scale-[0.98]">管理員登入</button>
                   </div>
               )}
             </div>
@@ -2283,13 +2243,11 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
           </div>
         </div>
       )}
-      
+
       <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-white border-r transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
-            <div className="flex items-center justify-center">
-               <SchoolLogo size={32} />
-            </div>
+            <div className="flex items-center justify-center"><SchoolLogo size={32} /></div>
             <div>
               <h2 className="text-2xl font-black tracking-tighter">正覺壁球</h2>
               <p className="text-[10px] text-slate-300 uppercase tracking-[0.2em] -mt-1">BCKLAS SYSTEM v{CURRENT_VERSION}</p>
@@ -2298,54 +2256,27 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
           
           <nav className="space-y-2 flex-1 overflow-y-auto">
             <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
-            
             {(role === 'admin' || role === 'student') && (
               <>
-                <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <LayoutDashboard size={20}/> 管理概況
-                </button>
-                <button onClick={() => {setActiveTab('monthlyStars'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStars' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Star size={20}/> 每月之星
-                </button>
-                <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Trophy size={20}/> 積分排行
-                </button>
-                <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Swords size={20}/> 聯賽專區
-                </button>
-                <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <ImageIcon size={20}/> 精彩花絮
-                </button>
-                <button onClick={() => {setActiveTab('awards'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'awards' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Award size={20}/> 獎項成就
-                </button>
-                <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <CalendarIcon size={20}/> 訓練日程
-                </button>
-                <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Megaphone size={20}/> 比賽與公告
-                </button>
+                <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><LayoutDashboard size={20}/> 管理概況</button>
+                <button onClick={() => {setActiveTab('monthlyStars'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStars' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Star size={20}/> 每月之星</button>
+                <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Trophy size={20}/> 積分排行</button>
+                <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Swords size={20}/> 聯賽專區</button>
+                <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><ImageIcon size={20}/> 精彩花絮</button>
+                <button onClick={() => {setActiveTab('awards'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'awards' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Award size={20}/> 獎項成就</button>
+                <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><CalendarIcon size={20}/> 訓練日程</button>
+                <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Megaphone size={20}/> 比賽與公告</button>
               </>
             )}
-            
             {role === 'admin' && (
               <>
                 <div className="text-[10px] text-slate-300 uppercase tracking-widest my-6 px-6 pt-6 border-t">教練工具</div>
-                <button onClick={() => {setActiveTab('monthlyStarsAdmin'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStarsAdmin' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Crown size={20}/> 每月之星管理
-                </button>
-                <button onClick={() => {setActiveTab('students'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'students' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Users size={20}/> 隊員管理
-                </button>
-                <button onClick={() => {setActiveTab('attendance'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <ClipboardCheck size={20}/> 快速點名
-                </button>
-                <button onClick={() => {setActiveTab('financial'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'financial' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <DollarSign size={20}/> 財務收支
-                </button>
-                <button onClick={() => {setActiveTab('settings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'settings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}>
-                  <Settings2 size={20}/> 系統設定
-                </button>
+                <button onClick={() => {setActiveTab('monthlyStarsAdmin'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStarsAdmin' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Crown size={20}/> 每月之星管理</button>
+                <button onClick={() => {setActiveTab('students'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'students' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Users size={20}/> 隊員管理</button>
+                <button onClick={() => {setActiveTab('externalMatches'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'externalMatches' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><BookMarked size={20}/> 校外賽管理</button>
+                <button onClick={() => {setActiveTab('attendance'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><ClipboardCheck size={20}/> 快速點名</button>
+                <button onClick={() => {setActiveTab('financial'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'financial' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><DollarSign size={20}/> 財務收支</button>
+                <button onClick={() => {setActiveTab('settings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'settings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Settings2 size={20}/> 系統設定</button>
               </>
             )}
           </nav>
@@ -2368,6 +2299,7 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
           </div>
         </div>
       </aside>
+
       <main className="flex-1 h-screen overflow-y-auto relative bg-[#F8FAFC]">
         <header className="px-10 py-8 sticky top-0 bg-white/80 backdrop-blur-xl z-40 border-b flex justify-between items-center">
           <div className="flex items-center gap-6">
@@ -2376,27 +2308,27 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
             </button>
             <div>
               <h1 className="text-3xl font-black tracking-tight text-slate-800">
-                {viewingStudent && "👨‍🎓 球員儀表板"}
-                {!viewingStudent && activeTab === 'rankings' && "🏆 積分排行榜"}
-                {!viewingStudent && activeTab === 'dashboard' && "📊 管理總結"}
-                {!viewingStudent && activeTab === 'students' && "👥 隊員檔案庫"}
-                {!viewingStudent && activeTab === 'attendance' && "✅ 日程連動點名"}
-                {!viewingStudent && activeTab === 'competitions' && "🏸 比賽資訊公告"}
-                {!viewingStudent && activeTab === 'schedules' && "📅 訓練班日程表"}
-                {!viewingStudent && activeTab === 'gallery' && "📸 精彩花絮"}
-                {!viewingStudent && activeTab === 'awards' && "🏆 獎項成就"}
-                {!viewingStudent && activeTab === 'league' && "🗓️ 聯賽專區"}
-                {!viewingStudent && activeTab === 'financial' && "💰 財務收支管理"}
-                {!viewingStudent && activeTab === 'settings' && "⚙️ 系統核心設定"}
-                {!viewingStudent && activeTab === 'monthlyStarsAdmin' && "🌟 每月之星管理"}
-                {!viewingStudent && activeTab === 'monthlyStars' && "🌟 每月之星"}
+                {viewingStudent ? "👨‍🎓 球員儀表板" :
+                 activeTab === 'rankings' ? "🏆 積分排行榜" :
+                 activeTab === 'dashboard' ? "📊 管理總結" :
+                 activeTab === 'students' ? "👥 隊員檔案庫" :
+                 activeTab === 'attendance' ? "✅ 日程連動點名" :
+                 activeTab === 'competitions' ? "🏸 比賽資訊公告" :
+                 activeTab === 'schedules' ? "📅 訓練班日程表" :
+                 activeTab === 'gallery' ? "📸 精彩花絮" :
+                 activeTab === 'awards' ? "🏆 獎項成就" :
+                 activeTab === 'league' ? "🗓️ 聯賽專區" :
+                 activeTab === 'financial' ? "💰 財務收支管理" :
+                 activeTab === 'settings' ? "⚙️ 系統核心設定" :
+                 activeTab === 'monthlyStarsAdmin' ? "🌟 每月之星管理" :
+                 activeTab === 'monthlyStars' ? "🌟 每月之星" :
+                 activeTab === 'externalMatches' ? "📝 校外賽記錄管理" : ""}
               </h1>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
               </p>
             </div>
           </div>
-          
           <div className="flex items-center gap-4">
             {role === 'admin' && isUpdating && (
               <div className="flex items-center gap-2 text-blue-600 text-xs font-black bg-blue-50 px-4 py-2 rounded-full animate-pulse">
@@ -2410,10 +2342,10 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
             </div>
           </div>
         </header>
+
         <div className="p-10 max-w-7xl mx-auto pb-40">
-          {showPlayerCard && (
-             <PlayerCardModal student={showPlayerCard} onClose={() => setShowPlayerCard(null)} />
-          )}
+          
+          {showPlayerCard && ( <PlayerCardModal student={showPlayerCard} onClose={() => setShowPlayerCard(null)} /> )}
 
           {selectedSchedule && (
             <div className="fixed inset-0 z-[250] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelectedSchedule(null)}>
@@ -2426,34 +2358,131 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                 </div>
                 {role === 'admin' && moment(selectedSchedule.start).isSame(new Date(), 'day') && (
                   <div className="mt-8 pt-6 border-t">
-                    <button onClick={() => { setActiveTab('attendance'); setSelectedSchedule(null); }} className="w-full text-center py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all">
-                      前往點名
-                    </button>
+                    <button onClick={() => { setActiveTab('attendance'); setSelectedSchedule(null); }} className="w-full text-center py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all">前往點名</button>
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {viewingStudent && (
-             <PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />
+          {viewingStudent && (<PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />)}
+          
+          {!viewingStudent && activeTab === 'monthlyStars' && (<MonthlyStarsPage monthlyStarsData={monthlyStars} />)}
+
+          {/* DASHBOARD TAB */}
+          {!viewingStudent && activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
+             <div className="space-y-10 animate-in fade-in duration-700 font-bold">
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><History className="text-blue-600"/> 最近更新活動</h3><div className="space-y-6">{competitions.slice(0, 4).map(c => (<div key={c.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div><div><p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p></div></div>))}{schedules.slice(0, 2).map(s => (<div key={s.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div><div><p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p></div></div>))}</div></div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div><p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">活躍隊員</p><p className="text-6xl font-black mt-2 font-mono">{students.length}</p><div className="mt-6 flex items-center gap-2 text-xs text-blue-200 font-bold"><TrendingUp size={14}/> 成長茁壯中</div></div>
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-5"><CalendarIcon size={120}/></div><p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">本月訓練</p><p className="text-6xl font-black mt-2 text-slate-800 font-mono">{dashboardStats.thisMonthTrainings}</p><div className="mt-6 flex items-center gap-2 text-xs text-slate-400 font-bold"><Clock size={14}/> 訓練不間斷</div></div>
+                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div><p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p><div className="flex items-baseline gap-2 mt-2"><p className="text-6xl font-black font-mono">{dashboardStats.daysToNextMatch}</p>{dashboardStats.daysToNextMatch !== '-' && dashboardStats.daysToNextMatch !== 'Today!' && (<span className="text-xl font-bold text-slate-500">Days</span>)}</div><div className="mt-6 flex items-center gap-2 text-xs text-emerald-400 font-bold"><Target size={14}/> 全力備戰中</div></div>
+                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div><div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200"><TrophyIcon size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1 z-10">本年度獎項</p><p className="text-4xl font-black mt-1 text-slate-800 z-10">{dashboardStats.awardsThisYear}</p></div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><Target className="text-blue-600"/> 章別分佈概況</h3><div className="space-y-6">{Object.keys(BADGE_DATA).filter(k => k !== '無').map(badge => {const count = students.filter(s => s.badge === badge).length;const percent = students.length ? Math.round((count/students.length)*100) : 0;return (<div key={badge} className="space-y-2"><div className="flex justify-between items-center px-2"><span className={`text-xs font-black ${BADGE_DATA[badge].color}`}>{badge}</span><span className="text-xs text-slate-400 font-mono">{count} 人 ({percent}%)</span></div><div className="h-4 w-full bg-slate-50 rounded-full overflow-hidden border"><div className={`h-full transition-all duration-1000 ${BADGE_DATA[badge].bg.replace('bg-', 'bg-')}`} style={{width: `${percent}%`, backgroundColor: 'currentColor'}}></div></div></div>);})}</div></div>
+                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col h-full"><h3 className="text-2xl font-black mb-6 flex items-center gap-4"><BookOpen className="text-blue-600"/> 章別獎勵計劃</h3><div className="flex-1 w-full bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 relative group"><iframe src="https://docs.google.com/gview?embedded=true&url=https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" className="w-full h-full min-h-[300px]" frameBorder="0" title="Award Scheme Booklet"></iframe><div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"><a href="https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"><Download size={14}/> 下載 PDF</a></div></div></div>
+                </div>
+             </div>
           )}
 
-          {!viewingStudent && activeTab === 'monthlyStars' && (
-             <MonthlyStarsPage monthlyStarsData={monthlyStars} />
+          {/* RANKINGS TAB */}
+          {!viewingStudent && activeTab === 'rankings' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
+                {rankedStudents.slice(0, 3).map((s, i) => {
+                   let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
+                   if (i === 0) { orderClass = "order-1 md:order-2"; sizeClass = "w-full md:w-1/3 md:-mt-12 scale-105 md:scale-110 z-20"; gradientClass = "bg-gradient-to-b from-yellow-100 via-yellow-50 to-white border-yellow-300"; iconColor = "text-yellow-500"; shadowClass = "shadow-2xl shadow-yellow-200/50"; label = "CHAMPION"; labelBg = "bg-yellow-500"; } 
+                   else if (i === 1) { orderClass = "order-2 md:order-1"; sizeClass = "w-full md:w-1/4 z-10"; gradientClass = "bg-gradient-to-b from-slate-200 via-slate-50 to-white border-slate-300"; iconColor = "text-slate-500"; shadowClass = "shadow-xl shadow-slate-300/50"; label = "RUNNER-UP"; labelBg = "bg-slate-500"; } 
+                   else { orderClass = "order-3 md:order-3"; sizeClass = "w-full md:w-1/4 z-10"; gradientClass = "bg-gradient-to-b from-orange-100 via-orange-50 to-white border-orange-300"; iconColor = "text-orange-500"; shadowClass = "shadow-xl shadow-orange-200/50"; label = "3RD PLACE"; labelBg = "bg-orange-500"; }
+                   return (
+                      <div key={s.id} className={`relative flex-shrink-0 flex flex-col items-center text-center ${orderClass} ${sizeClass} transition-all duration-500 hover:-translate-y-2`}>
+                          <div className={`absolute inset-0 rounded-[3rem] border-4 ${gradientClass} ${shadowClass} overflow-hidden`}>
+                               <div className="absolute -right-4 -top-4 opacity-10 rotate-12"><TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/></div>
+                               <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none"><span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span></div>
+                          </div>
+                          <div className="relative z-10 p-8 w-full h-full flex flex-col items-center">
+                              {i === 0 && (<div className="absolute -top-14 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg"><Crown size={64} fill="currentColor" strokeWidth={1.5} /></div>)}
+                              <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>{s.name[0]}<div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>{label}</div></div>
+                              <div className="mt-4 w-full"><h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3><p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p><div className="my-6"><div className={`text-5xl font-black font-mono tracking-tight ${iconColor}`}>{s.totalPoints}</div><p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Points</p></div><div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 border border-white/50 backdrop-blur-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black text-slate-500">{s.badge}</span></div></div>
+                          </div>
+                      </div>
+                   )
+                })}
+              </div>
+              <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 mb-8 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
+                  <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Info size={24} /></div>
+                  <div className="flex-1">
+                      <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分機制說明</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
+                          <ul className="list-disc pl-4 space-y-1"><li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li><li><span className="text-blue-600">內部聯賽</span>：勝方 +10 / 巨人殺手 +20</li></ul>
+                          <ul className="list-disc pl-4 space-y-1"><li><span className="text-indigo-500">校外賽參與</span>：+20 / 勝場 +20</li><li><span className="text-yellow-600">校外賽獎項</span>：冠軍+100 / 亞軍+50 / 季殿+30</li></ul>
+                      </div>
+                  </div>
+              </div>
+              <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden font-bold">
+                <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
+                  <h3 className="text-xl font-black">全體隊員排名表</h3>
+                  {role === 'admin' && <div className="flex gap-2"><span className="text-[10px] text-slate-400 self-center">*請在下方列表為個別學生加分</span></div>}
+                  <div className="relative w-full md:w-80"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/><input value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} placeholder="搜尋姓名或班別..." className="w-full bg-white border rounded-2xl py-3 pl-12 pr-4 outline-none focus:border-blue-600 transition-all shadow-sm"/></div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] bg-slate-50 border-b font-black"><tr><th className="px-8 py-6 text-center">排名</th><th className="px-8 py-6">隊員資料</th><th className="px-8 py-6">目前章別</th><th className="px-8 py-6 text-right">基礎分</th><th className="px-8 py-6 text-right">總分</th>{role === 'admin' && <th className="px-8 py-6 text-center">教練操作</th>}</tr></thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {filteredStudents.map((s, i) => (
+                        <tr key={s.id} className="group hover:bg-blue-50/30 transition-all cursor-pointer" onClick={() => setShowPlayerCard(s)}>
+                          <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
+                          <td className="px-8 py-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.name[0]}</div><div><div className="font-black text-lg text-slate-800">{s.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div></div></div></td>
+                          <td className="px-8 py-8"><div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black">{s.badge}</span></div></td>
+                          <td className="px-8 py-8 text-right font-mono text-slate-400">{s.points}</td>
+                          <td className="px-8 py-8 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
+                          {role === 'admin' && (
+                            <td className="px-8 py-8"><div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}><button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button><button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button><button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" title="校外賽成績錄入"><Globe size={18}/></button><button onClick={()=>deleteItem('students', s.id)} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="永久刪除"><Trash2 size={18}/></button></div></td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           )}
-          
+
+          {/* STUDENTS TAB */}
+          {!viewingStudent && activeTab === 'students' && role === 'admin' && (
+             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
+                <div className="flex overflow-x-auto gap-4 pb-4"><div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span><span className="text-xl font-black">{students.length}</span></div>{Object.entries(birthYearStats).sort().map(([year, count]) => (<div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span><span className="text-xl font-black text-slate-800">{count} 人</span></div>))}</div>
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden"><div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div><div className="relative z-10"><h3 className="text-3xl font-black">隊員檔案管理</h3><p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p></div><div className="flex gap-4 relative z-10 flex-wrap justify-center"><div className="relative"><Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><select value={selectedYearFilter} onChange={(e) => setSelectedYearFilter(e.target.value)} className="pl-10 pr-10 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 outline-none shadow-sm"><option value="ALL">全部年份</option>{Object.keys(birthYearStats).sort().map(year => (<option key={year} value={year}>{year} 年出生 ({birthYearStats[year]}人)</option>))}</select><ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/></div><button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button><label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]"><Upload size={20}/> 批量匯入 CSV 名單<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/></label></div></div>
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                   {filteredStudents.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
+                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative cursor-pointer" onClick={() => setShowPlayerCard(s)}>
+                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>{s.badge}</div>
+                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">{s.name[0]}</div>
+                        <p className="text-xl font-black text-slate-800">{s.name}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
+                        {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
+                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
+                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3" onClick={(e) => e.stopPropagation()}>
+                           <button onClick={() => handleManualAward(s)} className="text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 p-2 rounded-xl transition-all" title="授予徽章"><Award size={18}/></button>
+                           <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={18}/></button>
+                           <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={18}/></button>
+                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={18}/></button>
+                        </div>
+                     </div>
+                   ))}
+                   <button onClick={()=>{const name = prompt('隊員姓名');const cls = prompt('班別 (如: 6A)');if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });}} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group"><Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/><span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span></button>
+                </div>
+             </div>
+          )}
+
+          {/* MONTHLY STARS ADMIN */}
           {!viewingStudent && activeTab === 'monthlyStarsAdmin' && role === 'admin' && (
               <div className="animate-in fade-in duration-500 font-bold">
                   <div className="bg-white p-10 rounded-[3rem] border shadow-sm mb-8">
                     <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                         <h3 className="text-3xl font-black">每月之星內容管理</h3>
-                        <input 
-                          type="month"
-                          value={selectedMonthForAdmin}
-                          onChange={e => setSelectedMonthForAdmin(e.target.value)}
-                          className="bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg font-bold"
-                        />
+                        <input type="month" value={selectedMonthForAdmin} onChange={e => setSelectedMonthForAdmin(e.target.value)} className="bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg font-bold"/>
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                       {/* Male Winner Form */}
@@ -2461,11 +2490,7 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                         <h4 className="text-xl font-black text-blue-600">每月之星 (男)</h4>
                         <div>
                           <label className="text-xs font-bold text-slate-400 mb-2 block">選擇學員</label>
-                           <select 
-                             value={monthlyStarEditData.maleWinner?.studentId || ''}
-                             onChange={e => handleMonthlyStarStudentSelect('maleWinner', e.target.value)}
-                             className="w-full bg-white p-4 rounded-xl shadow-sm outline-none"
-                           >
+                           <select value={monthlyStarEditData.maleWinner?.studentId || ''} onChange={e => handleMonthlyStarStudentSelect('maleWinner', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm outline-none">
                              <option value="" disabled>請選擇一位男同學...</option>
                              {students.sort((a,b) => a.class.localeCompare(b.class)).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
                            </select>
@@ -2491,11 +2516,7 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                         <h4 className="text-xl font-black text-pink-500">每月之星 (女)</h4>
                         <div>
                           <label className="text-xs font-bold text-slate-400 mb-2 block">選擇學員</label>
-                           <select 
-                             value={monthlyStarEditData.femaleWinner?.studentId || ''}
-                             onChange={e => handleMonthlyStarStudentSelect('femaleWinner', e.target.value)}
-                             className="w-full bg-white p-4 rounded-xl shadow-sm outline-none"
-                           >
+                           <select value={monthlyStarEditData.femaleWinner?.studentId || ''} onChange={e => handleMonthlyStarStudentSelect('femaleWinner', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm outline-none">
                              <option value="" disabled>請選擇一位女同學...</option>
                              {students.sort((a,b) => a.class.localeCompare(b.class)).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
                            </select>
@@ -2520,17 +2541,125 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                   </div>
                   <div className="flex justify-end gap-4">
                      <button onClick={handleGeneratePoster} disabled={isGeneratingPoster || !monthlyStarEditData.maleWinner.studentId || !monthlyStarEditData.femaleWinner.studentId} className="flex items-center gap-3 px-8 py-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all font-black disabled:opacity-50 disabled:cursor-not-allowed">
-                        {isGeneratingPoster ? <Loader2 className="animate-spin" /> : <Printer />}
-                        下載本月海報
+                        {isGeneratingPoster ? <Loader2 className="animate-spin" /> : <Printer />} 下載本月海報
                     </button>
                     <button onClick={handleSaveMonthlyStar} disabled={isUpdating} className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all font-black disabled:opacity-50">
-                        {isUpdating ? <Loader2 className="animate-spin" /> : <Save />}
-                        發佈 / 更新
+                        {isUpdating ? <Loader2 className="animate-spin" /> : <Save />} 發佈 / 更新
                     </button>
                   </div>
               </div>
           )}
 
+          {/* SCHEDULES TAB */}
+          {!viewingStudent && activeTab === 'schedules' && (
+            <div className="space-y-8 animate-in fade-in duration-500 font-bold">
+               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                  <div className="flex items-center gap-6"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div><div><h3 className="text-xl font-black">訓練班日程表</h3><p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p></div></div>
+                  <div className="flex flex-wrap gap-4 w-full md:w-auto"><div className="relative flex-1 md:flex-none"><Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={18}/><select value={selectedClassFilter} onChange={(e)=>setSelectedClassFilter(e.target.value)} className="w-full md:w-60 bg-slate-50 border-none outline-none pl-12 pr-6 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner">{uniqueTrainingClasses.map(c => (<option key={c} value={c}>{c === 'ALL' ? '🌍 全部訓練班' : `🏸 ${c}`}</option>))}</select></div>{role === 'admin' && (<div className="flex gap-2"><button onClick={()=>downloadTemplate('schedule')} className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border transition-all" title="下載日程範本"><Download size={20}/></button><label className="bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm"><Upload size={18}/> 匯入 CSV 日程<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportSchedules}/></label></div>)}</div>
+               </div>
+               <div className="bg-white p-6 rounded-[3rem] shadow-sm border h-[70vh]">
+                  <Calendar
+                      localizer={localizer}
+                      events={calendarEvents}
+                      startAccessor="start"
+                      endAccessor="end"
+                      style={{ height: '100%' }}
+                      onSelectEvent={event => setSelectedSchedule(event)}
+                      eventPropGetter={(event) => {
+                          const className = event.resource.trainingClass === 'A班' ? 'bg-blue-500' : event.resource.trainingClass === 'B班' ? 'bg-green-500' : 'bg-yellow-500';
+                          return { className: `${className} border-none text-white p-1 text-xs rounded-lg` };
+                      }}
+                  />
+               </div>
+            </div>
+          )}
+
+          {/* ATTENDANCE TAB */}
+          {!viewingStudent && activeTab === 'attendance' && role === 'admin' && (
+            <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
+               <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}><div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div><div className="relative z-10"><h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3><div className="flex flex-wrap gap-4">{todaySchedule ? (<><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><Star size={14} className="text-yellow-300 fill-yellow-300"/><span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span></div><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><MapPin size={14}/><span className="text-sm font-black">{todaySchedule.location}</span></div></>) : (<div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2"><Info size={14}/><span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span></div>)}</div></div><div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner"><p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p><p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p></div></div>
+               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8"><div className="flex items-center gap-4"><div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div><div><h4 className="font-black text-slate-800">出席率報表中心</h4><p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p></div></div><div className="flex gap-2"><button onClick={() => exportMatrixAttendanceCSV(attendanceClassFilter)} className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"><Download size={16}/> 匯出班級點名總表</button></div></div>
+               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6"><div className="flex items-center gap-3 text-slate-400 min-w-max"><Filter size={20} /><span>選擇點名班別：</span></div><div className="flex flex-wrap gap-2">{uniqueTrainingClasses.map(cls => (<button key={cls} onClick={() => setAttendanceClassFilter(cls)} className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${attendanceClassFilter === cls ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'}`}>{cls === 'ALL' ? '🌍 全部學員' : cls}</button>))}</div></div>
+               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                  {studentsInSelectedAttendanceClass.length > 0 ? (
+                    studentsInSelectedAttendanceClass.map(s => {
+                      const isAttended = todaySchedule && attendanceLogs.some(log => log.studentId === s.id && log.date === todaySchedule.date && log.trainingClass === todaySchedule.trainingClass);
+                      const isPending = pendingAttendance.includes(s.id);
+                      return (
+                        <button 
+                          key={s.id} 
+                          onClick={() => {
+                              if (!isAttended) {
+                                  togglePendingAttendance(s.id);
+                              }
+                          }}
+                          disabled={isAttended}
+                          className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden 
+                            ${isAttended 
+                              ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-not-allowed' 
+                              : isPending 
+                                ? 'border-blue-500 shadow-xl shadow-blue-50 ring-4 ring-blue-100' 
+                                : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-lg'
+                            }`}
+                        >
+                          <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase 
+                            ${isAttended 
+                              ? 'bg-emerald-200 text-white rotate-12' 
+                              : isPending 
+                                ? 'bg-blue-600 text-white rotate-6' 
+                                : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-100'
+                            }`}
+                          >
+                            {s.name[0]}
+                          </div>
+                          <p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : isPending ? 'text-blue-600' : 'text-slate-800'}`}>{s.name}</p>
+                          <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
+                          <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>{s.squashClass}</div>
+                          <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : isPending ? 'text-blue-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
+                            <CheckCircle2 size={24}/>
+                          </div>
+                          {isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">已出席</div>)}
+                          {isPending && !isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] py-1 font-black uppercase tracking-widest">待儲存</div>)}
+                        </button>
+                      );
+                    })
+                  ) : (<div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">此班別暫無學員資料</div>)}
+               </div>
+            </div>
+          )}
+
+          {/* FINANCIAL TAB */}
+          {!viewingStudent && activeTab === 'financial' && role === 'admin' && (
+             <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
+                <div className="flex justify-end">
+                  <button onClick={saveFinanceConfig} className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-lg hover:bg-blue-700 transition-all active:scale-95"><Save size={20} /> 儲存財務設定</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center"><div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6"><TrendingUp size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總收入</p><h3 className="text-4xl font-black text-emerald-500">${financialSummary.revenue.toLocaleString()}</h3></div>
+                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center"><div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6"><Trash2 size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總支出</p><h3 className="text-4xl font-black text-rose-500">${financialSummary.expense.toLocaleString()}</h3></div>
+                  <div className={`p-10 rounded-[3.5rem] border shadow-sm flex flex-col justify-center items-center text-center ${financialSummary.profit >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}><div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${financialSummary.profit >= 0 ? 'bg-white text-blue-600 shadow-sm' : 'bg-white text-rose-600 shadow-sm'}`}><DollarSign size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計資助盈餘</p><h3 className={`text-4xl font-black ${financialSummary.profit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>${financialSummary.profit.toLocaleString()}</h3></div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-4 mb-10"><div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center shadow-sm"><Trash2 size={24}/></div><h4 className="text-2xl font-black text-slate-800">支出設定 (教練費)</h4></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {[ { label: '校隊教練次數', key: 'nTeam' }, { label: '單次校隊成本', key: 'costTeam' }, { label: '進階班次數', key: 'nTrain' }, { label: '單次進階成本', key: 'costTrain' }, { label: '趣味班次數', key: 'nHobby' }, { label: '單次趣味成本', key: 'costHobby' } ].map(item => (
+                        <div key={item.key}><label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">{item.label}</label><input type="number" className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-rose-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" value={financeConfig[item.key]} onChange={e => setFinanceConfig({...financeConfig, [item.key]: Number(e.target.value)})}/></div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-4 mb-10"><div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm"><DollarSign size={24}/></div><h4 className="text-2xl font-black text-slate-800">預計收入 (學費)</h4></div>
+                    <div className="space-y-10">
+                      <div><label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">預計總人數</label><input type="number" className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" value={financeConfig.totalStudents} onChange={e => setFinanceConfig({...financeConfig, totalStudents: Number(e.target.value)})}/></div>
+                      <div><label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">每位學員學費 ($)</label><input type="number" className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" value={financeConfig.feePerStudent} onChange={e => setFinanceConfig({...financeConfig, feePerStudent: Number(e.target.value)})}/></div>
+                    </div>
+                  </div>
+                </div>
+             </div>
+          )}
+
+          {/* COMPETITIONS TAB */}
           {!viewingStudent && activeTab === 'competitions' && (
              <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
@@ -2594,68 +2723,78 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                 </div>
              </div>
           )}
-          {!viewingStudent && activeTab === 'rankings' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-              <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
-                {rankedStudents.slice(0, 3).map((s, i) => {
-                   let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
-                   if (i === 0) { orderClass = "order-1 md:order-2"; sizeClass = "w-full md:w-1/3 md:-mt-12 scale-105 md:scale-110 z-20"; gradientClass = "bg-gradient-to-b from-yellow-100 via-yellow-50 to-white border-yellow-300"; iconColor = "text-yellow-500"; shadowClass = "shadow-2xl shadow-yellow-200/50"; label = "CHAMPION"; labelBg = "bg-yellow-500"; } 
-                   else if (i === 1) { orderClass = "order-2 md:order-1"; sizeClass = "w-full md:w-1/4 z-10"; gradientClass = "bg-gradient-to-b from-slate-200 via-slate-50 to-white border-slate-300"; iconColor = "text-slate-500"; shadowClass = "shadow-xl shadow-slate-300/50"; label = "RUNNER-UP"; labelBg = "bg-slate-500"; } 
-                   else { orderClass = "order-3 md:order-3"; sizeClass = "w-full md:w-1/4 z-10"; gradientClass = "bg-gradient-to-b from-orange-100 via-orange-50 to-white border-orange-300"; iconColor = "text-orange-500"; shadowClass = "shadow-xl shadow-orange-200/50"; label = "3RD PLACE"; labelBg = "bg-orange-500"; }
-                   return (
-                      <div key={s.id} className={`relative flex-shrink-0 flex flex-col items-center text-center ${orderClass} ${sizeClass} transition-all duration-500 hover:-translate-y-2`}>
-                          <div className={`absolute inset-0 rounded-[3rem] border-4 ${gradientClass} ${shadowClass} overflow-hidden`}>
-                               <div className="absolute -right-4 -top-4 opacity-10 rotate-12"><TrophyIcon size={120} className={i === 0 ? 'text-yellow-600' : i === 1 ? 'text-slate-400' : 'text-orange-600'}/></div>
-                               <div className="absolute top-2 right-4 opacity-10 select-none pointer-events-none"><span className="text-9xl font-black font-mono tracking-tighter">{i+1}</span></div>
-                          </div>
-                          <div className="relative z-10 p-8 w-full h-full flex flex-col items-center">
-                              {i === 0 && (<div className="absolute -top-14 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce drop-shadow-lg"><Crown size={64} fill="currentColor" strokeWidth={1.5} /></div>)}
-                              <div className={`w-24 h-24 mx-auto bg-white rounded-full border-4 border-white shadow-md flex items-center justify-center text-4xl font-black mb-4 ${iconColor}`}>{s.name[0]}<div className={`absolute -bottom-3 px-4 py-1 rounded-full text-[10px] text-white font-black tracking-widest ${labelBg} shadow-sm`}>{label}</div></div>
-                              <div className="mt-4 w-full"><h3 className="text-2xl font-black text-slate-800 truncate">{s.name}</h3><p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{s.class} ({s.classNo})</p><div className="my-6"><div className={`text-5xl font-black font-mono tracking-tight ${iconColor}`}>{s.totalPoints}</div><p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Points</p></div><div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/50 border border-white/50 backdrop-blur-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black text-slate-500">{s.badge}</span></div></div>
-                          </div>
-                      </div>
-                   )
-                })}
-              </div>
-              <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 mb-8 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
-                  <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Info size={24} /></div>
-                  <div className="flex-1">
-                      <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分機制說明</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
-                          <ul className="list-disc pl-4 space-y-1"><li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li><li><span className="text-blue-600">內部聯賽</span>：勝方 +10 / 巨人殺手 +20</li></ul>
-                          <ul className="list-disc pl-4 space-y-1"><li><span className="text-indigo-500">校外賽參與</span>：+20 / 勝場 +20</li><li><span className="text-yellow-600">校外賽獎項</span>：冠軍+100 / 亞軍+50 / 季殿+30</li></ul>
-                      </div>
+
+          {/* GALLERY TAB */}
+          {!viewingStudent && activeTab === 'gallery' && (
+            <div className="space-y-10 animate-in fade-in duration-500 font-bold">
+               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                  <div className="flex items-center gap-6">
+                    {currentAlbum ? (<button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all"><ArrowLeft size={24}/></button>) : (<div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>)}
+                    <div><h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3><p className="text-xs text-slate-400 mt-1">{currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}</p></div>
                   </div>
-              </div>
-              <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden font-bold">
-                <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
-                  <h3 className="text-xl font-black">全體隊員排名表</h3>
-                  {role === 'admin' && <div className="flex gap-2"><span className="text-[10px] text-slate-400 self-center">*請在下方列表為個別學生加分</span></div>}
-                  <div className="relative w-full md:w-80"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/><input value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} placeholder="搜尋姓名或班別..." className="w-full bg-white border rounded-2xl py-3 pl-12 pr-4 outline-none focus:border-blue-600 transition-all shadow-sm"/></div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] bg-slate-50 border-b font-black"><tr><th className="px-8 py-6 text-center">排名</th><th className="px-8 py-6">隊員資料</th><th className="px-8 py-6">目前章別</th><th className="px-8 py-6 text-right">基礎分</th><th className="px-8 py-6 text-right">總分</th>{role === 'admin' && <th className="px-8 py-6 text-center">教練操作</th>}</tr></thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {filteredStudents.map((s, i) => (
-                        <tr key={s.id} className="group hover:bg-blue-50/30 transition-all cursor-pointer" onClick={() => setShowPlayerCard(s)}>
-                          <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
-                          <td className="px-8 py-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.name[0]}</div><div><div className="font-black text-lg text-slate-800">{s.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div></div></div></td>
-                          <td className="px-8 py-8"><div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black">{s.badge}</span></div></td>
-                          <td className="px-8 py-8 text-right font-mono text-slate-400">{s.points}</td>
-                          <td className="px-8 py-8 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
-                          {role === 'admin' && (
-                            <td className="px-8 py-8"><div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}><button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button><button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button><button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" title="校外賽成績錄入"><Globe size={18}/></button><button onClick={()=>deleteItem('students', s.id)} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="永久刪除"><Trash2 size={18}/></button></div></td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                  {role === 'admin' && (<div className="flex items-center gap-3">{isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}<button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50"><PlusCircle size={18}/> 新增相片/影片</button></div>)}
+               </div>
+               {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
             </div>
-          )}
-           {!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
+           )}
+
+          {/* AWARDS TAB */}
+          {!viewingStudent && activeTab === 'awards' && (
+             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
+                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                   <div className="flex items-center gap-6">
+                     <div className="p-4 bg-yellow-100 text-yellow-600 rounded-2xl"><Award/></div>
+                     <div>
+                       <h3 className="text-xl font-black">獎項成就 (Hall of Fame)</h3>
+                       <p className="text-xs text-slate-400 mt-1">紀錄校隊輝煌戰績</p>
+                     </div>
+                   </div>
+                   <div className="flex items-center gap-4">
+                     <div className="flex items-center p-1 bg-slate-100 rounded-2xl">
+                       <button onClick={() => setAwardsViewMode('grid')} className={`flex items-center gap-2 px-4 py-2 rounded-[1.2rem] text-sm font-bold transition-all ${awardsViewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><Columns size={16}/> 榮譽牆</button>
+                       <button onClick={() => setAwardsViewMode('timeline')} className={`flex items-center gap-2 px-4 py-2 rounded-[1.2rem] text-sm font-bold transition-all ${awardsViewMode === 'timeline' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><History size={16}/> 時間軸</button>
+                     </div>
+                     {role === 'admin' && (
+                        <button onClick={handleAddAward} className="bg-yellow-500 text-white p-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black"><PlusCircle size={18}/> <span className="hidden sm:inline">新增獎項</span></button>
+                     )}
+                   </div>
+                </div>
+                {awards.length === 0 ? (
+                  <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><Trophy size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無獎項紀錄</p><p className="text-sm text-slate-300 mt-2">請教練新增比賽獲獎紀錄</p></div>
+                ) : (
+                  <>
+                  {awardsViewMode === 'grid' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                       {awards.map((award) => {
+                          const student = students.find(s => s.name === award.studentName);
+                          return <AwardCard key={award.id} award={award} student={student} />;
+                       })}
+                    </div>
+                  )}
+                  {awardsViewMode === 'timeline' && (
+                    <div className="relative pl-8 pr-4">
+                      <div className="absolute left-[3.25rem] top-0 h-full w-1 bg-slate-200 rounded-full"></div>
+                       {awards.map((award, index) => {
+                          const student = students.find(s => s.name === award.studentName);
+                          const year = award.date.split('-')[0];
+                          const prevYear = index > 0 ? awards[index-1].date.split('-')[0] : null;
+                          const showYear = year !== prevYear;
+                          return (
+                            <div key={award.id} className="relative mb-12 animate-in fade-in slide-in-from-left-8 duration-500">
+                              {showYear && (<div className="absolute -left-2 top-0 flex items-center justify-center w-24 h-24 bg-slate-800 text-white font-black text-2xl rounded-full border-8 border-[#F8FAFC] z-10">{year}</div>)}
+                              <div className={`ml-20 md:ml-40 pl-10 pt-2 ${showYear ? 'mt-8' : ''}`}><AwardCard award={award} student={student} /></div>
+                            </div>
+                          );
+                       })}
+                    </div>
+                  )}
+                  </>
+                )}
+             </div>
+            )}
+
+          {/* LEAGUE TAB */}
+          {!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
@@ -2664,19 +2803,12 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                               <p className="text-slate-400">查看賽程、賽果及歷史賽事</p>
                           </div>
                            <div className="flex w-full md:w-auto items-center gap-3">
-                               <select 
-                                   value={selectedTournament} 
-                                   onChange={(e) => setSelectedTournament(e.target.value)} 
-                                   className="flex-grow w-full md:w-72 bg-slate-50 border-none outline-none pl-6 pr-10 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner"
-                               >
-                                   {tournamentList.length === 0 ? <option value="">暫無賽事</option> :
-                                   tournamentList.map(t => <option key={t} value={t}>{t}</option>)}
+                               <select value={selectedTournament} onChange={(e) => setSelectedTournament(e.target.value)} className="flex-grow w-full md:w-72 bg-slate-50 border-none outline-none pl-6 pr-10 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner">
+                                   {tournamentList.length === 0 ? <option value="">暫無賽事</option> : tournamentList.map(t => <option key={t} value={t}>{t}</option>)}
                                </select>
                                {role === 'admin' && (
                                 <div className="flex gap-2">
-                                  <button onClick={() => setShowTournamentModal(true)} className="p-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all" title="建立新賽事">
-                                    <Plus size={20}/>
-                                  </button>
+                                  <button onClick={() => setShowTournamentModal(true)} className="p-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all" title="建立新賽事"><Plus size={20}/></button>
                                 </div>
                                )}
                            </div>
@@ -2768,7 +2900,7 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                                                     </td>
                                                     <td className="px-6 py-5 text-center">
                                                         {match.status === 'completed' ? (
-                                                            <span className="font-mono font-black text-2xl text-slate-800">{match.score1} : {match.score2}</span>
+                                                            <span className="font-mono font-black text-2xl text-slate-800">{match.matchType === 'external' ? match.externalMatchScore : `${match.score1} : ${match.score2}`}</span>
                                                         ) : (
                                                             <span className="text-slate-300">-</span>
                                                         )}
@@ -2783,25 +2915,13 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                                                     {role === 'admin' && (
                                                       <td className="px-6 py-5 text-center">
                                                           <div className="flex justify-center gap-2">
-                                                              {match.status === 'scheduled' && (
+                                                              {match.status === 'scheduled' && match.matchType !== 'external' && (
                                                                   <>
-                                                                    <button 
-                                                                        onClick={() => handleUpdateLeagueMatchScore(match)}
-                                                                        className="p-3 bg-white text-blue-600 rounded-xl border hover:bg-blue-600 hover:text-white transition-all" title="輸入比分">
-                                                                        <FileText size={16}/>
-                                                                    </button>
-                                                                    <button 
-                                                                        onClick={() => handleEditLeagueMatch(match)}
-                                                                        className="p-3 bg-white text-gray-600 rounded-xl border hover:bg-gray-600 hover:text-white transition-all" title="編輯比賽">
-                                                                        <Pencil size={16}/>
-                                                                    </button>
+                                                                    <button onClick={() => handleUpdateLeagueMatchScore(match)} className="p-3 bg-white text-blue-600 rounded-xl border hover:bg-blue-600 hover:text-white transition-all" title="輸入比分"><FileText size={16}/></button>
+                                                                    <button onClick={() => handleEditLeagueMatch(match)} className="p-3 bg-white text-gray-600 rounded-xl border hover:bg-gray-600 hover:text-white transition-all" title="編輯比賽"><Pencil size={16}/></button>
                                                                   </>
                                                               )}
-                                                              <button 
-                                                                  onClick={() => deleteItem('league_matches', match.id)}
-                                                                  className="p-3 bg-white text-red-500 rounded-xl border hover:bg-red-600 hover:text-white transition-all" title="刪除比賽">
-                                                                  <Trash2 size={16}/>
-                                                              </button>
+                                                              <button onClick={() => deleteItem('league_matches', match.id)} className="p-3 bg-white text-red-500 rounded-xl border hover:bg-red-600 hover:text-white transition-all" title="刪除比賽"><Trash2 size={16}/></button>
                                                           </div>
                                                       </td>
                                                     )}
@@ -2816,318 +2936,78 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                   </div>
               </div>
            )}
-          {!viewingStudent && activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
-             <div className="space-y-10 animate-in fade-in duration-700 font-bold">
-                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm mb-10"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><History className="text-blue-600"/> 最近更新活動</h3><div className="space-y-6">{competitions.slice(0, 4).map(c => (<div key={c.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 ring-8 ring-blue-50"></div><div><p className="text-sm font-black text-slate-800">發佈了比賽公告：{c.title}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">比賽日期：{c.date}</p></div></div>))}{schedules.slice(0, 2).map(s => (<div key={s.id} className="flex gap-6 items-start"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-2 ring-8 ring-emerald-50"></div><div><p className="text-sm font-black text-slate-800">新增訓練日程：{s.trainingClass}</p><p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{s.date} @ {s.location}</p></div></div>))}</div></div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                   <div className="bg-blue-600 p-10 rounded-[3.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-20"><Users size={120}/></div><p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2">活躍隊員</p><p className="text-6xl font-black mt-2 font-mono">{students.length}</p><div className="mt-6 flex items-center gap-2 text-xs text-blue-200 font-bold"><TrendingUp size={14}/> 成長茁壯中</div></div>
-                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-5"><CalendarIcon size={120}/></div><p className="text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">本月訓練</p><p className="text-6xl font-black mt-2 text-slate-800 font-mono">{dashboardStats.thisMonthTrainings}</p><div className="mt-6 flex items-center gap-2 text-xs text-slate-400 font-bold"><Clock size={14}/> 訓練不間斷</div></div>
-                   <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-20"><Hourglass size={120}/></div><p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">距離下一場比賽</p><div className="flex items-baseline gap-2 mt-2"><p className="text-6xl font-black font-mono">{dashboardStats.daysToNextMatch}</p>{dashboardStats.daysToNextMatch !== '-' && dashboardStats.daysToNextMatch !== 'Today!' && (<span className="text-xl font-bold text-slate-500">Days</span>)}</div><div className="mt-6 flex items-center gap-2 text-xs text-emerald-400 font-bold"><Target size={14}/> 全力備戰中</div></div>
-                   <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden"><div className="absolute -right-5 -bottom-5 opacity-5"><Medal size={120}/></div><div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4 z-10 border border-yellow-200"><TrophyIcon size={32}/></div><p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1 z-10">本年度獎項</p><p className="text-4xl font-black mt-1 text-slate-800 z-10">{dashboardStats.awardsThisYear}</p></div>
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm"><h3 className="text-2xl font-black mb-10 flex items-center gap-4"><Target className="text-blue-600"/> 章別分佈概況</h3><div className="space-y-6">{Object.keys(BADGE_DATA).filter(k => k !== '無').map(badge => {const count = students.filter(s => s.badge === badge).length;const percent = students.length ? Math.round((count/students.length)*100) : 0;return (<div key={badge} className="space-y-2"><div className="flex justify-between items-center px-2"><span className={`text-xs font-black ${BADGE_DATA[badge].color}`}>{badge}</span><span className="text-xs text-slate-400 font-mono">{count} 人 ({percent}%)</span></div><div className="h-4 w-full bg-slate-50 rounded-full overflow-hidden border"><div className={`h-full transition-all duration-1000 ${BADGE_DATA[badge].bg.replace('bg-', 'bg-')}`} style={{width: `${percent}%`, backgroundColor: 'currentColor'}}></div></div></div>);})}</div></div>
-                   <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col h-full"><h3 className="text-2xl font-black mb-6 flex items-center gap-4"><BookOpen className="text-blue-600"/> 章別獎勵計劃</h3><div className="flex-1 w-full bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 relative group"><iframe src="https://docs.google.com/gview?embedded=true&url=https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" className="w-full h-full min-h-[300px]" frameBorder="0" title="Award Scheme Booklet"></iframe><div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"><a href="https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@8532769cb36715336a13538c021cfee65daa50c9/Booklet.pdf" target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700"><Download size={14}/> 下載 PDF</a></div></div></div>
-                </div>
-             </div>
-          )}
-           {!viewingStudent && activeTab === 'students' && role === 'admin' && (
-             <div className="space-y-10 animate-in slide-in-from-right-10 duration-700 font-bold">
-                <div className="flex overflow-x-auto gap-4 pb-4"><div className="bg-slate-800 text-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-md flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">總人數</span><span className="text-xl font-black">{students.length}</span></div>{Object.entries(birthYearStats).sort().map(([year, count]) => (<div key={year} className="bg-white px-5 py-3 rounded-2xl whitespace-nowrap shadow-sm border border-slate-100 min-w-[100px] flex-shrink-0"><span className="text-[10px] uppercase tracking-widest text-slate-400 block">{year} 年</span><span className="text-xl font-black text-slate-800">{count} 人</span></div>))}</div>
-                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 flex flex-col md:flex-row items-center justify-between shadow-sm gap-8 relative overflow-hidden"><div className="absolute -left-10 -bottom-10 opacity-5 rotate-12"><Users size={150}/></div><div className="relative z-10"><h3 className="text-3xl font-black">隊員檔案管理</h3><p className="text-slate-400 text-sm mt-1">在此批量匯入名單或個別編輯隊員屬性</p></div><div className="flex gap-4 relative z-10 flex-wrap justify-center"><div className="relative"><Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><select value={selectedYearFilter} onChange={(e) => setSelectedYearFilter(e.target.value)} className="pl-10 pr-10 py-5 bg-slate-50 border border-slate-100 rounded-[2rem] text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 outline-none shadow-sm"><option value="ALL">全部年份</option>{Object.keys(birthYearStats).sort().map(year => (<option key={year} value={year}>{year} 年出生 ({birthYearStats[year]}人)</option>))}</select><ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/></div><button onClick={()=>downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本"><Download size={24}/></button><label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]"><Upload size={20}/> 批量匯入 CSV 名單<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/></label></div></div>
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                   {filteredStudents.sort((a,b)=>a.class.localeCompare(b.class)).map(s => (
-                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative cursor-pointer" onClick={() => setViewingStudent(s)}>
-                        <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>{s.badge}</div>
-                        <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">{s.name[0]}</div>
-                        <p className="text-xl font-black text-slate-800">{s.name}</p>
-                        <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
-                        {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
-                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
-                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3" onClick={(e) => e.stopPropagation()}>
-                           <button onClick={() => handleManualAward(s)} className="text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 p-2 rounded-xl transition-all" title="授予徽章"><Award size={18}/></button>
-                           <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={18}/></button>
-                           <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={18}/></button>
-                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={18}/></button>
+
+          {/* EXTERNAL MATCHES TAB */}
+          {!viewingStudent && activeTab === 'externalMatches' && role === 'admin' && (
+              <div className="max-w-2xl mx-auto space-y-10 animate-in fade-in duration-500 font-bold">
+                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                   <h3 className="text-3xl font-black mb-2 text-center">新增校外賽記錄</h3>
+                   <p className="text-center text-slate-400 mb-10">請在此逐一記錄每場校外賽的賽果。</p>
+                   <div className="space-y-6">
+                      <div>
+                        <label className="text-sm font-bold text-slate-500 mb-2 block">1. 選擇賽事</label>
+                        <select value={newExternalMatch.tournamentName} onChange={e => setNewExternalMatch({...newExternalMatch, tournamentName: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none">
+                          <option value="" disabled>-- 請選擇一個已匯入的賽事 --</option>
+                          {externalTournaments.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                        </select>
+                        <p className="text-xs text-slate-400 mt-2 px-2">如清單中沒有所需賽事，請先到「系統設定」頁面匯入。</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-bold text-slate-500 mb-2 block">2. 比賽日期</label>
+                        <input type="date" value={newExternalMatch.date} onChange={e => setNewExternalMatch({...newExternalMatch, date: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none"/>
+                      </div>
+                      <div>
+                        <label className="text-sm font-bold text-slate-500 mb-2 block">3. 我方隊員</label>
+                        <select value={newExternalMatch.player1Id} onChange={e => setNewExternalMatch({...newExternalMatch, player1Id: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none">
+                          <option value="" disabled>-- 請選擇一位隊員 --</option>
+                          {students.sort((a,b) => a.name.localeCompare(b.name, 'zh-Hant')).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-bold text-slate-500 mb-2 block">4. 對手學校 (可選)</label>
+                          <input type="text" value={newExternalMatch.opponentSchool} onChange={e => setNewExternalMatch({...newExternalMatch, opponentSchool: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none" placeholder="例如: 喇沙書院"/>
                         </div>
-                     </div>
-                   ))}
-                   <button onClick={()=>{const name = prompt('隊員姓名');const cls = prompt('班別 (如: 6A)');if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });}} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group"><Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/><span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span></button>
-                </div>
-             </div>
-          )}
-          
-          {!viewingStudent && activeTab === 'schedules' && (
-            <div className="space-y-8 animate-in fade-in duration-500 font-bold">
-               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-6"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><CalendarIcon/></div><div><h3 className="text-xl font-black">訓練班日程表</h3><p className="text-xs text-slate-400 mt-1">查看各級訓練班的日期與地點安排</p></div></div>
-                  <div className="flex flex-wrap gap-4 w-full md:w-auto"><div className="relative flex-1 md:flex-none"><Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600" size={18}/><select value={selectedClassFilter} onChange={(e)=>setSelectedClassFilter(e.target.value)} className="w-full md:w-60 bg-slate-50 border-none outline-none pl-12 pr-6 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner">{uniqueTrainingClasses.map(c => (<option key={c} value={c}>{c === 'ALL' ? '🌍 全部訓練班' : `🏸 ${c}`}</option>))}</select></div>{role === 'admin' && (<div className="flex gap-2"><button onClick={()=>downloadTemplate('schedule')} className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border transition-all" title="下載日程範本"><Download size={20}/></button><label className="bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm"><Upload size={18}/> 匯入 CSV 日程<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportSchedules}/></label></div>)}</div>
-               </div>
-               <div className="bg-white p-6 rounded-[3rem] shadow-sm border h-[70vh]">
-                  <Calendar
-                      localizer={localizer}
-                      events={calendarEvents}
-                      startAccessor="start"
-                      endAccessor="end"
-                      style={{ height: '100%' }}
-                      onSelectEvent={event => setSelectedSchedule(event)}
-                      eventPropGetter={(event) => {
-                          const className = event.resource.trainingClass === 'A班' ? 'bg-blue-500' : event.resource.trainingClass === 'B班' ? 'bg-green-500' : 'bg-yellow-500';
-                          return { className: `${className} border-none text-white p-1 text-xs rounded-lg` };
-                      }}
-                  />
-               </div>
-            </div>
-          )}
-          {!viewingStudent && activeTab === 'attendance' && role === 'admin' && (
-            <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
-               <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}><div className="absolute -right-20 -bottom-20 opacity-10 rotate-12"><ClipboardCheck size={300}/></div><div className="relative z-10"><h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3><div className="flex flex-wrap gap-4">{todaySchedule ? (<><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><Star size={14} className="text-yellow-300 fill-yellow-300"/><span className="text-sm font-black">今日：{todaySchedule.trainingClass}</span></div><div className="bg-white/20 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 flex items-center gap-2"><MapPin size={14}/><span className="text-sm font-black">{todaySchedule.location}</span></div></>) : (<div className="bg-slate-700/50 backdrop-blur-md px-5 py-2 rounded-full border border-white/5 flex items-center gap-2"><Info size={14}/><span className="text-sm font-black text-slate-300 font-bold">今日無預設訓練，進行一般點名</span></div>)}</div></div><div className="relative z-10 bg-white/10 px-10 py-6 rounded-[2.5rem] backdrop-blur-md mt-10 md:mt-0 text-center border border-white/10 shadow-inner"><p className="text-[10px] uppercase tracking-[0.3em] text-blue-100 font-black opacity-60">Today's Date</p><p className="text-2xl font-black mt-1 font-mono">{new Date().toLocaleDateString()}</p></div></div>
-               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 mb-8 mt-8"><div className="flex items-center gap-4"><div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><FileBarChart size={24}/></div><div><h4 className="font-black text-slate-800">出席率報表中心</h4><p className="text-[10px] text-slate-400 font-bold">匯出 CSV 檢查各班出席狀況</p></div></div><div className="flex gap-2"><button onClick={() => exportMatrixAttendanceCSV(attendanceClassFilter)} className="px-6 py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl text-xs font-black shadow-lg shadow-emerald-100 transition-all flex items-center gap-2"><Download size={16}/> 匯出班級點名總表</button></div></div>
-               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6"><div className="flex items-center gap-3 text-slate-400 min-w-max"><Filter size={20} /><span>選擇點名班別：</span></div><div className="flex flex-wrap gap-2">{uniqueTrainingClasses.map(cls => (<button key={cls} onClick={() => setAttendanceClassFilter(cls)} className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${attendanceClassFilter === cls ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'}`}>{cls === 'ALL' ? '🌍 全部學員' : cls}</button>))}</div></div>
-               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                  {studentsInSelectedAttendanceClass.length > 0 ? (
-                    studentsInSelectedAttendanceClass.map(s => {
-                      const isAttended = todaySchedule && attendanceLogs.some(log => log.studentId === s.id && log.date === todaySchedule.date && log.trainingClass === todaySchedule.trainingClass);
-                      const isPending = pendingAttendance.includes(s.id);
-                      return (
-                        <button 
-                          key={s.id} 
-                          onClick={() => {
-                              if (!isAttended) {
-                                  togglePendingAttendance(s.id);
-                              }
-                          }}
-                          disabled={isAttended}
-                          className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden 
-                            ${isAttended 
-                              ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-not-allowed' 
-                              : isPending 
-                                ? 'border-blue-500 shadow-xl shadow-blue-50 ring-4 ring-blue-100' 
-                                : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-lg'
-                            }`}
-                        >
-                          <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase 
-                            ${isAttended 
-                              ? 'bg-emerald-200 text-white rotate-12' 
-                              : isPending 
-                                ? 'bg-blue-600 text-white rotate-6' 
-                                : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-100'
-                            }`}
-                          >
-                            {s.name[0]}
-                          </div>
-                          <p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : isPending ? 'text-blue-600' : 'text-slate-800'}`}>{s.name}</p>
-                          <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
-                          <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>{s.squashClass}</div>
-                          <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : isPending ? 'text-blue-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
-                            <CheckCircle2 size={24}/>
-                          </div>
-                          {isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">已出席</div>)}
-                          {isPending && !isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] py-1 font-black uppercase tracking-widest">待儲存</div>)}
-                        </button>
-                      );
-                    })
-                  ) : (<div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">此班別暫無學員資料</div>)}
-               </div>
-            </div>
-          )}
-          {!viewingStudent && activeTab === 'gallery' && (
-            <div className="space-y-10 animate-in fade-in duration-500 font-bold">
-               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-6">
-                    {currentAlbum ? (<button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all"><ArrowLeft size={24}/></button>) : (<div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>)}
-                    <div><h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3><p className="text-xs text-slate-400 mt-1">{currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}</p></div>
-                  </div>
-                  {role === 'admin' && (<div className="flex items-center gap-3">{isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}<button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50"><PlusCircle size={18}/> 新增相片/影片</button></div>)}
-               </div>
-               {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
-            </div>
-           )}
-           {!viewingStudent && activeTab === 'awards' && (
-             <div className="space-y-8 animate-in fade-in duration-500 font-bold">
-                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
-                   <div className="flex items-center gap-6">
-                     <div className="p-4 bg-yellow-100 text-yellow-600 rounded-2xl"><Award/></div>
-                     <div>
-                       <h3 className="text-xl font-black">獎項成就 (Hall of Fame)</h3>
-                       <p className="text-xs text-slate-400 mt-1">紀錄校隊輝煌戰績</p>
-                     </div>
+                        <div>
+                          <label className="text-sm font-bold text-slate-500 mb-2 block">5. 對手球員 (可選)</label>
+                          <input type="text" value={newExternalMatch.opponentPlayerName} onChange={e => setNewExternalMatch({...newExternalMatch, opponentPlayerName: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none" placeholder="例如: 王小虎"/>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm font-bold text-slate-500 mb-2 block">6. 賽果 (文字)</label>
+                        <input type="text" value={newExternalMatch.externalMatchScore} onChange={e => setNewExternalMatch({...newExternalMatch, externalMatchScore: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none" placeholder="例如: 2-1"/>
+                      </div>
+                      <div>
+                        <label className="text-sm font-bold text-slate-500 mb-2 block">7. 本場結果</label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <button onClick={() => setNewExternalMatch({...newExternalMatch, isWin: true})} className={`p-4 rounded-2xl text-lg font-black transition-all ${newExternalMatch.isWin === true ? 'bg-emerald-500 text-white ring-4 ring-emerald-200' : 'bg-slate-100 hover:bg-slate-200'}`}>勝利</button>
+                            <button onClick={() => setNewExternalMatch({...newExternalMatch, isWin: false})} className={`p-4 rounded-2xl text-lg font-black transition-all ${newExternalMatch.isWin === false ? 'bg-rose-500 text-white ring-4 ring-rose-200' : 'bg-slate-100 hover:bg-slate-200'}`}>落敗</button>
+                        </div>
+                      </div>
+                      <div className="pt-6 border-t">
+                        <button onClick={handleSaveExternalMatch} disabled={isUpdating} className="w-full flex items-center justify-center gap-3 py-5 bg-blue-600 text-white font-black text-xl rounded-2xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:opacity-50">{isUpdating ? <Loader2 className="animate-spin" /> : <Save />} 儲存賽果</button>
+                      </div>
                    </div>
-                   
-                   <div className="flex items-center gap-4">
-                     <div className="flex items-center p-1 bg-slate-100 rounded-2xl">
-                       <button onClick={() => setAwardsViewMode('grid')} className={`flex items-center gap-2 px-4 py-2 rounded-[1.2rem] text-sm font-bold transition-all ${awardsViewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>
-                         <Columns size={16}/> 榮譽牆
-                       </button>
-                       <button onClick={() => setAwardsViewMode('timeline')} className={`flex items-center gap-2 px-4 py-2 rounded-[1.2rem] text-sm font-bold transition-all ${awardsViewMode === 'timeline' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>
-                         <History size={16}/> 時間軸
-                       </button>
-                     </div>
-                     {role === 'admin' && (
-                        <button onClick={handleAddAward} className="bg-yellow-500 text-white p-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black">
-                          <PlusCircle size={18}/> <span className="hidden sm:inline">新增獎項</span>
-                        </button>
-                     )}
-                   </div>
-                </div>
- 
-                {awards.length === 0 ? (
-                  <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
-                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><Trophy size={40}/></div>
-                     <p className="text-xl font-black text-slate-400">目前暫無獎項紀錄</p>
-                     <p className="text-sm text-slate-300 mt-2">請教練新增比賽獲獎紀錄</p>
-                  </div>
-                ) : (
-                  <>
-                  {awardsViewMode === 'grid' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                       {awards.map((award) => {
-                          const student = students.find(s => s.name === award.studentName);
-                          return <AwardCard key={award.id} award={award} student={student} />;
-                       })}
-                    </div>
-                  )}
-                  {awardsViewMode === 'timeline' && (
-                    <div className="relative pl-8 pr-4">
-                      <div className="absolute left-[3.25rem] top-0 h-full w-1 bg-slate-200 rounded-full"></div>
-                       {awards.map((award, index) => {
-                          const student = students.find(s => s.name === award.studentName);
-                          const year = award.date.split('-')[0];
-                          const prevYear = index > 0 ? awards[index-1].date.split('-')[0] : null;
-                          const showYear = year !== prevYear;
-                          return (
-                            <div key={award.id} className="relative mb-12">
-                              {showYear && (
-                                <div className="absolute -left-2 top-0 flex items-center justify-center w-24 h-24 bg-slate-800 text-white font-black text-2xl rounded-full border-8 border-[#F8FAFC] z-10">
-                                  {year}
-                                </div>
-                              )}
-                              <div className={`ml-20 md:ml-40 pl-10 pt-2 ${showYear ? 'mt-8' : ''}`}>
-                                 <AwardCard award={award} student={student} />
-                              </div>
-                            </div>
-                          );
-                       })}
-                    </div>
-                  )}
-                  </>
-                )}
-             </div>
+                 </div>
+              </div>
             )}
-          {!viewingStudent && activeTab === 'financial' && role === 'admin' && (
-             <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
-                <div className="flex justify-end">
-                  <button 
-                      onClick={saveFinanceConfig}
-                      className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-lg hover:bg-blue-700 transition-all active:scale-95"
-                  >
-                      <Save size={20} />
-                      儲存財務設定
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-                    <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6">
-                      <TrendingUp size={32}/>
-                    </div>
-                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總收入</p>
-                    <h3 className="text-4xl font-black text-emerald-500">${financialSummary.revenue.toLocaleString()}</h3>
-                  </div>
-                  <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-                    <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6">
-                      <Trash2 size={32}/>
-                    </div>
-                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總支出</p>
-                    <h3 className="text-4xl font-black text-rose-500">${financialSummary.expense.toLocaleString()}</h3>
-                  </div>
-                  <div className={`p-10 rounded-[3.5rem] border shadow-sm flex flex-col justify-center items-center text-center ${financialSummary.profit >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${financialSummary.profit >= 0 ? 'bg-white text-blue-600 shadow-sm' : 'bg-white text-rose-600 shadow-sm'}`}>
-                      <DollarSign size={32}/>
-                    </div>
-                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計資助盈餘</p>
-                    <h3 className={`text-4xl font-black ${financialSummary.profit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-                      ${financialSummary.profit.toLocaleString()}
-                    </h3>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-4 mb-10">
-                      <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center shadow-sm"><Trash2 size={24}/></div>
-                      <h4 className="text-2xl font-black text-slate-800">支出設定 (教練費)</h4>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      {[
-                        { label: '校隊教練次數', key: 'nTeam' }, { label: '單次校隊成本', key: 'costTeam' },
-                        { label: '進階班次數', key: 'nTrain' }, { label: '單次進階成本', key: 'costTrain' },
-                        { label: '趣味班次數', key: 'nHobby' }, { label: '單次趣味成本', key: 'costHobby' },
-                      ].map(item => (
-                        <div key={item.key}>
-                          <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">{item.label}</label>
-                          <input 
-                            type="number" 
-                            className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-rose-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
-                            value={financeConfig[item.key]}
-                            onChange={e => setFinanceConfig({...financeConfig, [item.key]: Number(e.target.value)})}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-4 mb-10">
-                      <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm"><DollarSign size={24}/></div>
-                      <h4 className="text-2xl font-black text-slate-800">預計收入 (學費)</h4>
-                    </div>
-                    <div className="space-y-10">
-                      <div>
-                        <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">預計總人數</label>
-                        <input 
-                          type="number" 
-                          className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
-                          value={financeConfig.totalStudents}
-                          onChange={e => setFinanceConfig({...financeConfig, totalStudents: Number(e.target.value)})}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">每位學員學費 ($)</label>
-                        <input 
-                          type="number" 
-                          className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black"
-                          value={financeConfig.feePerStudent}
-                          onChange={e => setFinanceConfig({...financeConfig, feePerStudent: Number(e.target.value)})}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-             </div>
-          )}
+
+          {/* SETTINGS TAB */}
           {!viewingStudent && activeTab === 'settings' && role === 'admin' && (
-             <div className="max-w-2xl mx-auto space-y-10 animate-in zoom-in-95 duration-500 font-bold">
-                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+             <div className="max-w-4xl mx-auto space-y-10 animate-in zoom-in-95 duration-500 font-bold">
+                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
                    <h3 className="text-3xl font-black mb-10 text-center">系統偏好設定</h3>
                    <div className="space-y-8">
                       <div className="space-y-3">
                         <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">管理員存取密碼</label>
                         <div className="relative">
                            <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
-                           <input 
-                              type="password" 
-                              value={systemConfig.adminPassword}
-                              onChange={(e)=>setSystemConfig({...systemConfig, adminPassword: e.target.value})}
-                              className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white p-5 pl-14 rounded-2xl outline-none transition-all"
-                           />
+                           <input type="password" value={systemConfig.adminPassword} onChange={(e)=>setSystemConfig({...systemConfig, adminPassword: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white p-5 pl-14 rounded-2xl outline-none transition-all"/>
                         </div>
                       </div>
-                      
                       <div className="space-y-3">
                         <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">數據導入編碼</label>
-                        <select 
-                          value={importEncoding}
-                          onChange={(e)=>setImportEncoding(e.target.value)}
-                          className="w-full bg-slate-50 border-none p-5 rounded-2xl outline-none font-black cursor-pointer appearance-none shadow-inner"
-                        >
+                        <select value={importEncoding} onChange={(e)=>setImportEncoding(e.target.value)} className="w-full bg-slate-50 border-none p-5 rounded-2xl outline-none font-black cursor-pointer appearance-none shadow-inner">
                           <option value="AUTO">自動偵測 (推薦)</option>
                           <option value="UTF8">萬用編碼 (UTF-8)</option>
                           <option value="BIG5">繁體中文 (BIG5 - Excel 常用)</option>
@@ -3136,99 +3016,55 @@ const MonthlyStarsPage = ({ monthlyStarsData }) => {
                       <div className="space-y-3">
                         <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">學校校徽 (School Logo)</label>
                         <div className="flex flex-col items-center gap-4 p-8 border-2 border-dashed border-slate-200 rounded-[2rem] bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer relative" onClick={() => document.getElementById('logoInput').click()}>
-                           {systemConfig.schoolLogo ? (
-                             <img src={systemConfig.schoolLogo} className="h-32 object-contain" alt="Current Logo"/>
-                           ) : (
-                             <div className="text-slate-300 flex flex-col items-center">
-                               <ImageIcon size={48} className="mb-2"/>
-                               <span className="text-xs font-bold">點擊上傳校徽圖片</span>
-                             </div>
-                           )}
-                           <input 
-                             id="logoInput"
-                             type="file" 
-                             className="hidden" 
-                             accept="image/png, image/jpeg"
-                             onChange={(e) => {
-                               const file = e.target.files[0];
-                               if(file) {
-                                 if(file.size > 1024 * 1024) { 
-                                   alert('圖片太大，請使用小於 1MB 的圖片');
-                                   return;
-                                 }
-                                 const reader = new FileReader();
-                                 reader.onload = (ev) => setSystemConfig({...systemConfig, schoolLogo: ev.target.result});
-                                 reader.readAsDataURL(file);
-                               }
-                             }}
-                           />
-                           {systemConfig.schoolLogo && (
-                             <button 
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 setSystemConfig({...systemConfig, schoolLogo: null});
-                               }}
-                               className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-sm text-red-500 hover:bg-red-50"
-                             >
-                               <Trash2 size={16}/>
-                             </button>
-                           )}
+                           {systemConfig.schoolLogo ? (<img src={systemConfig.schoolLogo} className="h-32 object-contain" alt="Current Logo"/>) : (<div className="text-slate-300 flex flex-col items-center"><ImageIcon size={48} className="mb-2"/><span className="text-xs font-bold">點擊上傳校徽圖片</span></div>)}
+                           <input id="logoInput" type="file" className="hidden" accept="image/png, image/jpeg" onChange={(e) => { const file = e.target.files[0]; if(file) { if(file.size > 1024 * 1024) { alert('圖片太大，請使用小於 1MB 的圖片'); return; } const reader = new FileReader(); reader.onload = (ev) => setSystemConfig({...systemConfig, schoolLogo: ev.target.result}); reader.readAsDataURL(file); } }}/>
+                           {systemConfig.schoolLogo && (<button onClick={(e) => { e.stopPropagation(); setSystemConfig({...systemConfig, schoolLogo: null}); }} className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-sm text-red-500 hover:bg-red-50"><Trash2 size={16}/></button>)}
                         </div>
                         <p className="text-[10px] text-slate-400 font-bold px-2">建議使用背景透明的 PNG 圖片，檔案大小請小於 1MB 以確保讀取速度。</p>
                       </div>
-                      <div className="pt-8 border-t border-slate-100 space-y-4">
-                        <div className="p-6 bg-orange-50 rounded-[2.5rem] border border-orange-100 mb-6">
-                           <h4 className="text-orange-600 font-black mb-2 flex items-center gap-2"><History/> 新賽季重置</h4>
-                           <p className="text-xs text-slate-400 mb-4">將所有學員積分重置為該章別的起步底分 (金:200, 銀:100...)。</p>
-                           <button 
-                             onClick={handleSeasonReset}
-                             className="w-full bg-white text-orange-600 border-2 border-orange-200 py-3 rounded-2xl font-black hover:bg-orange-600 hover:text-white transition-all"
-                           >
-                             重置積分 (開啟新賽季)
-                           </button>
-                        </div>
-                        <button 
-                          onClick={async ()=>{
-                            setIsUpdating(true);
-                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system'), systemConfig);
-                            setIsUpdating(false);
-                            alert('系統設定已更新！');
-                          }}
-                          className="w-full bg-blue-600 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 flex items-center justify-center gap-3 transition-all active:scale-[0.98]"
-                        >
-                          <Save size={24}/> 保存設定
-                        </button>
-                        <div className="p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex items-center gap-4">
-                          <Info className="text-blue-500 shrink-0" size={20}/>
-                          <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
-                            修改密碼後請妥善保存，否則將無法進入教練後台。系統預設密碼為 "admin"。
-                          </p>
-                        </div>
-                      </div>
                    </div>
-                </div>
-                
-                <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">
-                  Copyright © 2026 正覺壁球. All Rights Reserved.
-                </div>
+                 </div>
+
+                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                   <h3 className="text-2xl font-black mb-4">校外賽事名稱管理</h3>
+                   <p className="text-slate-400 mb-8">您可以在此批量匯入官方的賽事名稱，以便在「校外賽管理」頁面中快速選取。</p>
+                   <div className="flex flex-col sm:flex-row gap-4 items-center">
+                     <label className="flex-1 w-full bg-blue-600 text-white px-10 py-5 rounded-[2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center justify-center gap-3 transition-all active:scale-[0.98]"><Upload size={20}/> 批量匯入賽事名稱 (CSV)<input type="file" className="hidden" accept=".csv" onChange={handleCSVImportExternalTournaments}/></label>
+                     <button onClick={() => { const name = prompt('請輸入單一賽事名稱:'); if (name) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'), { name, timestamp: serverTimestamp() }); }} className="w-full sm:w-auto p-5 bg-slate-50 text-slate-500 border rounded-[2rem] hover:text-blue-600 transition-all flex items-center justify-center gap-2" title="新增單一賽事"><Plus size={24}/> 新增單一</button>
+                   </div>
+                   <div className="mt-8">
+                     <h4 className="font-bold text-slate-500 mb-2">目前已匯入的賽事列表:</h4>
+                     <div className="max-h-48 overflow-y-auto bg-slate-50 rounded-2xl p-4 space-y-2 border">
+                       {externalTournaments.length > 0 ? externalTournaments.map(t => (
+                         <div key={t.id} className="flex justify-between items-center bg-white p-2 rounded-lg">
+                           <span className="text-sm font-semibold text-slate-700">{t.name}</span>
+                           <button onClick={() => deleteItem('external_tournaments', t.id)} className="p-1 text-slate-300 hover:text-red-500"><Trash2 size={14}/></button>
+                         </div>
+                       )) : <p className="text-sm text-center text-slate-400 p-4">暫無賽事</p>}
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                    <div className="p-6 bg-orange-50 rounded-[2.5rem] border border-orange-100 mb-6">
+                       <h4 className="text-orange-600 font-black mb-2 flex items-center gap-2"><History/> 新賽季重置</h4>
+                       <p className="text-xs text-slate-400 mb-4">將所有學員積分重置為該章別的起步底分 (金:200, 銀:100...)。</p>
+                       <button onClick={handleSeasonReset} className="w-full bg-white text-orange-600 border-2 border-orange-200 py-3 rounded-2xl font-black hover:bg-orange-600 hover:text-white transition-all">重置積分 (開啟新賽季)</button>
+                    </div>
+                    <button onClick={async ()=>{ setIsUpdating(true); await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system'), systemConfig); setIsUpdating(false); alert('系統設定已更新！'); }} className="w-full bg-blue-600 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 flex items-center justify-center gap-3 transition-all active:scale-[0.98]">
+                      <Save size={24}/> 保存設定
+                    </button>
+                    <div className="p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex items-center gap-4 mt-6">
+                      <Info className="text-blue-500 shrink-0" size={20}/>
+                      <p className="text-[10px] text-slate-400 font-bold leading-relaxed">修改密碼後請妥善保存，否則將無法進入教練後台。系統預設密碼為 "admin"。</p>
+                    </div>
+                 </div>
+                 <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">Copyright © 2026 正覺壁球. All Rights Reserved.</div>
              </div>
           )}
+          
         </div>
       </main>
-
-        {activeTab === 'attendance' && pendingAttendance.length > 0 && role === 'admin' && (
-          <div className="fixed bottom-12 right-12 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <button
-              onClick={savePendingAttendance}
-              disabled={isUpdating}
-              className="flex items-center gap-4 px-8 py-5 bg-blue-600 text-white rounded-[2rem] shadow-2xl shadow-blue-200 hover:bg-blue-700 transition-all text-lg font-black disabled:opacity-50"
-            >
-              <Save size={24} />
-              <span>儲存 {pendingAttendance.length} 筆點名紀錄</span>
-              {isUpdating && <Loader2 className="animate-spin" size={20} />}
-            </button>
-          </div>
-        )}
     </div>
   );
 }
