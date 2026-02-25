@@ -35,7 +35,7 @@ import {
 } from 'recharts';
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "11.2";
+const CURRENT_VERSION = "11.3";
 
 // --- Firebase 初始化 ---
 let firebaseConfig;
@@ -92,6 +92,7 @@ const ACHIEVEMENT_DATA = {
   'top-three': { name: '年度三甲', desc: '賽季積分榜前三名', icon: <TrophyIcon size={24} /> },
   'elite-player': { name: '年度壁球精英', desc: '賽季積分榜前八名', icon: <Sparkles size={24} /> },
 };
+
 
 // --- Helper function ---
 const toDataURL = (url) => {
@@ -191,7 +192,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
-  const [activeTab, setActiveTab] = useState('rankings');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [students, setStudents] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
   const [competitions, setCompetitions] = useState([]);
@@ -201,7 +202,7 @@ export default function App() {
   const [achievements, setAchievements] = useState([]); 
   const [leagueMatches, setLeagueMatches] = useState([]);
   const [externalTournaments, setExternalTournaments] = useState([]);
-  const [assessments, setAssessments] = useState([]); // NEW: Store assessments data
+  const [assessments, setAssessments] = useState([]); 
   const [downloadFiles, setDownloadFiles] = useState([]);
   const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
@@ -274,7 +275,6 @@ export default function App() {
     isWin: null,
   });
 
-  // NEW: State for Assessment Form
   const [newAssessment, setNewAssessment] = useState({
     studentId: '',
     date: new Date().toISOString().split('T')[0],
@@ -326,7 +326,7 @@ export default function App() {
         league_matches: collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'),
         external_tournaments: collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'),
         monthly_stars: collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars'),
-        assessments: collection(db, 'artifacts', appId, 'public', 'data', 'assessments') // NEW
+        assessments: collection(db, 'artifacts', appId, 'public', 'data', 'assessments') 
       };
 
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
@@ -353,7 +353,7 @@ export default function App() {
       listeners.push(onSnapshot(query(collections.league_matches, orderBy("date", "desc")), (snap) => setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(query(collections.external_tournaments, orderBy("name", "asc")), (snap) => setExternalTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(query(collections.monthly_stars, orderBy("month", "desc")), (snap) => setMonthlyStars(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-      listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() }))))); // NEW
+      listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
 
       return () => listeners.forEach(unsub => unsub());
 
@@ -1528,7 +1528,7 @@ export default function App() {
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
-    const playerDashboardData = useMemo(() => {
+  const playerDashboardData = useMemo(() => {
         if (!viewingStudent) return null;
 
         const studentMatches = leagueMatches.filter(m => m.player1Id === viewingStudent.id || m.player2Id === viewingStudent.id);
@@ -1544,7 +1544,6 @@ export default function App() {
         const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
         const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
 
-        // 生成積分走勢圖的資料 (Dynamic for Recharts)
         let currentPoints = BADGE_DATA[viewingStudent.badge]?.basePoints || 0;
         const dynamicPointsHistory = [{ 
             date: viewingStudent.createdAt?.toDate ? viewingStudent.createdAt.toDate().toISOString().split('T')[0] : '初始', 
@@ -1564,14 +1563,11 @@ export default function App() {
                 }
         });
 
-        // 獲取最新一次的綜合評估 (Radar Chart 數據處理)
         const studentAssessments = assessments.filter(a => a.studentId === viewingStudent.id).sort((a, b) => b.date.localeCompare(a.date));
         const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
         
         let radarData = [];
         if (latestAssessment) {
-            // Normalize raw data to 1-10 scale for Radar Chart display. 
-            // These normalization factors are examples and can be adjusted by the coach.
             const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
             
             radarData = [
@@ -1600,8 +1596,7 @@ export default function App() {
             radarData,
             achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
         };
-    }, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments]);
-
+  }, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments]);
 
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
@@ -1649,6 +1644,128 @@ export default function App() {
     } catch (e) {
         console.error(e);
         alert('新增失敗');
+    }
+  };
+
+  const handleMonthlyStarFieldChange = (gender, field, value) => {
+    setMonthlyStarEditData(prev => ({
+        ...prev,
+        [gender]: { ...prev[gender], [field]: value }
+    }));
+  };
+
+  const handleMonthlyStarStudentSelect = (gender, studentId) => {
+    const student = students.find(s => s.id === studentId);
+    if (student) {
+        setMonthlyStarEditData(prev => ({
+            ...prev,
+            [gender]: {
+                ...prev[gender],
+                studentId: student.id,
+                studentName: student.name,
+                studentClass: student.class,
+            }
+        }));
+    }
+  };
+  
+  const handleMonthlyStarPhotoUpload = async (gender, file) => {
+    if (!file) return;
+    setIsUpdating(true);
+    try {
+        const compressedUrl = await compressImage(file, 0.8);
+        handleMonthlyStarFieldChange(gender, 'fullBodyPhotoUrl', compressedUrl);
+        if (gender === 'maleWinner') setMalePhotoPreview(compressedUrl);
+        if (gender === 'femaleWinner') setFemalePhotoPreview(compressedUrl);
+    } catch (e) {
+        console.error("Photo upload failed:", e);
+        alert("照片上傳失敗。");
+    }
+    setIsUpdating(false);
+  };
+
+  const handleSaveMonthlyStar = async () => {
+      if (!monthlyStarEditData.maleWinner.studentId || !monthlyStarEditData.femaleWinner.studentId) {
+          alert("請同時選擇一位男生和一位女生作為每月之星。");
+          return;
+      }
+      setIsUpdating(true);
+      try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'monthly_stars', selectedMonthForAdmin);
+          await setDoc(docRef, {
+              ...monthlyStarEditData,
+              month: selectedMonthForAdmin,
+              publishedAt: serverTimestamp()
+          });
+          alert(`✅ 成功發佈/更新 ${selectedMonthForAdmin} 的每月之星！`);
+      } catch (e) {
+          console.error("Failed to save monthly star:", e);
+          alert("儲存失敗，請檢查網絡連線。");
+      }
+      setIsUpdating(false);
+  };
+
+  useEffect(() => {
+    if(activeTab === 'monthlyStarsAdmin') {
+      const dataForMonth = monthlyStars.find(ms => ms.id === selectedMonthForAdmin);
+      const emptyData = {
+          month: selectedMonthForAdmin,
+          maleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
+          femaleWinner: { studentId: '', studentName: '', studentClass: '', reason: '', goals: '', fullBodyPhotoUrl: null },
+      };
+      setMonthlyStarEditData(dataForMonth || emptyData);
+      setMalePhotoPreview(dataForMonth?.maleWinner?.fullBodyPhotoUrl || null);
+      setFemalePhotoPreview(dataForMonth?.femaleWinner?.fullBodyPhotoUrl || null);
+    }
+  }, [selectedMonthForAdmin, monthlyStars, activeTab]);
+
+  const handleGeneratePoster = async () => {
+    setIsGeneratingPoster(true);
+    const dataToRender = JSON.parse(JSON.stringify(monthlyStarEditData));
+
+    try {
+        const [malePhotoData, femalePhotoData, logoData] = await Promise.all([
+            toDataURL(dataToRender.maleWinner.fullBodyPhotoUrl),
+            toDataURL(dataToRender.femaleWinner.fullBodyPhotoUrl),
+            toDataURL(systemConfig.schoolLogo)
+        ]);
+        
+        setPosterData({ 
+            ...dataToRender, 
+            maleWinner: { ...dataToRender.maleWinner, fullBodyPhotoUrl: malePhotoData },
+            femaleWinner: { ...dataToRender.femaleWinner, fullBodyPhotoUrl: femalePhotoData },
+            schoolLogo: logoData
+        });
+        
+        setTimeout(async () => {
+            const posterElement = posterRef.current;
+            if (!posterElement) {
+                alert("海報模板加載失敗。");
+                setIsGeneratingPoster(false);
+                return;
+            }
+            try {
+                const canvas = await html2canvas(posterElement, { scale: 2, useCORS: true });
+                const image = canvas.toDataURL('image/png', 1.0);
+                const link = document.createElement('a');
+                link.href = image;
+                link.download = `Monthly_Star_Poster_${selectedMonthForAdmin}.png`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (canvasError) {
+                console.error('海報生成失敗 (html2canvas stage):', canvasError);
+                alert('海報生成失敗，可能是由於網絡或圖片格式問題。');
+            } finally {
+                setIsGeneratingPoster(false);
+                setPosterData(null);
+            }
+        }, 500);
+
+    } catch (preloadError) {
+        console.error('海報圖片預加載或轉換失敗:', preloadError);
+        alert('海報圖片處理失敗，請檢查網絡連線。');
+        setIsGeneratingPoster(false);
     }
   };
 
@@ -1958,9 +2075,7 @@ export default function App() {
                 </div>
             </div>
 
-            {/* CHARTS SECTION */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
-                {/* 1. Line Chart: Points History */}
                 <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col">
                     <h4 className="text-2xl font-black mb-2 flex items-center gap-3"><TrendingUp className="text-blue-500"/> 積分走勢圖</h4>
                     <p className="text-xs text-slate-400 mb-6">顯示該學員參與校內比賽後的積分變化軌跡</p>
@@ -1987,7 +2102,6 @@ export default function App() {
                     </div>
                 </div>
 
-                {/* 2. Radar Chart: Assessment Overview */}
                 <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col">
                     <h4 className="text-2xl font-black mb-2 flex items-center gap-3"><Activity className="text-emerald-500"/> 綜合能力評估</h4>
                     <p className="text-xs text-slate-400 mb-6">{data.latestAssessment ? `最後更新: ${data.latestAssessment.date}` : '尚未有評估紀錄'}</p>
@@ -2012,7 +2126,6 @@ export default function App() {
                 </div>
             </div>
 
-            {/* Assessment Details List */}
             {data.latestAssessment && (
                 <div className="bg-slate-50 p-10 rounded-[4rem] border border-slate-200 shadow-inner mb-10">
                     <h4 className="text-xl font-black text-slate-700 mb-6">最新體能與技術測試詳細數據</h4>
@@ -2082,12 +2195,99 @@ export default function App() {
     );
   };
 
+  const MonthlyStarsPage = ({ monthlyStarsData }) => {
+    const [displayMonth, setDisplayMonth] = useState('');
+
+    useEffect(() => {
+        if (monthlyStarsData.length > 0) {
+            setDisplayMonth(monthlyStarsData[0].id);
+        }
+    }, [monthlyStarsData]);
+
+    const currentData = monthlyStarsData.find(ms => ms.id === displayMonth);
+
+    if (monthlyStarsData.length === 0) {
+        return (
+            <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
+               <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center text-yellow-300 mb-6"><Star size={40}/></div>
+               <p className="text-xl font-black text-slate-400">「每月之星」即將登場</p>
+               <p className="text-sm text-slate-300 mt-2">請教練在後台設定本月的得獎者。</p>
+            </div>
+        )
+    }
+
+    return (
+        <div className="animate-in fade-in duration-500 font-bold">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+                <h3 className="text-4xl font-black text-slate-800">每月之星 <span className="text-yellow-500">Player of the Month</span></h3>
+                <select 
+                    value={displayMonth} 
+                    onChange={e => setDisplayMonth(e.target.value)}
+                    className="bg-white border-2 border-slate-100 focus:border-blue-600 transition-all rounded-2xl p-4 outline-none text-lg font-bold shadow-sm"
+                >
+                    {monthlyStarsData.map(ms => <option key={ms.id} value={ms.id}>{ms.id.replace('-', ' 年 ')} 月</option>)}
+                </select>
+            </div>
+
+            {currentData && (
+                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                    <div className="bg-gradient-to-br from-blue-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
+                        <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
+                           {currentData.maleWinner.fullBodyPhotoUrl ? <img src={currentData.maleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top" crossOrigin="anonymous"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
+                        </div>
+                        <h4 className="text-3xl font-black text-blue-800">{currentData.maleWinner.studentName}</h4>
+                        <p className="text-sm font-bold text-slate-400 mb-6">{currentData.maleWinner.studentClass}</p>
+                        <div className="space-y-6">
+                            <div>
+                                <h5 className="font-black text-slate-500 mb-2">獲選原因</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed">{currentData.maleWinner.reason}</p>
+                            </div>
+                             <div>
+                                <h5 className="font-black text-slate-500 mb-2">本年度目標</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed font-semibold italic">"{currentData.maleWinner.goals}"</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-gradient-to-br from-pink-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
+                        <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
+                            {currentData.femaleWinner.fullBodyPhotoUrl ? <img src={currentData.femaleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top" crossOrigin="anonymous"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
+                        </div>
+                        <h4 className="text-3xl font-black text-pink-800">{currentData.femaleWinner.studentName}</h4>
+                        <p className="text-sm font-bold text-slate-400 mb-6">{currentData.femaleWinner.studentClass}</p>
+                        <div className="space-y-6">
+                            <div>
+                                <h5 className="font-black text-slate-500 mb-2">獲選原因</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed">{currentData.femaleWinner.reason}</p>
+                            </div>
+                             <div>
+                                <h5 className="font-black text-slate-500 mb-2">本年度目標</h5>
+                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed font-semibold italic">"{currentData.femaleWinner.goals}"</p>
+                            </div>
+                        </div>
+                    </div>
+                 </div>
+            )}
+        </div>
+    );
+  };
+
+  if (loading) return (
+    <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+      <div className="mb-8 animate-pulse">
+        <SchoolLogo size={96} />
+      </div>
+      <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
+      <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
+      <p className="text-xs text-slate-300 mt-2 font-mono">v{CURRENT_VERSION}</p>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
       
       {/* Hidden Poster for Rendering */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100}}>
-          <PosterTemplate ref={posterRef} data={posterData} />
+          <PosterTemplate ref={posterRef} data={posterData} schoolLogo={systemConfig?.schoolLogo} />
       </div>
 
       <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" multiple onChange={handleGalleryImageUpload} />
@@ -2603,6 +2803,85 @@ export default function App() {
              </div>
           )}
 
+          {/* COMPETITIONS TAB */}
+          {!viewingStudent && activeTab === 'competitions' && (
+             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
+                <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                   <div className="absolute -right-10 -top-10 text-slate-50 rotate-12"><Megaphone size={120}/></div>
+                   <div className="flex justify-between items-center mb-10 relative z-10">
+                      <div>
+                        <h3 className="text-3xl font-black">最新比賽與公告</h3>
+                        <p className="text-slate-400 text-xs mt-1">追蹤校隊最新動態與賽程詳情</p>
+                      </div>
+                      {role === 'admin' && (
+                        <div className="flex gap-2">
+                          <button onClick={generateCompetitionRoster} className="p-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all flex items-center gap-2" title="生成推薦名單">
+                            <ListChecks size={24}/>
+                            <span className="text-xs font-black">推薦名單</span>
+                          </button>
+                          <button onClick={()=>{
+                            const title = prompt('公告標題');
+                            const date = prompt('發佈日期 (YYYY-MM-DD)');
+                            const url = prompt('相關連結 (如報名表 Google Drive / 官網網址) - 可選:');
+                            if(title && date) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'competitions'), { title, date, url: url || '', createdAt: serverTimestamp() });
+                          }} className="p-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
+                            <Plus size={24}/>
+                          </button>
+                        </div>
+                      )}
+                   </div>
+                   <div className="space-y-4 relative z-10">
+                      {competitions.length === 0 && (
+                        <div className="text-center py-20 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
+                          <p className="text-slate-300 font-black">目前暫無公告發佈</p>
+                        </div>
+                      )}
+                      {competitions.sort((a,b)=>b.createdAt?.seconds - a.createdAt?.seconds).map(c => (
+                        <div key={c.id} className="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-white hover:shadow-lg hover:shadow-slate-100 transition-all group">
+                           <div className="flex gap-6 items-center flex-1">
+                             <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm group-hover:scale-110 transition-all">
+                               <TrophyIcon size={24}/>
+                             </div>
+                             <div>
+                               <p className="font-black text-xl text-slate-800">{c.title}</p>
+                               <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">
+                                 <CalendarIcon size={12}/> {c.date}
+                               </div>
+                             </div>
+                           </div>
+                           <div className="flex items-center gap-3 w-full md:w-auto">
+                             <button 
+                                onClick={() => {
+                                    if (c.url) window.open(c.url, '_blank');
+                                    else alert('此公告暫無詳細連結');
+                                }}
+                                className={`flex-1 md:flex-none px-6 py-3 border rounded-xl text-xs font-black transition-all flex items-center gap-2 ${c.url ? 'bg-blue-600 text-white border-transparent hover:bg-blue-700' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`}
+                             >
+                                <ExternalLink size={14}/> 查看詳情
+                             </button>
+                             {role === 'admin' && <button onClick={()=>deleteItem('competitions', c.id)} className="p-3 text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>}
+                           </div>
+                        </div>
+                      ))}
+                   </div>
+                </div>
+             </div>
+          )}
+
+          {/* GALLERY TAB */}
+          {!viewingStudent && activeTab === 'gallery' && (
+            <div className="space-y-10 animate-in fade-in duration-500 font-bold">
+               <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
+                  <div className="flex items-center gap-6">
+                    {currentAlbum ? (<button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all"><ArrowLeft size={24}/></button>) : (<div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>)}
+                    <div><h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3><p className="text-xs text-slate-400 mt-1">{currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}</p></div>
+                  </div>
+                  {role === 'admin' && (<div className="flex items-center gap-3">{isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}<button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50"><PlusCircle size={18}/> 新增相片/影片</button></div>)}
+               </div>
+               {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
+            </div>
+           )}
+
           {/* SETTINGS TAB */}
           {!viewingStudent && activeTab === 'settings' && role === 'admin' && (
              <div className="max-w-4xl mx-auto space-y-10 animate-in zoom-in-95 duration-500 font-bold">
@@ -2673,7 +2952,7 @@ export default function App() {
                  <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">Copyright © 2026 正覺壁球. All Rights Reserved.</div>
              </div>
           )}
-
+          
         </div>
       </main>
 
