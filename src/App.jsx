@@ -313,6 +313,7 @@ export default function App() {
     
     try {
       const listeners = [];
+      // 版本 11.4: 修正因遺漏 `assessments` 集合定義而導致的 Firestore 初始化錯誤
       const collections = {
         students: collection(db, 'artifacts', appId, 'public', 'data', 'students'),
         attendance_logs: collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'),
@@ -324,8 +325,10 @@ export default function App() {
         achievements: collection(db, 'artifacts', appId, 'public', 'data', 'achievements'),
         league_matches: collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'),
         external_tournaments: collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'),
-        monthly_stars: collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars')
+        monthly_stars: collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars'),
+        assessments: collection(db, 'artifacts', appId, 'public', 'data', 'assessments') // <-- 在此新增
       };
+
 
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
       const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
