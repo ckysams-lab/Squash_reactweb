@@ -1533,13 +1533,68 @@ export default function App() {
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
-        // 版本 11.3：修正球員儀表板在輸入體測數據後無法即時更新的問題
+// 版本 11.8: 修正 playerDashboardData 和 myDashboardData 程式碼合併錯誤
+
+// ========================================================================
+// Hook 1: playerDashboardData (供教練點擊查看任一學生)
+// ========================================================================
 const playerDashboardData = useMemo(() => {
-  if (role !== 'student' || !currentUserInfo) return null;
+    // 原始邏輯：依賴 viewingStudent
+    if (!viewingStudent) return null;
+
+    const studentMatches = leagueMatches.filter(m => m.player1Id === viewingStudent.id || m.player2Id === viewingStudent.id);
+    const completedMatches = studentMatches.filter(m => m.status === 'completed');
+    const studentAttendance = attendanceLogs.filter(log => log.studentId === viewingStudent.id);
+    const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
+    const studentAssessments = assessments.filter(a => a.studentId === viewingStudent.id).sort((a, b) => b.date.localeCompare(a.date));
+
+    const wins = completedMatches.filter(m => m.winnerId === viewingStudent.id).length;
+    const totalPlayed = completedMatches.length;
+    const winRate = totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : 0;
+
+    const totalScheduledSessions = schedules.filter(s => viewingStudent.squashClass && s.trainingClass === viewingStudent.squashClass).length;
+    const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
+    const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
+
+    const dynamicPointsHistory = [
+        { date: '初始積分', points: BADGE_DATA[viewingStudent.badge]?.basePoints || 0 },
+        { date: '目前', points: viewingStudent.totalPoints }
+    ];
+
+    const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
     
-    // 直接複用 playerDashboardData 的計算邏輯，但數據源鎖定為 currentUserInfo
+    let radarData = [];
+    if (latestAssessment) {
+        const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
+        radarData = [
+            { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 25), fullMark: 10 }, 
+            { subject: '力量 (仰臥/握力)', A: calcScore(((latestAssessment.situps || 0) + (latestAssessment.gripStrength || 0))/2, 50), fullMark: 10 },
+            { subject: '柔軟度', A: calcScore(latestAssessment.flexibility, 40), fullMark: 10 },
+            { subject: '正手技術', A: calcScore(((latestAssessment.fhDrive || 0) + (latestAssessment.fhVolley || 0))/2, 50), fullMark: 10 },
+            { subject: '反手技術', A: calcScore(((latestAssessment.bhDrive || 0) + (latestAssessment.bhVolley || 0))/2, 50), fullMark: 10 },
+        ];
+    }
+
+    const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+
+    return {
+        winRate, wins, totalPlayed,
+        attendanceRate, attendedSessions, totalScheduledSessions,
+        pointsHistory: dynamicPointsHistory,
+        recentMatches, latestAssessment, radarData,
+        achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
+    };
+}, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments]);
+
+// ========================================================================
+// Hook 2: myDashboardData (供學生登入後查看自己)
+// ========================================================================
+const myDashboardData = useMemo(() => {
+    // 新邏輯：依賴 currentUserInfo
+    if (role !== 'student' || !currentUserInfo) return null;
+    
     const studentData = rankedStudents.find(s => s.id === currentUserInfo.id);
-    if (!studentData) return null; // 如果在排名列表中找不到學生，則返回 null
+    if (!studentData) return null;
 
     const studentMatches = leagueMatches.filter(m => m.player1Id === studentData.id || m.player2Id === studentData.id);
     const completedMatches = studentMatches.filter(m => m.status === 'completed');
@@ -1584,68 +1639,8 @@ const playerDashboardData = useMemo(() => {
         achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
     };
 }, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
-    if (!viewingStudent) return null;
 
-    // --- 核心修正 #1: 確保所有數據來源都被正確監聽 ---
-    const studentMatches = leagueMatches.filter(m => m.player1Id === viewingStudent.id || m.player2Id === viewingStudent.id);
-    const completedMatches = studentMatches.filter(m => m.status === 'completed');
-    const studentAttendance = attendanceLogs.filter(log => log.studentId === viewingStudent.id);
-    const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
-    const studentAssessments = assessments.filter(a => a.studentId === viewingStudent.id).sort((a, b) => b.date.localeCompare(a.date));
 
-    const wins = completedMatches.filter(m => m.winnerId === viewingStudent.id).length;
-    const totalPlayed = completedMatches.length;
-    const winRate = totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : 0;
-
-    const totalScheduledSessions = schedules.filter(s => viewingStudent.squashClass && s.trainingClass === viewingStudent.squashClass).length;
-    const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
-    const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
-
-    // --- 核心修正 #2: 走勢圖數據直接採用官方總分 ---
-    const dynamicPointsHistory = [{ 
-        date: '初始積分', 
-        points: BADGE_DATA[viewingStudent.badge]?.basePoints || 0 
-    }];
-    // For simplicity and accuracy, we will just show the final score.
-    // A more complex implementation would require logging every single point transaction.
-    dynamicPointsHistory.push({
-        date: '目前',
-        points: viewingStudent.totalPoints 
-    });
-
-    // --- 核心修正 #3: 確保能正確抓取最新評估 ---
-    const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
-    
-    let radarData = [];
-    if (latestAssessment) {
-        const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
-        radarData = [
-            { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 22), fullMark: 10 }, 
-            { subject: '力量 (仰臥/握力)', A: calcScore(((latestAssessment.situps || 0) + (latestAssessment.gripStrength || 0))/2, 40), fullMark: 10 },
-            { subject: '柔軟度', A: calcScore(latestAssessment.flexibility, 30), fullMark: 10 },
-            { subject: '正手技術', A: calcScore(((latestAssessment.fhDrive || 0) + (latestAssessment.fhVolley || 0))/2, 10), fullMark: 10 },
-            { subject: '反手技術', A: calcScore(((latestAssessment.bhDrive || 0) + (latestAssessment.bhVolley || 0))/2, 10), fullMark: 10 },
-        ];
-    }
-
-    const recentMatches = studentMatches
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .slice(0, 5);
-
-    return {
-        winRate,
-        wins,
-        totalPlayed,
-        attendanceRate,
-        attendedSessions,
-        totalScheduledSessions,
-        pointsHistory: dynamicPointsHistory,
-        recentMatches,
-        latestAssessment,
-        radarData,
-        achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
-    };
-}, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments]); // <-- 關鍵修正：加入了 assessments
 
 
 
