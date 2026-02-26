@@ -1712,12 +1712,6 @@ const myDashboardData = useMemo(() => {
   // 打開 Modal
   setShowAddAwardModal(true);
 };
-        alert('🏆 獎項新增成功！');
-    } catch (e) {
-        console.error(e);
-        alert('新增失敗');
-    }
-  };
 
   const handleMonthlyStarFieldChange = (gender, field, value) => {
     setMonthlyStarEditData(prev => ({
