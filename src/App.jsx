@@ -2198,9 +2198,8 @@ const myDashboardData = useMemo(() => {
                 </div>
             )}
             
-            {/* --- OTHER SECTIONS (Unchanged) --- */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-1">
+   {/* 版本 12.1: 球員儀表板「成就徽章牆」美化 */}
+<div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-1">
     <div className="flex items-center gap-3 mb-8">
         <Award className="text-orange-500" />
         <h4 className="text-2xl font-black">我的成就徽章</h4>
@@ -2248,6 +2247,7 @@ const myDashboardData = useMemo(() => {
         })}
     </div>
 </div>
+
 
   const MonthlyStarsPage = ({ monthlyStarsData }) => {
     const [displayMonth, setDisplayMonth] = useState('');
