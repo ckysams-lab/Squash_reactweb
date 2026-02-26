@@ -1,1 +1,71 @@
 @import "tailwindcss";
+
+/* ===== START: 版本 12.1 - 主題模式樣式 ===== */
+
+/* 1. 定義 CSS 顏色變數 */
+:root {
+  --theme-bg: #F8FAFC;
+  --theme-bg-card: white;
+  --theme-text-primary: #1e293b; /* slate-800 */
+  --theme-text-secondary: #64748b; /* slate-500 */
+  --theme-text-faint: #94a3b8; /* slate-400 */
+  --theme-border: #f1f5f9; /* slate-100 */
+  --theme-accent: #3b82f6; /* blue-600 */
+  --theme-accent-text: white;
+  --theme-sidebar-bg: white;
+  --theme-sidebar-text: #64748b; /* slate-500 */
+  --theme-sidebar-active-bg: #3b82f6; /* blue-600 */
+  --theme-sidebar-active-text: white;
+  --theme-header-bg: rgba(255, 255, 255, 0.8);
+}
+
+/* 2. 定義「冠軍金」主題 */
+.theme-championship-gold {
+  --theme-bg: #111827; /* gray-900 */
+  --theme-bg-card: #1f2937; /* gray-800 */
+  --theme-text-primary: #f9fafb; /* gray-50 */
+  --theme-text-secondary: #9ca3af; /* gray-400 */
+  --theme-text-faint: #6b7280; /* gray-500 */
+  --theme-border: #374151; /* gray-700 */
+  --theme-accent: #facc15; /* yellow-400 */
+  --theme-accent-text: #422006;
+  --theme-sidebar-bg: #1f2937;
+  --theme-sidebar-text: #d1d5db; /* gray-300 */
+  --theme-sidebar-active-bg: #facc15;
+  --theme-sidebar-active-text: #422006;
+  --theme-header-bg: rgba(31, 41, 55, 0.8);
+}
+
+/* 3. 定義「清新綠」主題 */
+.theme-fresh-green {
+  --theme-bg: #f0fdf4; /* green-50 */
+  --theme-bg-card: white;
+  --theme-text-primary: #14532d; /* green-900 */
+  --theme-text-secondary: #4d7c0f; /* lime-700 */
+  --theme-text-faint: #84cc16; /* lime-500 */
+  --theme-border: #dcfce7; /* green-100 */
+  --theme-accent: #22c55e; /* green-500 */
+  --theme-accent-text: white;
+  --theme-sidebar-bg: white;
+  --theme-sidebar-text: #3f6212; /* lime-800 */
+  --theme-sidebar-active-bg: #16a34a; /* green-600 */
+  --theme-sidebar-active-text: white;
+  --theme-header-bg: rgba(255, 255, 255, 0.8);
+}
+
+/* 4. 將背景圖案應用到 body */
+body {
+  background-color: var(--theme-bg);
+  transition: background-color 0.5s ease;
+}
+body.theme-default {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%23dbeafe' fill-opacity='0.4'%3E%3Cpath d='M0 38.59l2.83-2.83 1.41 1.41L1.41 40H0v-1.41zM0 1.4l2.83 2.83 1.41-1.41L1.41 0H0v1.41zM38.59 40l-2.83-2.83 1.41-1.41L40 38.59V40h-1.41zM40 1.41l-2.83 2.83-1.41-1.41L38.59 0H40v1.41z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+body.theme-championship-gold {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg id='hexagons' fill='%23ca8a04' fill-opacity='0.1' fill-rule='nonzero'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.99-7.5L26 15v19L13 41.5 0 34V15z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+body.theme-fresh-green {
+  background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2386efac' fill-opacity='0.15'%3E%3Cpath d='M50 50c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c-5.523 0-10-4.477-10-10zM10 10c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c-5.523 0-10-4.477-10-10z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* ===== END: 版本 12.1 - 主題模式樣式 ===== */
