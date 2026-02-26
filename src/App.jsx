@@ -258,6 +258,25 @@ export default function App() {
   const [awardsViewMode, setAwardsViewMode] = useState('grid'); 
   const [showcaseEditorOpen, setShowcaseEditorOpen] = useState(false);
   const [selectedFeaturedBadges, setSelectedFeaturedBadges] = useState([]);
+  {/* --- START: 版本 12.6 修正 - 補上遺漏的函式 --- */}
+const handleSaveFeaturedBadges = async () => {
+    if (!currentUserInfo) return;
+    setIsUpdating(true);
+    try {
+        const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', currentUserInfo.id);
+        await updateDoc(studentRef, {
+            featuredBadges: selectedFeaturedBadges
+        });
+        alert('✅ 你的勳章展示牆已更新！');
+        setShowcaseEditorOpen(false);
+    } catch (e) {
+        console.error("Failed to save featured badges:", e);
+        alert('儲存失敗，請檢查網絡連線。');
+    }
+    setIsUpdating(false);
+};
+{/* --- END: 版本 12.6 修正 --- */}
+
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
     announcements: [],
@@ -439,24 +458,6 @@ export default function App() {
 
   {/* --- START: 版本 12.4 修正 - handleManualAward 函式 --- */}
 const handleManualAward = (student) => {
-  {/* --- START: 版本 12.5 新增 --- */}
-const handleSaveFeaturedBadges = async () => {
-    if (!currentUserInfo) return;
-    setIsUpdating(true);
-    try {
-        const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', currentUserInfo.id);
-        await updateDoc(studentRef, {
-            featuredBadges: selectedFeaturedBadges
-        });
-        alert('✅ 你的勳章展示牆已更新！');
-        setShowcaseEditorOpen(false);
-    } catch (e) {
-        console.error("Failed to save featured badges:", e);
-        alert('儲存失敗，請檢查網絡連線。');
-    }
-    setIsUpdating(false);
-};
-{/* --- END: 版本 12.5 新增 --- */}
     const allBadges = Object.entries(ACHIEVEMENT_DATA);
     let promptMsg = `請為 ${student.name} 選擇要授予的徽章 (輸入代號):\n\n`;
     
