@@ -2810,8 +2810,8 @@ const PlayerDashboard = ({ student, data, onClose }) => {
           {viewingStudent && (<PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />)}
 
           {!viewingStudent && activeTab === 'myDashboard' && role === 'student' && (
+              <>
               <PlayerDashboard student={currentUserInfo} data={myDashboardData} onClose={null} />
-          )}
 
 {/* --- START: 版本 12.5 新增 - 勳章展示牆編輯器 --- */}
                 {showcaseEditorOpen && (
