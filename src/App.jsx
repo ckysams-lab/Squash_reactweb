@@ -233,7 +233,7 @@ export default function App() {
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
     announcements: [],
-    seasonalTheme: 'default',
+    theme: 'default',
     schoolLogo: null 
   });
   
@@ -308,6 +308,11 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    const theme = systemConfig?.theme || 'default';
+    document.body.className = `theme-${theme}`; // 移除舊的，設置新的
+  }, [systemConfig?.theme]);
+  
   useEffect(() => {
     if (!user) return;
     
@@ -2333,7 +2338,7 @@ const myDashboardData = useMemo(() => {
   );
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 overflow-hidden">
+    <div className="min-h-screen flex font-sans overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-text-primary)' }}>
       
       {/* Hidden Poster for Rendering */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100}}>
@@ -2453,7 +2458,7 @@ const myDashboardData = useMemo(() => {
 )}
 
 
-      <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 bg-white border-r transition-transform duration-500 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 border-r ...`} style={{ backgroundColor: 'var(--theme-sidebar-bg)' }}>
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
             <div className="flex items-center justify-center"><SchoolLogo size={32} /></div>
@@ -2464,33 +2469,79 @@ const myDashboardData = useMemo(() => {
           </div>
           
           <nav className="space-y-2 flex-1 overflow-y-auto">
-            <div className="text-[10px] text-slate-300 uppercase tracking-widest mb-4 px-6">主選單</div>
-            {(role === 'admin' || role === 'student') && (
-              <>
-                <button onClick={() => {setActiveTab('myDashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'myDashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><UserCheck size={20}/> 我的表現</button>
-                <button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><LayoutDashboard size={20}/> 管理概況</button>
-                <button onClick={() => {setActiveTab('monthlyStars'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStars' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Star size={20}/> 每月之星</button>
-                <button onClick={() => {setActiveTab('rankings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'rankings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Trophy size={20}/> 積分排行</button>
-                <button onClick={() => {setActiveTab('league'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'league' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Swords size={20}/> 聯賽專區</button>
-                <button onClick={() => {setActiveTab('gallery'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'gallery' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><ImageIcon size={20}/> 精彩花絮</button>
-                <button onClick={() => {setActiveTab('awards'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'awards' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Award size={20}/> 獎項成就</button>
-                <button onClick={() => {setActiveTab('schedules'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'schedules' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><CalendarIcon size={20}/> 訓練日程</button>
-                <button onClick={() => {setActiveTab('competitions'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'competitions' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Megaphone size={20}/> 比賽與公告</button>
-              </>
-            )}
-            {role === 'admin' && (
-              <>
-                <div className="text-[10px] text-slate-300 uppercase tracking-widest my-6 px-6 pt-6 border-t">教練工具</div>
-                <button onClick={() => {setActiveTab('assessments'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'assessments' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Activity size={20}/> 綜合能力評估</button>
-                <button onClick={() => {setActiveTab('monthlyStarsAdmin'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'monthlyStarsAdmin' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Crown size={20}/> 每月之星管理</button>
-                <button onClick={() => {setActiveTab('students'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'students' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Users size={20}/> 隊員管理</button>
-                <button onClick={() => {setActiveTab('externalMatches'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'externalMatches' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><BookMarked size={20}/> 校外賽管理</button>
-                <button onClick={() => {setActiveTab('attendance'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><ClipboardCheck size={20}/> 快速點名</button>
-                <button onClick={() => {setActiveTab('financial'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'financial' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><DollarSign size={20}/> 財務收支</button>
-                <button onClick={() => {setActiveTab('settings'); setSidebarOpen(false);}} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all ${activeTab === 'settings' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-slate-400 hover:bg-slate-50'}`}><Settings2 size={20}/> 系統設定</button>
-              </>
-            )}
-          </nav>
+              {/***** START: 版本 12.1 - 側邊欄按鈕樣式更新 (修正版) *****/}
+              {(() => {
+                // --- Helper Component & Styles ---
+                const baseButtonClass = "w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all text-left font-bold";
+                const activeStyle = {
+                  backgroundColor: 'var(--theme-sidebar-active-bg)',
+                  color: 'var(--theme-sidebar-active-text)',
+                  boxShadow: '0 10px 15px -3px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.2), 0 4px 6px -2px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.1)'
+                };
+                const inactiveStyle = {
+                  color: 'var(--theme-sidebar-text)',
+                  backgroundColor: 'transparent'
+                };
+                const hoverStyle = { // For inactive buttons
+                    backgroundColor: 'rgba(128, 128, 128, 0.05)'
+                };
+
+                const NavButton = ({ tabName, icon, children }) => {
+                    const [isHovered, setIsHovered] = useState(false);
+                    const isActive = activeTab === tabName;
+
+                    let style = isActive ? activeStyle : inactiveStyle;
+                    if (!isActive && isHovered) {
+                        style = {...style, ...hoverStyle};
+                    }
+                    
+                    return (
+                        <button
+                          onClick={() => { setActiveTab(tabName); setSidebarOpen(false); }}
+                          className={baseButtonClass}
+                          style={style}
+                          onMouseEnter={() => setIsHovered(true)}
+                          onMouseLeave={() => setIsHovered(false)}
+                        >
+                          {icon} {children}
+                        </button>
+                    );
+                };
+
+                // --- Main Navigation Structure ---
+                return (
+                  <>
+                    {(role === 'admin' || role === 'student') && (
+                      <>
+                        <div className="text-[10px] uppercase tracking-widest mb-4 px-6" style={{ color: 'var(--theme-text-faint)' }}>主選單</div>
+                        <NavButton tabName="myDashboard" icon={<UserCheck size={20} />}>我的表現</NavButton>
+                        <NavButton tabName="dashboard" icon={<LayoutDashboard size={20} />}>管理概況</NavButton>
+                        <NavButton tabName="monthlyStars" icon={<Star size={20} />}>每月之星</NavButton>
+                        <NavButton tabName="rankings" icon={<Trophy size={20} />}>積分排行</NavButton>
+                        <NavButton tabName="league" icon={<Swords size={20} />}>聯賽專區</NavButton>
+                        <NavButton tabName="gallery" icon={<ImageIcon size={20} />}>精彩花絮</NavButton>
+                        <NavButton tabName="awards" icon={<Award size={20} />}>獎項成就</NavButton>
+                        <NavButton tabName="schedules" icon={<CalendarIcon size={20} />}>訓練日程</NavButton>
+                        <NavButton tabName="competitions" icon={<Megaphone size={20} />}>比賽與公告</NavButton>
+                      </>
+                    )}
+                    {role === 'admin' && (
+                      <>
+                        <div className="text-[10px] uppercase tracking-widest my-6 px-6 pt-6 border-t" style={{ color: 'var(--theme-text-faint)', borderColor: 'var(--theme-border)' }}>教練工具</div>
+                        <NavButton tabName="assessments" icon={<Activity size={20} />}>綜合能力評估</NavButton>
+                        <NavButton tabName="monthlyStarsAdmin" icon={<Crown size={20} />}>每月之星管理</NavButton>
+                        <NavButton tabName="students" icon={<Users size={20} />}>隊員管理</NavButton>
+                        <NavButton tabName="externalMatches" icon={<BookMarked size={20} />}>校外賽管理</NavButton>
+                        <NavButton tabName="attendance" icon={<ClipboardCheck size={20} />}>快速點名</NavButton>
+                        <NavButton tabName="financial" icon={<DollarSign size={20} />}>財務收支</NavButton>
+                        <NavButton tabName="settings" icon={<Settings2 size={20} />}>系統設定</NavButton>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+              {/***** END: 版本 12.1 - 側邊欄按鈕樣式更新 (修正版) *****/}
+            </nav>
           
           <div className="pt-10 border-t">
             <div className="bg-slate-50 rounded-3xl p-6 mb-4">
@@ -2511,8 +2562,8 @@ const myDashboardData = useMemo(() => {
         </div>
       </aside>
 
-      <main className="flex-1 h-screen overflow-y-auto relative bg-[#F8FAFC]">
-        <header className="px-10 py-8 sticky top-0 bg-white/80 backdrop-blur-xl z-40 border-b flex justify-between items-center">
+      <main className="flex-1 h-screen overflow-y-auto relative" style={{ backgroundColor: 'var(--theme-bg)' }}>
+        <header className="px-10 py-8 sticky top-0 backdrop-blur-xl z-40 border-b flex ..." style={{ backgroundColor: 'var(--theme-header-bg)', borderColor: 'var(--theme-border)' }}>
           <div className="flex items-center gap-6">
             <button onClick={()=>setSidebarOpen(true)} className="md:hidden p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-blue-600 transition-all">
               <Menu size={24}/>
@@ -3281,6 +3332,19 @@ const myDashboardData = useMemo(() => {
                           <option value="AUTO">自動偵測 (推薦)</option>
                           <option value="UTF8">萬用編碼 (UTF-8)</option>
                           <option value="BIG5">繁體中文 (BIG5 - Excel 常用)</option>
+                        </select>
+                      </div>
+                     <div className="space-y-3">
+                        <label className="text-xs text-slate-400 font-black uppercase tracking-widest px-2">系統外觀主題</label>
+                        <select 
+                          value={systemConfig.theme || 'default'} 
+                          onChange={(e) => setSystemConfig({...systemConfig, theme: e.target.value})}
+                          className="w-full bg-slate-50 border-none p-5 rounded-2xl outline-none font-black cursor-pointer appearance-none shadow-inner"
+                          style={{ color: 'var(--theme-text-primary)', backgroundColor: 'var(--theme-bg-card)' }}
+                        >
+                          <option value="default">預設 (專業藍)</option>
+                          <option value="championship-gold">冠軍金 (黑金)</option>
+                          <option value="fresh-green">清新綠 (活力)</option>
                         </select>
                       </div>
                       <div className="space-y-3">
