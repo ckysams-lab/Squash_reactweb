@@ -2198,56 +2198,52 @@ const myDashboardData = useMemo(() => {
                 </div>
             )}
             
-   {/* 版本 12.1: 球員儀表板「成就徽章牆」美化 */}
-<div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-1">
-    <div className="flex items-center gap-3 mb-8">
-        <Award className="text-orange-500" />
-        <h4 className="text-2xl font-black">我的成就徽章</h4>
-    </div>
-    <div className="grid grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-6">
-        {Object.entries(ACHIEVEMENT_DATA).map(([badgeId, badgeInfo], index) => {
-            const isAchieved = data.achievements.includes(badgeId);
-            return (
-                <div 
-                    key={badgeId} 
-                    className="group relative flex flex-col items-center justify-center text-center animate-in fade-in zoom-in-90"
-                    style={{ animationDelay: `${index * 50}ms` }}
-                >
-                    {/* 徽章圖示 */}
-                    <div className={`w-20 h-20 rounded-3xl flex items-center justify-center transition-all duration-300 border-2
-                        ${isAchieved 
-                            ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-200 border-blue-400' 
-                            : 'bg-slate-100 text-slate-300 border-slate-200 grayscale'
-                        }`}
-                    >
-                        <div className={`transform transition-transform duration-300 ${isAchieved ? 'scale-110' : 'group-hover:scale-110'}`}>
-                           {badgeInfo.icon}
-                        </div>
-                    </div>
-                    {/* 徽章名稱 */}
-                    <p className={`text-xs font-bold mt-3 w-full truncate ${isAchieved ? 'text-slate-700' : 'text-slate-400'}`}>
-                        {badgeInfo.name}
-                    </p>
-                    
-                    {/* 互動提示框 (Tooltip) */}
-                    <div className="absolute bottom-full mb-3 w-48 p-4 bg-slate-800 text-white rounded-2xl shadow-xl 
-                                    opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none
-                                    transform translate-y-2 group-hover:translate-y-0 z-10">
-                        <h5 className="font-black text-sm mb-1">{badgeInfo.name}</h5>
-                        <p className="text-xs text-slate-300">{badgeInfo.desc}</p>
-                        <div className={`mt-2 text-xs font-bold px-2 py-0.5 rounded-full inline-block
-                            ${isAchieved ? 'bg-emerald-500 text-white' : 'bg-slate-600 text-slate-300'}`}
-                        >
-                            {isAchieved ? '已獲得' : '未解鎖'}
-                        </div>
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-slate-800"></div>
+            {/* --- OTHER SECTIONS (Unchanged) --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-1">
+                    <h4 className="text-2xl font-black mb-6">我的成就</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                        {data.achievements.length > 0 ? data.achievements.map(badgeId => {
+                            const badge = ACHIEVEMENT_DATA[badgeId];
+                            if (!badge) return null;
+                            return (
+                                <div key={badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
+                                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
+                                        {badge.icon}
+                                    </div>
+                                    <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{badge.name}</p>
+                                </div>
+                            );
+                        }) : <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章。</p>}
                     </div>
                 </div>
-            );
-        })}
-    </div>
-</div>
 
+                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-2">
+                    <h4 className="text-2xl font-black mb-6">近期比賽記錄</h4>
+                    <div className="space-y-4">
+                        {data.recentMatches.length > 0 ? data.recentMatches.map(match => {
+                            const isWinner = match.winnerId === student.id;
+                            const opponentName = match.player1Id === student.id ? match.player2Name : match.player1Name;
+                            const score = match.matchType === 'external' ? match.externalMatchScore : (match.player1Id === student.id ? `${match.score1} - ${match.score2}` : `${match.score2} - ${match.score1}`);
+                            return (
+                                <div key={match.id} className={`p-6 rounded-3xl flex items-center justify-between gap-4 ${isWinner ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
+                                    <div>
+                                        <p className="text-xs text-slate-400 font-bold">{match.date} - {match.tournamentName}</p>
+                                        <p className="font-bold text-slate-700">vs. {opponentName}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className={`font-black text-2xl ${isWinner ? 'text-emerald-600' : 'text-rose-600'}`}>{score}</p>
+                                        <p className={`text-xs font-bold ${isWinner ? 'text-emerald-500' : 'text-rose-500'}`}>{isWinner ? '勝利' : '落敗'}</p>
+                                    </div>
+                                </div>
+                            )
+                        }) : <p className="text-center text-slate-400 py-10">暫無比賽記錄</p>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+  };
 
   const MonthlyStarsPage = ({ monthlyStarsData }) => {
     const [displayMonth, setDisplayMonth] = useState('');
