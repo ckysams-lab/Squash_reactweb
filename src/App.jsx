@@ -2092,135 +2092,161 @@ const myDashboardData = useMemo(() => {
   const PlayerDashboard = ({ student, data, onClose }) => {
     if (!student || !data) return null;
 
-    const rank = rankedStudents.findIndex(s => s.id === student.id) + 1;
-
-    const StatCard = ({ icon, value, label, color }) => (
-      <div className="dashboard-stat-card">
-        <div className="icon-container" style={{ backgroundColor: `rgba(${color}, 0.1)`, color: `rgb(${color})` }}>
-          {icon}
-        </div>
-        <p className="stat-value">{value}</p>
-        <p className="stat-label">{label}</p>
-      </div>
-    );
-
     return (
-      <div className="animate-in fade-in duration-500 font-sans">
-        {/* --- 標題和返回按鈕 --- */}
-        <div className="flex items-center gap-4 mb-12">
-          {onClose && (
-            <button onClick={onClose} className="p-4 rounded-2xl transition-all" style={{ backgroundColor: 'var(--theme-bg-card)', color: 'var(--theme-text-secondary)', border: '1px solid var(--theme-border)' }}>
-              <ArrowLeft size={24} />
-            </button>
-          )}
-          <div>
-            <p className="text-sm font-bold" style={{ color: 'var(--theme-text-secondary)' }}>{student.class} ({student.classNo}) - {student.squashClass}</p>
-            <h3 className="text-4xl font-black" style={{ color: 'var(--theme-text-primary)' }}>{student.name}</h3>
-          </div>
-        </div>
-
-        {/* --- 核心數據統計 --- */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          <StatCard icon={<TrophyIcon size={32} />} value={student.totalPoints} label="總積分" color="250, 180, 42" />
-          <StatCard icon={<Swords size={32} />} value={`${data.winRate}%`} label={`勝率 (${data.wins}/${data.totalPlayed})`} color="59, 130, 246" />
-          <StatCard icon={<ClipboardCheck size={32} />} value={`${data.attendanceRate}%`} label="訓練出席率" color="34, 197, 94" />
-          <StatCard icon={<Award size={32} />} value={data.achievements.length} label="成就總數" color="234, 88, 12" />
-        </div>
-
-        {/* --- 圖表區 --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-10 mb-12">
-          <div className="lg:col-span-3 p-8 md:p-10 rounded-[2.5rem]" style={{ backgroundColor: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)' }}>
-            <h4 className="text-2xl font-black mb-2 flex items-center gap-3" style={{ color: 'var(--theme-text-primary)' }}><TrendingUp style={{ color: 'var(--theme-accent)' }} /> 積分走勢圖</h4>
-            <p className="text-xs mb-6" style={{ color: 'var(--theme-text-secondary)' }}>顯示該學員參與校內比賽後的積分變化軌跡</p>
-            <div className="flex-1 min-h-[300px] w-full">
-              {data.pointsHistory && data.pointsHistory.length > 1 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data.pointsHistory} margin={{ top: 5, right: 20, bottom: 5, left: -20 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--theme-border)" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--theme-text-secondary)', fontWeight: 'bold' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 12, fill: 'var(--theme-text-secondary)', fontWeight: 'bold' }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', backgroundColor: 'var(--theme-bg-card)', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} />
-                    <Line type="monotone" dataKey="points" name="總積分" stroke="var(--theme-accent)" strokeWidth={4} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 6 }} animationDuration={1500} />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center" style={{ color: 'var(--theme-text-faint)' }}>
-                  <Activity size={48} className="mb-4 opacity-50" />
-                  <p className="font-bold">需要至少一場比賽紀錄才能繪製走勢圖</p>
+        <div className="animate-in fade-in duration-500 font-bold">
+            <div className="flex items-center gap-6 mb-10">
+                <button onClick={onClose} className="p-4 bg-white text-slate-500 hover:text-blue-600 rounded-2xl transition-all border shadow-sm">
+                    <ArrowLeft size={24}/>
+                </button>
+                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-4xl font-black text-slate-400 border-4 border-white shadow-inner uppercase">{student.name[0]}</div>
+                <div>
+                    <h3 className="text-4xl font-black text-slate-800">{student.name}</h3>
+                    <p className="text-sm font-bold text-slate-400">{student.class} ({student.classNo}) - {student.squashClass}</p>
                 </div>
-              )}
             </div>
-          </div>
-          <div className="lg:col-span-2 p-8 md:p-10 rounded-[2.5rem]" style={{ backgroundColor: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)' }}>
-            <h4 className="text-2xl font-black mb-2 flex items-center gap-3" style={{ color: 'var(--theme-text-primary)' }}><Activity style={{ color: 'var(--theme-accent)' }} /> 綜合能力</h4>
-            <p className="text-xs mb-6" style={{ color: 'var(--theme-text-secondary)' }}>{data.latestAssessment ? `最後更新: ${data.latestAssessment.date}` : '尚未有評估紀錄'}</p>
-            <div className="flex-1 min-h-[300px] w-full">
-              {data.radarData && data.radarData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data.radarData}>
-                    <PolarGrid stroke="var(--theme-border)" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--theme-text-secondary)', fontSize: 12, fontWeight: 'bold' }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                    <Radar name={student.name} dataKey="A" stroke="var(--theme-accent)" fill="var(--theme-accent)" fillOpacity={0.4} animationDuration={1500} />
-                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: 'var(--theme-bg-card)', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center" style={{ color: 'var(--theme-text-faint)' }}>
-                  <ShieldCheck size={48} className="mb-4 opacity-50" />
-                  <p className="font-bold">教練尚未輸入該學員的測試數據</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
 
-        {/* --- 成就和近期比賽 --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-          <div className="lg:col-span-1 p-8 md:p-10 rounded-[2.5rem]" style={{ backgroundColor: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)' }}>
-            <h4 className="text-2xl font-black mb-6" style={{ color: 'var(--theme-text-primary)' }}>我的成就</h4>
-            <div className="grid grid-cols-3 gap-4">
-              {data.achievements.length > 0 ? data.achievements.map(badgeId => {
-                const badge = ACHIEVEMENT_DATA[badgeId];
-                if (!badge) return null;
-                return (
-                  <div key={badgeId} className="achievement-badge-3d" title={badge.desc}>
-                    <div className="icon-wrapper" style={{backgroundColor: 'var(--theme-border)'}}>
-                      {badge.icon}
-                    </div>
-                    <p className="badge-name">{badge.name}</p>
-                  </div>
-                );
-              }) : <p className="col-span-full text-center text-xs py-4" style={{ color: 'var(--theme-text-faint)' }}>還沒有獲得任何徽章。</p>}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <TrophyIcon size={32} className="mx-auto text-yellow-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{student.totalPoints}</p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Total Points</p>
+                </div>
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <Swords size={32} className="mx-auto text-blue-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{data.winRate}<span className="text-2xl">%</span></p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Win Rate ({data.wins}/{data.totalPlayed})</p>
+                </div>
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <ClipboardCheck size={32} className="mx-auto text-emerald-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{data.attendanceRate}<span className="text-2xl">%</span></p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Attendance</p>
+                </div>
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <Award size={32} className="mx-auto text-orange-500 mb-4"/>
+                    <p className="text-4xl font-black text-slate-800">{data.achievements.length}</p>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Achievements</p>
+                </div>
             </div>
-          </div>
-          <div className="lg:col-span-2 p-8 md:p-10 rounded-[2.5rem]" style={{ backgroundColor: 'var(--theme-bg-card)', border: '1px solid var(--theme-border)' }}>
-            <h4 className="text-2xl font-black mb-6" style={{ color: 'var(--theme-text-primary)' }}>近期比賽記錄</h4>
-            <div className="space-y-4">
-              {data.recentMatches.length > 0 ? data.recentMatches.map(match => {
-                const isWinner = match.winnerId === student.id;
-                const opponentName = match.player1Id === student.id ? match.player2Name : match.player1Name;
-                const score = match.matchType === 'external' ? match.externalMatchScore : (match.player1Id === student.id ? `${match.score1} - ${match.score2}` : `${match.score2} - ${match.score1}`);
-                const bgColor = isWinner ? 'rgba(34, 197, 94, 0.05)' : 'rgba(239, 68, 68, 0.05)';
-                const borderColor = isWinner ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)';
-                const scoreColor = isWinner ? '#22c55e' : '#ef4444';
-                return (
-                  <div key={match.id} className="p-6 rounded-3xl flex items-center justify-between gap-4" style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}>
-                    <div>
-                      <p className="text-xs font-bold" style={{ color: 'var(--theme-text-secondary)' }}>{match.date} - {match.tournamentName}</p>
-                      <p className="font-bold" style={{ color: 'var(--theme-text-primary)' }}>vs. {opponentName}</p>
+
+            {/* --- CHARTS SECTION (NEWLY ADDED) --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
+                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col">
+                    <h4 className="text-2xl font-black mb-2 flex items-center gap-3"><TrendingUp className="text-blue-500"/> 積分走勢圖</h4>
+                    <p className="text-xs text-slate-400 mb-6">顯示該學員參與校內比賽後的積分變化軌跡</p>
+                    <div className="flex-1 min-h-[300px] w-full">
+                        {data.pointsHistory && data.pointsHistory.length > 1 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={data.pointsHistory} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                    <XAxis dataKey="date" tick={{fontSize: 10, fill: '#94A3B8', fontWeight: 'bold'}} axisLine={false} tickLine={false} />
+                                    <YAxis tick={{fontSize: 12, fill: '#64748B', fontWeight: 'bold'}} axisLine={false} tickLine={false} />
+                                    <Tooltip 
+                                        contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold'}}
+                                        labelStyle={{color: '#94A3B8', fontSize: '12px'}}
+                                    />
+                                    <Line type="monotone" dataKey="points" name="總積分" stroke="#3B82F6" strokeWidth={4} dot={{r: 4, strokeWidth: 2, fill: '#fff'}} activeDot={{r: 6}} animationDuration={1500} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-300">
+                                <Activity size={48} className="mb-4 opacity-50"/>
+                                <p>需要至少一場比賽紀錄才能繪製走勢圖</p>
+                            </div>
+                        )}
                     </div>
-                    <div className="text-right">
-                      <p className="font-black text-2xl" style={{ color: scoreColor }}>{score}</p>
-                      <p className="text-xs font-bold" style={{ color: scoreColor }}>{isWinner ? '勝利' : '落敗'}</p>
+                </div>
+
+                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col">
+                    <h4 className="text-2xl font-black mb-2 flex items-center gap-3"><Activity className="text-emerald-500"/> 綜合能力評估</h4>
+                    <p className="text-xs text-slate-400 mb-6">{data.latestAssessment ? `最後更新: ${data.latestAssessment.date}` : '尚未有評估紀錄'}</p>
+                    <div className="flex-1 min-h-[300px] w-full">
+                        {data.radarData && data.radarData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={data.radarData}>
+                                    <PolarGrid stroke="#E2E8F0" />
+                                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 11, fontWeight: 'bold' }} />
+                                    <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
+                                    <Radar name={student.name} dataKey="A" stroke="#10B981" fill="#10B981" fillOpacity={0.4} animationDuration={1500} />
+                                    <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontWeight: 'bold'}} />
+                                </RadarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                             <div className="h-full flex flex-col items-center justify-center text-slate-300">
+                                <ShieldCheck size={48} className="mb-4 opacity-50"/>
+                                <p>教練尚未輸入該學員的測試數據</p>
+                            </div>
+                        )}
                     </div>
-                  </div>
-                )
-              }) : <p className="text-center py-10" style={{ color: 'var(--theme-text-faint)' }}>暫無比賽記錄</p>}
+                </div>
             </div>
-          </div>
+          
+            {/* --- ASSESSMENT DETAILS (NEWLY ADDED) --- */}
+            {data.latestAssessment && (
+                <div className="bg-slate-50 p-10 rounded-[4rem] border border-slate-200 shadow-inner mb-10">
+                    <h4 className="text-xl font-black text-slate-700 mb-6">最新體能與技術測試詳細數據</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        <div className="bg-white p-4 rounded-3xl border shadow-sm text-center"><p className="text-2xl font-black text-indigo-600">{data.latestAssessment.situps}</p><p className="text-[10px] text-slate-400 font-bold mt-1">仰臥起坐 (次/分)</p></div>
+                        <div className="bg-white p-4 rounded-3xl border shadow-sm text-center"><p className="text-2xl font-black text-indigo-600">{data.latestAssessment.shuttleRun}</p><p className="text-[10px] text-slate-400 font-bold mt-1">1分鐘折返跑 (次)</p></div>
+                        <div className="bg-white p-4 rounded-3xl border shadow-sm text-center"><p className="text-2xl font-black text-indigo-600">{data.latestAssessment.enduranceRun}</p><p className="text-[10px] text-slate-400 font-bold mt-1">耐力跑 (圈/米)</p></div>
+                        <div className="bg-white p-4 rounded-3xl border shadow-sm text-center"><p className="text-2xl font-black text-indigo-600">{data.latestAssessment.gripStrength}</p><p className="text-[10px] text-slate-400 font-bold mt-1">手握力 (kg)</p></div>
+                        <div className="bg-white p-4 rounded-3xl border shadow-sm text-center"><p className="text-2xl font-black text-indigo-600">{data.latestAssessment.flexibility}</p><p className="text-[10px] text-slate-400 font-bold mt-1">柔軟度 (cm)</p></div>
+                        <div className="bg-white p-4 rounded-3xl border shadow-sm text-center"><p className="text-2xl font-black text-blue-600">{data.latestAssessment.fhDrive}</p><p className="text-[10px] text-slate-400 font-bold mt-1">正手直線連續 (次)</p></div>
+                        <div className="bg-white p-4 rounded-3xl border shadow-sm text-center"><p className="text-2xl font-black text-blue-600">{data.latestAssessment.bhDrive}</p><p className="text-[10px] text-slate-400 font-bold mt-1">反手直線連續 (次)</p></div>
+                        <div className="bg-white p-4 rounded-3xl border shadow-sm text-center"><p className="text-2xl font-black text-blue-600">{data.latestAssessment.fhVolley}</p><p className="text-[10px] text-slate-400 font-bold mt-1">正手截擊連續 (次)</p></div>
+                        <div className="bg-white p-4 rounded-3xl border shadow-sm text-center"><p className="text-2xl font-black text-blue-600">{data.latestAssessment.bhVolley}</p><p className="text-[10px] text-slate-400 font-bold mt-1">反手截擊連續 (次)</p></div>
+                    </div>
+                    {data.latestAssessment.notes && (
+                        <div className="mt-6 p-4 bg-white rounded-2xl border text-sm text-slate-600 italic">
+                            <strong>教練評語:</strong> {data.latestAssessment.notes}
+                        </div>
+                    )}
+                </div>
+            )}
+            
+            {/* --- OTHER SECTIONS (Unchanged) --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-1">
+                    <h4 className="text-2xl font-black mb-6">我的成就</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                        {data.achievements.length > 0 ? data.achievements.map(badgeId => {
+                            const badge = ACHIEVEMENT_DATA[badgeId];
+                            if (!badge) return null;
+                            return (
+                                <div key={badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
+                                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
+                                        {badge.icon}
+                                    </div>
+                                    <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{badge.name}</p>
+                                </div>
+                            );
+                        }) : <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章。</p>}
+                    </div>
+                </div>
+
+                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-2">
+                    <h4 className="text-2xl font-black mb-6">近期比賽記錄</h4>
+                    <div className="space-y-4">
+                        {data.recentMatches.length > 0 ? data.recentMatches.map(match => {
+                            const isWinner = match.winnerId === student.id;
+                            const opponentName = match.player1Id === student.id ? match.player2Name : match.player1Name;
+                            const score = match.matchType === 'external' ? match.externalMatchScore : (match.player1Id === student.id ? `${match.score1} - ${match.score2}` : `${match.score2} - ${match.score1}`);
+                            return (
+                                <div key={match.id} className={`p-6 rounded-3xl flex items-center justify-between gap-4 ${isWinner ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
+                                    <div>
+                                        <p className="text-xs text-slate-400 font-bold">{match.date} - {match.tournamentName}</p>
+                                        <p className="font-bold text-slate-700">vs. {opponentName}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className={`font-black text-2xl ${isWinner ? 'text-emerald-600' : 'text-rose-600'}`}>{score}</p>
+                                        <p className={`text-xs font-bold ${isWinner ? 'text-emerald-500' : 'text-rose-500'}`}>{isWinner ? '勝利' : '落敗'}</p>
+                                    </div>
+                                </div>
+                            )
+                        }) : <p className="text-center text-slate-400 py-10">暫無比賽記錄</p>}
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
     );
   };
 
