@@ -2491,7 +2491,12 @@ const myDashboardData = useMemo(() => {
 )}
 
 
-      <aside className={`fixed md:static inset-y-0 left-0 z-50 w-80 border-r ...`} style={{ backgroundColor: 'var(--theme-sidebar-bg)' }}>
+      <aside 
+        className={`fixed md:static inset-y-0 left-0 z-[60] w-80 border-r transition-transform duration-300 ease-in-out 
+                   ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
+                   md:translate-x-0`}
+        style={{ backgroundColor: 'var(--theme-sidebar-bg)' }}
+      >
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
             <div className="flex items-center justify-center"><SchoolLogo size={32} /></div>
