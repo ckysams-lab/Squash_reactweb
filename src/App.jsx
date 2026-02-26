@@ -2223,7 +2223,6 @@ const myDashboardData = useMemo(() => {
       </div>
     );
   };
-  };
 
   const MonthlyStarsPage = ({ monthlyStarsData }) => {
     const [displayMonth, setDisplayMonth] = useState('');
