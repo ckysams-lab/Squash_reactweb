@@ -3047,10 +3047,29 @@ const myDashboardData = useMemo(() => {
                         </button>
                       );
                     })
-                  ) : (<div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">此班別暫無學員資料</div>)}
-               </div>
-            </div>
-          )}
+                  <div className="...">此班別暫無學員資料</div>
+              )}
+           </div>
+
+           {/***** START: 版本 13.2 - 新增儲存點名按鈕 *****/}
+           {pendingAttendance.length > 0 && (
+              <div className="fixed bottom-10 right-10 z-50 animate-in fade-in slide-in-from-bottom-5">
+                <button 
+                  onClick={savePendingAttendance} 
+                  disabled={isUpdating}
+                  className="flex items-center gap-4 px-8 py-5 bg-blue-600 text-white rounded-full font-black text-lg shadow-2xl shadow-blue-500/30 hover:bg-blue-700 transition-all disabled:opacity-50"
+                >
+                  {isUpdating ? (
+                    <Loader2 size={24} className="animate-spin" />
+                  ) : (
+                    <Save size={24} />
+                  )}
+                  儲存 {pendingAttendance.length} 筆點名紀錄
+                </button>
+              </div>
+           )}
+           {/***** END: 版本 13.2 *****/}
+        </div> 
 
           {/* FINANCIAL TAB */}
           {!viewingStudent && activeTab === 'financial' && role === 'admin' && (
