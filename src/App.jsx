@@ -279,6 +279,17 @@ export default function App() {
   const [isGeneratingPoster, setIsGeneratingPoster] = useState(false);
   const [posterData, setPosterData] = useState(null);
 
+    const [showAddAwardModal, setShowAddAwardModal] = useState(false);
+  const [newAwardData, setNewAwardData] = useState({
+    title: '',
+    studentName: '',
+    date: new Date().toISOString().split('T')[0],
+    rank: '',
+    description: '',
+    photoUrl: null, // 將用來儲存 Base64 圖片
+  });
+  const [awardPhotoPreview, setAwardPhotoPreview] = useState(null);
+  
   const [newExternalMatch, setNewExternalMatch] = useState({
     tournamentName: '',
     date: new Date().toISOString().split('T')[0],
@@ -634,6 +645,20 @@ export default function App() {
     setIsUpdating(false);
   };
 
+  const handleAwardPhotoUpload = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setIsUpdating(true);
+  try {
+    const compressedUrl = await compressImage(file, 0.8); // 使用現有的壓縮函式
+    setNewAwardData(prev => ({ ...prev, photoUrl: compressedUrl }));
+    setAwardPhotoPreview(URL.createObjectURL(file)); // 建立本地預覽
+  } catch (err) {
+    console.error("Award photo upload failed:", err);
+    alert("照片上傳或壓縮失敗。");
+  }
+  setIsUpdating(false);
+};
   
   const handleSaveExternalMatch = async () => {
     const { player1Id, tournamentName, date, isWin, externalMatchScore, opponentSchool, opponentPlayerName } = newExternalMatch;
@@ -1673,25 +1698,20 @@ const myDashboardData = useMemo(() => {
     );
   };
 
-  const handleAddAward = async () => {
-    const title = prompt("獎項名稱 (例如：全港學界壁球賽 冠軍):");
-    if (!title) return;
-    const studentName = prompt("獲獎學生姓名:");
-    if (!studentName) return;
-    const date = prompt("獲獎日期 (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
-    const rank = prompt("名次 (例如：冠軍, 亞軍, 季軍, 優異):");
-    const photoUrl = prompt("得獎照片網址 (可選，空白則使用預設圖):"); 
-    const desc = prompt("備註 (可選):") || "";
-    try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'awards'), {
-            title,
-            studentName,
-            date,
-            rank,
-            photoUrl: photoUrl || "", 
-            description: desc,
-            timestamp: serverTimestamp()
-        });
+  const handleAddAward = () => {
+  // 重置表單數據
+  setNewAwardData({
+    title: '',
+    studentName: '',
+    date: new Date().toISOString().split('T')[0],
+    rank: '',
+    description: '',
+    photoUrl: null,
+  });
+  setAwardPhotoPreview(null);
+  // 打開 Modal
+  setShowAddAwardModal(true);
+};
         alert('🏆 獎項新增成功！');
     } catch (e) {
         console.error(e);
@@ -2610,6 +2630,73 @@ const myDashboardData = useMemo(() => {
           
           {showPlayerCard && ( <PlayerCardModal student={showPlayerCard} onClose={() => setShowPlayerCard(null)} /> )}
 
+          {showAddAwardModal && (
+                  <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddAwardModal(false)}>
+                      <div className="bg-white rounded-[3rem] w-full max-w-2xl p-10 shadow-2xl relative animate-in fade-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={() => setShowAddAwardModal(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-800 transition-colors"><X size={24} /></button>
+                          <h3 className="text-3xl font-black text-slate-800 mb-8">新增輝煌成就</h3>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                            {/* 圖片上傳區 */}
+                            <div className="md:col-span-1">
+                              <label className="text-sm font-bold text-slate-500 mb-2 block">得獎照片</label>
+                              <div 
+                                className="w-full aspect-[4/3] bg-slate-50 rounded-2xl border-2 border-dashed flex items-center justify-center text-slate-400 hover:border-blue-500 hover:text-blue-500 transition-all cursor-pointer"
+                                onClick={() => document.getElementById('awardPhotoInput').click()}
+                              >
+                                {awardPhotoPreview ? (
+                                  <img src={awardPhotoPreview} alt="Award Preview" className="w-full h-full object-cover rounded-2xl" />
+                                ) : (
+                                  <div className="text-center">
+                                    <ImageIcon size={40} />
+                                    <p className="text-xs font-bold mt-2">點擊上傳照片</p>
+                                  </div>
+                                )}
+                              </div>
+                              <input 
+                                id="awardPhotoInput"
+                                type="file" 
+                                className="hidden" 
+                                accept="image/*" 
+                                onChange={handleAwardPhotoUpload}
+                              />
+                            </div>
+          
+                            {/* 表單輸入區 */}
+                            <div className="md:col-span-1 space-y-4">
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">獎項名稱</label>
+                                <input type="text" placeholder="例如：全港學界壁球賽" value={newAwardData.title} onChange={e => setNewAwardData({...newAwardData, title: e.target.value})} className="w-full bg-slate-50 p-3 rounded-xl outline-none border-2 focus:border-blue-500" />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">名次</label>
+                                <input type="text" placeholder="例如：冠軍" value={newAwardData.rank} onChange={e => setNewAwardData({...newAwardData, rank: e.target.value})} className="w-full bg-slate-50 p-3 rounded-xl outline-none border-2 focus:border-blue-500" />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">獲獎學生</label>
+                                <input type="text" placeholder="輸入學生姓名" value={newAwardData.studentName} onChange={e => setNewAwardData({...newAwardData, studentName: e.target.value})} className="w-full bg-slate-50 p-3 rounded-xl outline-none border-2 focus:border-blue-500" />
+                              </div>
+                            </div>
+          
+                            <div className="md:col-span-2">
+                                <label className="text-xs font-bold text-slate-500 block mb-1">獲獎日期</label>
+                                <input type="date" value={newAwardData.date} onChange={e => setNewAwardData({...newAwardData, date: e.target.value})} className="w-full bg-slate-50 p-3 rounded-xl outline-none border-2 focus:border-blue-500" />
+                            </div>
+                             <div className="md:col-span-2">
+                                <label className="text-xs font-bold text-slate-500 block mb-1">備註 (可選)</label>
+                                <textarea placeholder="可輸入比賽地點、主辦單位等資訊" value={newAwardData.description} onChange={e => setNewAwardData({...newAwardData, description: e.target.value})} className="w-full bg-slate-50 p-3 rounded-xl outline-none border-2 focus:border-blue-500 h-20"></textarea>
+                            </div>
+                          </div>
+          
+                          <div className="mt-8 flex justify-end">
+                              <button onClick={handleSaveAward} disabled={isUpdating} className="flex items-center gap-3 px-8 py-4 bg-yellow-500 text-white rounded-2xl shadow-xl shadow-yellow-100 hover:bg-yellow-600 transition-all font-black disabled:opacity-50">
+                                  {isUpdating ? <Loader2 className="animate-spin" /> : <Save />} 儲存獎項
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+                )}
+          
           {selectedSchedule && (
             <div className="fixed inset-0 z-[250] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelectedSchedule(null)}>
               <div className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl animate-in fade-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
