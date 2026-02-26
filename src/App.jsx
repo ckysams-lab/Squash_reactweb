@@ -2272,23 +2272,33 @@ const myDashboardData = useMemo(() => {
             {/* --- OTHER SECTIONS (Unchanged) --- */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                 <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-1">
-                    <h4 className="text-2xl font-black mb-6">我的成就</h4>
-                    <div className="grid grid-cols-3 gap-4">
-                        {data.achievements.length > 0 ? data.achievements.map(badgeId => {
-                            const badge = ACHIEVEMENT_DATA[badgeId];
-                            if (!badge) return null;
-                            const currentLevelData = badgeData.levels?.[ach.level] || badgeData.levels?.[1] || { name: badgeData.baseName, desc: '詳細描述待補充' };
-          
-                            return (
-                                <div key={ach.badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={currentLevelData.desc}>
-                                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
-                                        {badgeData.icon}
-                                    </div>
-                                    <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{currentLevelData.name}</p>
-                                </div>
-                            );
-                        }) : <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章。</p>}
+                    <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-1">
+    <h4 className="text-2xl font-black mb-6">我的成就</h4>
+    <div className="grid grid-cols-3 gap-4">
+        {data.achievements.length > 0 ? (
+            data.achievements.map(ach => {
+                const badgeData = ACHIEVEMENT_DATA[ach.badgeId];
+                if (!badgeData) {
+                    return null; // 如果找不到勳章資料，直接跳過
+                }
+                
+                // 使用更安全的?.可選鏈操作符，並提供最終後備方案
+                const currentLevelData = badgeData.levels?.[ach.level] || badgeData.levels?.[1] || { name: badgeData.baseName, desc: '詳細描述待補充' };
+
+                return (
+                    <div key={ach.badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={currentLevelData.desc}>
+                        <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
+                            {badgeData.icon}
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{currentLevelData.name}</p>
                     </div>
+                );
+            })
+        ) : (
+            <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章。</p>
+        )}
+    </div>
+</div>
                 <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-2">
                     <h4 className="text-2xl font-black mb-6">近期比賽記錄</h4>
                     <div className="space-y-4">
