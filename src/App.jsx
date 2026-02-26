@@ -2277,7 +2277,7 @@ const myDashboardData = useMemo(() => {
                         {data.achievements.length > 0 ? data.achievements.map(badgeId => {
                             const badge = ACHIEVEMENT_DATA[badgeId];
                             if (!badge) return null;
-                            const currentLevelData = badgeData.levels[ach.level] || badgeData.levels[1];
+                            const currentLevelData = badgeData.levels?.[ach.level] || badgeData.levels?.[1] || { name: badgeData.baseName, desc: '詳細描述待補充' };
           
                             return (
                                 <div key={ach.badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={currentLevelData.desc}>
