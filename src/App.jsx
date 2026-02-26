@@ -405,7 +405,7 @@ export default function App() {
   const handleManualAward = (student) => {
     const allBadges = Object.entries(ACHIEVEMENT_DATA);
     let promptMsg = `請為 ${student.name} 選擇要授予的徽章 (輸入代號):\n\n`;
-    allBadges.forEach(([badgeId, data], index) => {
+    allBadges.forEach(([id, data], index) => {
         promptMsg += `${index + 1}. ${data.name}\n`;
     });
     const choice = prompt(promptMsg);
