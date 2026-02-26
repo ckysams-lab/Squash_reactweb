@@ -3020,7 +3020,31 @@ const PlayerDashboard = ({ student, data, onClose }) => {
                       {filteredStudents.map((s, i) => (
                         <tr key={s.id} className="group hover:bg-blue-50/30 transition-all cursor-pointer" onClick={() => setShowPlayerCard(s)}>
                           <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
-                          <td className="px-8 py-8"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.name[0]}</div><div><div className="font-black text-lg text-slate-800">{s.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div></div></div></td>
+                          <td className="px-8 py-8">
+    <div className="flex items-center gap-4">
+        <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.name[0]}</div>
+        <div>
+            <div className="flex items-center gap-2">
+                <div className="font-black text-lg text-slate-800">{s.name}</div>
+                {/* --- START: 版本 12.9 新增 - 顯示主打勳章 --- */}
+                <div className="flex items-center gap-1">
+                    {s.featuredBadges?.map(badgeId => {
+                        const badge = ACHIEVEMENT_DATA[badgeId];
+                        if (!badge) return null;
+                        return (
+                            <div key={badgeId} title={badge.baseName} className="w-5 h-5 flex items-center justify-center text-blue-600">
+                                {React.cloneElement(badge.icon, { size: 18 })}
+                            </div>
+                        );
+                    })}
+                </div>
+                {/* --- END: 版本 12.9 新增 --- */}
+            </div>
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div>
+        </div>
+    </div>
+</td>
+
                           <td className="px-8 py-8"><div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black">{s.badge}</span></div></td>
                           <td className="px-8 py-8 text-right font-mono text-slate-400">{s.points}</td>
                           <td className="px-8 py-8 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
@@ -3048,6 +3072,20 @@ const PlayerDashboard = ({ student, data, onClose }) => {
                         <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">{s.name[0]}</div>
                         <p className="text-xl font-black text-slate-800">{s.name}</p>
                         <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
+
+                        {/* --- START: 版本 12.9 新增 - 在隊員卡片上顯示主打勳章 --- */}
+                        <div className="flex items-center justify-center gap-2 mt-3 h-6">
+                            {s.featuredBadges?.map(badgeId => {
+                                const badge = ACHIEVEMENT_DATA[badgeId];
+                                if (!badge) return null;
+                                return (
+                                    <div key={badgeId} title={badge.baseName} className="w-6 h-6 flex items-center justify-center text-yellow-500">
+                                        {React.cloneElement(badge.icon, { size: 20 })}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {/* --- END: 版本 12.9 新增 --- */}
                         {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
                         <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3" onClick={(e) => e.stopPropagation()}>
