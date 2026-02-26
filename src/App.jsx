@@ -1700,8 +1700,8 @@ const playerDashboardData = useMemo(() => {
 // ========================================================================
 // Hook 2: myDashboardData (供學生登入後查看自己)
 // ========================================================================
+const myDashboardData = useMemo((){/* --- START: 版本 13.1 修正 - 修正 myDashboardData 的數據格式與依賴 --- */}
 const myDashboardData = useMemo(() => {
-    // 新邏輯：依賴 currentUserInfo
     if (role !== 'student' || !currentUserInfo) return null;
     
     const studentData = rankedStudents.find(s => s.id === currentUserInfo.id);
@@ -1747,9 +1747,12 @@ const myDashboardData = useMemo(() => {
         attendanceRate, attendedSessions, totalScheduledSessions,
         pointsHistory: dynamicPointsHistory,
         recentMatches, latestAssessment, radarData,
-        achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
+        // 修正：返回包含 level 的完整勳章物件陣列
+        achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
-}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
+}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, BADGE_DATA]); // 修正：補全 BADGE_DATA 依賴
+{/* --- END: 版本 13.1 修正 --- */}
+
 
 
 
