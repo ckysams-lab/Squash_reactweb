@@ -1,0 +1,51 @@
+# .github/workflows/ci.yml
+
+name: Code Quality Check & Formatter
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # --- Job 1: 執行 ESLint 語法檢查 ---
+  lint:
+    name: Run ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # 使用一個穩定的 Node.js 版本
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run ESLint check
+        run: npx eslint . --ext .js,.jsx
+
+  # --- Job 2: 執行 Prettier 格式化 ---
+  format:
+    name: Format with Prettier
+    runs-on: ubuntu-latest
+    # 確保 lint 任務成功後才執行格式化
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Prettier and Commit Changes
+        uses: creyD/prettier_action@v4.3
+        with:
+          prettier_version: "3.2.5"
+          prettier_plugins: "prettier-plugin-tailwindcss eslint-config-prettier" # 加入 eslint-config-prettier
+          commit_message: "Chore: Format code with Prettier"
