@@ -217,7 +217,6 @@ export default function App() {
     notes: ''
   });
 
-  const [downloadFiles, setDownloadFiles] = useState([]);
   const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
   const [showPlayerCard, setShowPlayerCard] = useState(null);
@@ -238,7 +237,6 @@ export default function App() {
   });
   
   const [loading, setLoading] = useState(true);
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(true);
   const [viewingImage, setViewingImage] = useState(null);
   const [currentAlbum, setCurrentAlbum] = useState(null);
@@ -407,7 +405,7 @@ export default function App() {
   const handleManualAward = (student) => {
     const allBadges = Object.entries(ACHIEVEMENT_DATA);
     let promptMsg = `請為 ${student.name} 選擇要授予的徽章 (輸入代號):\n\n`;
-    allBadges.forEach(([id, data], index) => {
+    allBadges.forEach(([badgeId, data], index) => {
         promptMsg += `${index + 1}. ${data.name}\n`;
     });
     const choice = prompt(promptMsg);
