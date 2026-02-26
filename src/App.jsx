@@ -77,22 +77,50 @@ try {
 const localizer = momentLocalizer(moment);
 
 const appId = 'bcklas-squash-core-v1'; 
+// --- 版本 12.0: 勳章系統重構 ---
 const ACHIEVEMENT_DATA = {
-  'ice-breaker': { name: '破蛋者', desc: '首次在內部聯賽中獲勝', icon: <Zap size={24} /> },
-  'giant-killer': { name: '巨人殺手', desc: '戰勝比自己排名高10位以上的對手', icon: <ShieldIcon size={24} /> },
-  'first-participation': { name: '賽場新星', desc: '首次代表學校參加校外賽', icon: <Star size={24} /> },
-  'first-win-ext': { name: '首戰告捷', desc: '首次在校外賽中勝出一場', icon: <Rocket size={24} /> },
-  'first-bronze': { name: '銅級榮譽', desc: '首次贏得校外賽季軍或殿軍', icon: <Medal size={24} className="text-orange-500" /> },
-  'first-silver': { name: '銀級榮譽', desc: '首次贏得校外賽亞軍', icon: <Medal size={24} className="text-slate-500" /> },
-  'first-gold': { name: '金級榮譽', desc: '首次贏得校外賽冠軍', icon: <Medal size={24} className="text-yellow-500" /> },
-  'perfect-attendance': { name: '全勤小蜜蜂', desc: '訓練全勤，風雨不改', icon: <Sun size={24} /> },
-  'diligent-practice': { name: '勤奮練習', desc: '訓練態度認真，值得嘉許', icon: <Coffee size={24} /> },
-  'team-spirit': { name: '團隊精神', desc: '具備體育精神，樂於助人', icon: <Heart size={24} /> },
-  'mvp': { name: '年度 MVP', desc: '賽季積分榜第一名', icon: <Crown size={24} /> },
-  'top-three': { name: '年度三甲', desc: '賽季積分榜前三名', icon: <TrophyIcon size={24} /> },
-  'elite-player': { name: '年度壁球精英', desc: '賽季積分榜前八名', icon: <Sparkles size={24} /> },
-};
+  // --- 賽事實踐類 (稀有/史詩) ---
+  'first-participation': {
+    baseName: '賽場新星',
+    rarity: '普通',
+    icon: <Star size={24} />,
+    levels: { 1: { name: '賽場新星', desc: '首次代表學校參加校外賽' } }
+  },
+  'first-win-ext': {
+    baseName: '首戰告捷',
+    rarity: '稀有',
+    icon: <Rocket size={24} />,
+    levels: {
+      1: { name: '首戰告捷 (銅)', desc: '首次在校外賽中勝出一場' },
+      2: { name: '連戰連捷 (銀)', desc: '在校外賽中累積勝出 5 場' },
+      3: { name: '百戰強者 (金)', desc: '在校外賽中累積勝出 15 場' }
+    }
+  },
+  'giant-killer': {
+    baseName: '巨人殺手',
+    rarity: '稀有',
+    icon: <ShieldIcon size={24} className="text-red-500" />,
+    levels: {
+      1: { name: '巨人殺手', desc: '戰勝比自己排名高10位以上的對手' }
+    }
+  },
+  
+  // --- 榮譽類 (史詩/傳說) ---
+  'first-bronze': { baseName: '銅級榮譽', rarity: '稀有', icon: <Medal size={24} className="text-orange-500" />, levels: { 1: { name: '銅級榮譽', desc: '首次贏得校外賽季軍或殿軍' } } },
+  'first-silver': { baseName: '銀級榮譽', rarity: '史詩', icon: <Medal size={24} className="text-slate-500" />, levels: { 1: { name: '銀級榮譽', desc: '首次贏得校外賽亞軍' } } },
+  'first-gold': { baseName: '金級榮譽', rarity: '史詩', icon: <Medal size={24} className="text-yellow-500" />, levels: { 1: { name: '金級榮譽', desc: '首次贏得校外賽冠軍' } } },
+  'mvp': { baseName: '年度 MVP', rarity: '傳說', icon: <Crown size={24} />, levels: { 1: { name: '年度 MVP', desc: '賽季積分榜第一名' } } },
+  'top-three': { baseName: '年度三甲', rarity: '史詩', icon: <TrophyIcon size={24} />, levels: { 1: { name: '年度三甲', desc: '賽季積分榜前三名' } } },
+  
+  // --- 訓練態度類 (普通) ---
+  'perfect-attendance': { baseName: '全勤小蜜蜂', rarity: '普通', icon: <Sun size={24} />, levels: { 1: { name: '全勤小蜜蜂', desc: '單月訓練全勤，風雨不改' } } },
+  'diligent-practice': { baseName: '勤奮練習', rarity: '普通', icon: <Coffee size={24} />, levels: { 1: { name: '勤奮練習', desc: '訓練態度認真，值得嘉許' } } },
+  'team-spirit': { baseName: '團隊精神', rarity: '普通', icon: <Heart size={24} />, levels: { 1: { name: '團隊精神', desc: '具備體育精神，樂於助人' } } },
 
+  // --- 隱藏/組合類 (特殊) ---
+  'elite-player': { baseName: '年度壁球精英', rarity: '史詩', icon: <Sparkles size={24} />, levels: { 1: { name: '年度壁球精英', desc: '賽季積分榜前八名' } } },
+  'ice-breaker': { baseName: '破蛋者', rarity: '普通', icon: <Zap size={24} />, levels: { 1: { name: '破蛋者', desc: '首次在內部聯賽中獲勝' } } },
+};
 
 // --- Helper function ---
 const toDataURL = (url) => {
@@ -382,7 +410,7 @@ export default function App() {
     }
   }, [user]);
 
-  const awardAchievement = async (badgeId, studentId) => {
+    const awardAchievement = async (badgeId, studentId) => {
     if (!badgeId || !studentId) return;
     const alreadyHasBadge = achievements.some(ach => ach.studentId === studentId && ach.badgeId === badgeId);
     if (alreadyHasBadge) {
@@ -390,19 +418,24 @@ export default function App() {
       return;
     }
     try {
+      // 版本 12.0: 寫入成就時，增加 level: 1 基礎等級
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'), {
         studentId,
         badgeId,
+        level: 1, // <-- 新增
         timestamp: serverTimestamp()
       });
       const student = students.find(s => s.id === studentId);
+      // 版本 12.0: 從新的數據結構中讀取勳章名稱
       const badge = ACHIEVEMENT_DATA[badgeId];
-      alert(`✅ 成功授予 ${student?.name || '學員'} 「${badge.name}」 徽章！`);
+      const badgeName = badge.levels['1'] ? badge.levels['1'].name : badge.baseName;
+      alert(`✅ 成功授予 ${student?.name || '學員'} 「${badgeName}」 徽章！`);
     } catch (e) {
       console.error("Failed to award achievement:", e);
       alert("授予失敗，請檢查網絡連線。");
     }
   };
+
 
   const handleManualAward = (student) => {
     const allBadges = Object.entries(ACHIEVEMENT_DATA);
@@ -1631,7 +1664,7 @@ const playerDashboardData = useMemo(() => {
         attendanceRate, attendedSessions, totalScheduledSessions,
         pointsHistory: dynamicPointsHistory,
         recentMatches, latestAssessment, radarData,
-        achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
+        achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
 }, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments]);
 
@@ -2244,18 +2277,18 @@ const myDashboardData = useMemo(() => {
                         {data.achievements.length > 0 ? data.achievements.map(badgeId => {
                             const badge = ACHIEVEMENT_DATA[badgeId];
                             if (!badge) return null;
+                            const currentLevelData = badgeData.levels[ach.level] || badgeData.levels[1];
+          
                             return (
-                                <div key={badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={badge.desc}>
+                                <div key={ach.badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={currentLevelData.desc}>
                                     <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
-                                        {badge.icon}
+                                        {badgeData.icon}
                                     </div>
-                                    <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{badge.name}</p>
+                                    <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{currentLevelData.name}</p>
                                 </div>
                             );
                         }) : <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章。</p>}
                     </div>
-                </div>
-
                 <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm col-span-full lg:col-span-2">
                     <h4 className="text-2xl font-black mb-6">近期比賽記錄</h4>
                     <div className="space-y-4">
