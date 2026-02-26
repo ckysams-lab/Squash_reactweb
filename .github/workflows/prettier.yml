@@ -1,0 +1,28 @@
+# .github/workflows/prettier.yml
+
+name: Format Code with Prettier
+
+on:
+  push:
+    branches:
+      - main  # 只在推送到 main 分支時觸發
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # 需要 token 才能將格式化後的變更推送回倉庫
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Prettier and Commit Changes
+        uses: creyD/prettier_action@v4.3
+        with:
+          # Prettier 的版本，可以根據需要調整
+          prettier_version: "3.2.5"
+          # 需要安裝的額外套件
+          prettier_plugins: "prettier-plugin-tailwindcss"
+          # 提交變更時使用的訊息
+          commit_message: "Chore: Format code with Prettier"
