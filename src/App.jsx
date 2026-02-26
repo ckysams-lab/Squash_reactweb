@@ -437,25 +437,35 @@ export default function App() {
   };
 
 
-  const handleManualAward = (student) => {
+  {/* --- START: 版本 12.4 修正 - handleManualAward 函式 --- */}
+const handleManualAward = (student) => {
     const allBadges = Object.entries(ACHIEVEMENT_DATA);
     let promptMsg = `請為 ${student.name} 選擇要授予的徽章 (輸入代號):\n\n`;
-    allBadges.forEach(([id, data], index) => {
-        promptMsg += `${index + 1}. ${data.name}\n`;
+    
+    // 修正：從 data.baseName 讀取基礎名稱
+    allBadges.forEach(([, data], index) => {
+        promptMsg += `${index + 1}. ${data.baseName}\n`; 
     });
+
     const choice = prompt(promptMsg);
     if (choice && !isNaN(choice)) {
         const selectedIndex = parseInt(choice, 10) - 1;
         if (selectedIndex >= 0 && selectedIndex < allBadges.length) {
             const [badgeId, badgeData] = allBadges[selectedIndex];
-            if (confirm(`確定要授予 ${student.name} 「${badgeData.name}」徽章嗎？`)) {
+            
+            // 修正：從 levels[1].name 讀取 Lv.1 的實際名稱
+            const level1Name = badgeData.levels?.['1']?.name || badgeData.baseName;
+
+            if (confirm(`確定要授予 ${student.name} 「${level1Name}」徽章嗎？`)) {
                 awardAchievement(badgeId, student.id);
             }
         } else {
             alert("無效的選擇。");
         }
     }
-  };
+};
+{/* --- END: 版本 12.4 修正 --- */}
+
 
   const togglePendingAttendance = (studentId) => {
     setPendingAttendance(prev => 
