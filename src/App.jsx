@@ -1700,7 +1700,6 @@ const playerDashboardData = useMemo(() => {
 // ========================================================================
 // Hook 2: myDashboardData (供學生登入後查看自己)
 // ========================================================================
-const myDashboardData = useMemo((){/* --- START: 版本 13.1 修正 - 修正 myDashboardData 的數據格式與依賴 --- */}
 const myDashboardData = useMemo(() => {
     if (role !== 'student' || !currentUserInfo) return null;
     
