@@ -68,4 +68,108 @@ body.theme-fresh-green {
   background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2386efac' fill-opacity='0.15'%3E%3Cpath d='M50 50c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c-5.523 0-10-4.477-10-10zM10 10c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c-5.523 0-10-4.477-10-10z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
 
-/* ===== END: 版本 12.1 - 主題模式樣式 ===== */
+/* ===== START: 版本 12.2 - PlayerDashboard 樣式 ===== */
+
+.dashboard-stat-card {
+  background-color: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: 2rem; /* 32px */
+  padding: 2rem; /* 32px */
+  text-align: center;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03), 0 2px 4px -1px rgba(0,0,0,0.02);
+  transition: all 0.3s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-stat-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.08), 0 10px 10px -5px rgba(0,0,0,0.04);
+  border-color: var(--theme-accent);
+}
+
+.dashboard-stat-card .icon-container {
+  margin: 0 auto 1rem;
+  width: 4rem; /* 64px */
+  height: 4rem; /* 64px */
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease-out;
+}
+
+.dashboard-stat-card:hover .icon-container {
+  transform: scale(1.1);
+  box-shadow: 0 0 20px rgba(var(--theme-accent-rgb), 0.5);
+}
+
+.dashboard-stat-card .stat-value {
+  font-size: 3rem; /* 48px */
+  font-weight: 900;
+  line-height: 1;
+  color: var(--theme-text-primary);
+}
+
+.dashboard-stat-card .stat-label {
+  margin-top: 0.5rem;
+  font-size: 0.75rem; /* 12px */
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--theme-text-secondary);
+}
+
+/* 偽 3D 成就徽章 */
+.achievement-badge-3d {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+.achievement-badge-3d .icon-wrapper {
+  width: 4rem; /* 64px */
+  height: 4rem; /* 64px */
+  border-radius: 1rem; /* 16px */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, rgba(255,255,255,0.1), rgba(255,255,255,0));
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+  transform-style: preserve-3d;
+}
+.achievement-badge-3d:hover {
+  transform: translateY(-5px);
+}
+.achievement-badge-3d:hover .icon-wrapper {
+  transform: scale(1.1) rotateX(10deg) rotateY(5deg);
+  box-shadow: 0 16px 32px rgba(0,0,0,0.2);
+  background-color: var(--theme-accent);
+}
+.achievement-badge-3d .icon-wrapper > svg {
+  color: var(--theme-accent);
+  transition: color 0.3s ease;
+}
+.achievement-badge-3d:hover .icon-wrapper > svg {
+  color: var(--theme-accent-text);
+}
+.achievement-badge-3d .badge-name {
+  width: 100%;
+  margin-top: 0.75rem;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--theme-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* ===== END: 版本 12.2 - PlayerDashboard 樣式 ===== */
+
