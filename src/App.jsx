@@ -1701,21 +1701,16 @@ const playerDashboardData = useMemo(() => {
 // Hook 2: myDashboardData (供學生登入後查看自己)
 // ========================================================================
 const myDashboardData = useMemo(() => {
-    // 1. 確保在學生未登入時，不做任何計算
+    // 新邏輯：依賴 currentUserInfo
     if (role !== 'student' || !currentUserInfo) return null;
     
-    // 2. 從 `rankedStudents` 中找到當前登入學生的核心數據
     const studentData = rankedStudents.find(s => s.id === currentUserInfo.id);
     if (!studentData) return null;
 
-    // 3. 從全域的、即時的 `achievements` state 中，過濾出只屬於這位學生的勳章
-    const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
-    
-    // --- 後續的所有計算，都基於上面最新的 `studentAchievements` ---
-    
     const studentMatches = leagueMatches.filter(m => m.player1Id === studentData.id || m.player2Id === studentData.id);
     const completedMatches = studentMatches.filter(m => m.status === 'completed');
     const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
+    const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
     const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => b.date.localeCompare(a.date));
 
     const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
@@ -1747,17 +1742,14 @@ const myDashboardData = useMemo(() => {
 
     const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
 
-    // 4. 返回包含最新勳章列表的完整數據
     return {
         winRate, wins, totalPlayed,
         attendanceRate, attendedSessions, totalScheduledSessions,
         pointsHistory: dynamicPointsHistory,
         recentMatches, latestAssessment, radarData,
-        // 確保返回的 achievements 是最新的
-        achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
+        achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
     };
-}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, BADGE_DATA]); // <-- 確保 achievements 在依賴陣列中
-{/* --- END: 版本 13.0 修正 --- */}
+}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
 
 
 
