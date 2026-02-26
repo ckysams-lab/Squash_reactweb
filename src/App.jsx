@@ -1285,33 +1285,30 @@ export default function App() {
     }, [leagueMatches, selectedTournament, tournamentList]);
 
   const groupedMatches = useMemo(() => {
-    if(filteredMatches.length === 0) return {};
-    const groups = {};
-    filteredMatches.forEach(match => {
-        const groupKey = match.groupName || '所有比賽';
-        if (!groups[groupKey]) {
-            groups[groupKey] = [];
-        }
-        groups[groupKey].push(match);
-    });
-    const sortedGroups = Object.keys(groups).sort((a, b) => {
+    const groups = {}; // 先宣告
+    if (filteredMatches.length > 0) { // 將邏輯包在條件內
+        filteredMatches.forEach(match => {
+            const groupKey = match.groupName || '所有比賽';
+            if (!groups[groupKey]) {
+                groups[groupKey] = [];
+            }
+            groups[groupKey].push(match);
+        });
+    }
+
+    const sortedGroupKeys = Object.keys(groups).sort((a, b) => {
         if (a === '所有比賽') return -1;
         if (b === '所有比賽') return 1;
         return a.localeCompare(b);
     });
 
     const result = {};
-    sortedGroups.forEach(key => {
+    sortedGroupKeys.forEach(key => {
         result[key] = groups[key];
-    })
-    return result;
-  }, [filteredMatches]);
+    });
 
-  useEffect(() => {
-    if (tournamentList.length > 0 && !selectedTournament) {
-      setSelectedTournament(tournamentList[0]);
-    }
-  }, [tournamentList, selectedTournament]);
+    return result; // 最後返回結果
+  }, [filteredMatches]);
 
     const handleUpdateLeagueMatchScore = async (match) => {
         const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
