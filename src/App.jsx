@@ -1695,7 +1695,7 @@ const playerDashboardData = useMemo(() => {
         recentMatches, latestAssessment, radarData,
         achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
-}, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments]);
+}, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments, students]);
 
 // ========================================================================
 // Hook 2: myDashboardData (供學生登入後查看自己)
