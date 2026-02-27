@@ -1688,6 +1688,7 @@ const playerDashboardData = useMemo(() => {
 
     const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
 
+    // ... in myDashboardData hook
     return {
         winRate, wins, totalPlayed,
         attendanceRate, attendedSessions, totalScheduledSessions,
@@ -1695,7 +1696,8 @@ const playerDashboardData = useMemo(() => {
         recentMatches, latestAssessment, radarData,
         achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 })) // <--- 修改後的程式碼
     };
-}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);;
+}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
+
 
 // ========================================================================
 // Hook 2: myDashboardData (供學生登入後查看自己)
