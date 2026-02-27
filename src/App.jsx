@@ -2314,7 +2314,7 @@ const PlayerDashboard = ({ student, data, onClose }) => {
                                 const currentLevelData = badgeData.levels?.[ach.level] || badgeData.levels?.[1] || { name: badgeData.baseName, desc: '詳細描述待補充' };
 
                                 return (
-                                    <div key={ach.badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={`【${currentLevelData.name}】\n${currentLevelData.desc}`}>
+                                    <div key={ach.badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={currentLevelData.desc}>
                                         <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
                                             {badgeData.icon}
                                         </div>
