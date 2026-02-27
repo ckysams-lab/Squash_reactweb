@@ -258,7 +258,6 @@ export default function App() {
   const [awardsViewMode, setAwardsViewMode] = useState('grid'); 
   const [showcaseEditorOpen, setShowcaseEditorOpen] = useState(false);
   const [selectedFeaturedBadges, setSelectedFeaturedBadges] = useState([]);
-  const [selectedFeaturedBadges, setSelectedFeaturedBadges] = useState([]);
   const [viewingBadge, setViewingBadge] = useState(null); // <-- 加入這行，用來控制勳章彈窗
 
   {/* --- START: 版本 12.6 修正 - 補上遺漏的函式 --- */}
