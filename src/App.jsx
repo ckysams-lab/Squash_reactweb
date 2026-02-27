@@ -1693,14 +1693,15 @@ const playerDashboardData = useMemo(() => {
         attendanceRate, attendedSessions, totalScheduledSessions,
         pointsHistory: dynamicPointsHistory,
         recentMatches, latestAssessment, radarData,
-        achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
+        achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 })) // <--- 修改後的程式碼
     };
-}, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments]);
+}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);;
 
 // ========================================================================
 // Hook 2: myDashboardData (供學生登入後查看自己)
 // ========================================================================
 const myDashboardData = useMemo(() => {
+    // 新邏輯：依賴 currentUserInfo
     if (role !== 'student' || !currentUserInfo) return null;
     
     const studentData = rankedStudents.find(s => s.id === currentUserInfo.id);
@@ -1746,12 +1747,9 @@ const myDashboardData = useMemo(() => {
         attendanceRate, attendedSessions, totalScheduledSessions,
         pointsHistory: dynamicPointsHistory,
         recentMatches, latestAssessment, radarData,
-        // 修正：返回包含 level 的完整勳章物件陣列
-        achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
+        achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
     };
-}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, BADGE_DATA]); // 修正：補全 BADGE_DATA 依賴
-{/* --- END: 版本 13.1 修正 --- */}
-
+}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
 
 
 
@@ -2829,32 +2827,32 @@ const PlayerDashboard = ({ student, data, onClose }) => {
                         <div className="bg-slate-50 p-6 rounded-3xl border">
                             <h4 className="font-bold text-slate-600 mb-4 text-center">我獲得的勳章</h4>
                             <div className="grid grid-cols-4 gap-4 max-h-96 overflow-y-auto">
-                                {myDashboardData?.achievements.map(ach => {
-                                    const badgeData = ACHIEVEMENT_DATA[ach.badgeId];
-                                    if (!badgeData) return null;
-                                    const levelData = badgeData.levels?.[ach.level] || badgeData.levels?.[1] || {};
-                                    const isSelected = selectedFeaturedBadges.includes(ach.badgeId);
-                                    const isDisabled = !isSelected && selectedFeaturedBadges.length >= 3;
+                                {myDashboardData?.achievements.map(ach => { // 'ach' is now { badgeId: '...', level: 1 }
+    const badgeData = ACHIEVEMENT_DATA[ach.badgeId];
+    if (!badgeData) return null;
+    const levelData = badgeData.levels?.[ach.level] || badgeData.levels?.[1] || {};
+    const isSelected = selectedFeaturedBadges.includes(ach.badgeId);
+    const isDisabled = !isSelected && selectedFeaturedBadges.length >= 3;
 
-                                    return (
-                                        <button 
-                                            key={ach.badgeId}
-                                            disabled={isDisabled}
-                                            onClick={() => {
-                                                setSelectedFeaturedBadges(prev => 
-                                                    isSelected ? prev.filter(b => b !== ach.badgeId) : [...prev, ach.badgeId]
-                                                );
-                                            }}
-                                            className={`flex flex-col items-center justify-center p-2 rounded-2xl border-2 transition-all ${
-                                                isSelected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-transparent hover:bg-slate-200'
-                                            } ${isDisabled ? 'opacity-30 cursor-not-allowed' : ''}`}
-                                            title={levelData.name}
-                                        >
-                                            <div className="w-12 h-12 flex items-center justify-center">{badgeData.icon}</div>
-                                            <p className="text-[9px] font-bold text-slate-500 mt-1 truncate w-full">{levelData.name}</p>
-                                        </button>
-                                    );
-                                })}
+    return (
+        <button 
+            key={ach.badgeId}
+            disabled={isDisabled}
+            onClick={() => {
+                setSelectedFeaturedBadges(prev => 
+                    isSelected ? prev.filter(b => b !== ach.badgeId) : [...prev, ach.badgeId]
+                );
+            }}
+            className={`flex flex-col items-center justify-center p-2 rounded-2xl border-2 transition-all ${
+                isSelected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-transparent hover:bg-slate-200'
+            } ${isDisabled ? 'opacity-30 cursor-not-allowed' : ''}`}
+            title={levelData.name}
+        >
+            <div className="w-12 h-12 flex items-center justify-center">{badgeData.icon}</div>
+            <p className="text-[9px] font-bold text-slate-500 mt-1 truncate w-full">{levelData.name}</p>
+        </button>
+    );
+})}
                             </div>
                         </div>
 
