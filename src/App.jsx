@@ -1747,7 +1747,7 @@ const myDashboardData = useMemo(() => {
         attendanceRate, attendedSessions, totalScheduledSessions,
         pointsHistory: dynamicPointsHistory,
         recentMatches, latestAssessment, radarData,
-        achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
+        achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
 }, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
 
