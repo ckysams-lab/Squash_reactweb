@@ -263,21 +263,36 @@ export default function App() {
   {/* --- START: 版本 12.6 修正 - 補上遺漏的函式 --- */}
 const handleSaveFeaturedBadges = async () => {
     if (!currentUserInfo) return;
+    
+    // 確保從最新的 students 陣列中抓取到正確的學生文檔 ID
+    const studentData = students.find(s => s.authEmail === currentUserInfo.authEmail || s.id === currentUserInfo.id);
+    
+    if (!studentData || !studentData.id) {
+        alert("找不到你的帳號資料，請嘗試重新登入再試一次！");
+        return;
+    }
+
     setIsUpdating(true);
     try {
-        const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', currentUserInfo.id);
+        const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', studentData.id);
         await updateDoc(studentRef, {
-            featuredBadges: selectedFeaturedBadges
+            featuredBadges: selectedFeaturedBadges,
+            lastUpdated: serverTimestamp() // 順便更新最後修改時間
         });
-        alert('✅ 你的勳章展示牆已更新！');
+        
+        // 更新當前的 currentUserInfo 狀態，讓畫面能即時反應
+        setCurrentUserInfo(prev => ({ ...prev, featuredBadges: selectedFeaturedBadges }));
+        
+        alert('✅ 你的勳章展示牆已成功更新！');
         setShowcaseEditorOpen(false);
     } catch (e) {
         console.error("Failed to save featured badges:", e);
-        alert('儲存失敗，請檢查網絡連線。');
+        alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網絡。`);
     }
     setIsUpdating(false);
 };
-{/* --- END: 版本 12.6 修正 --- */}
+
+
 
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
