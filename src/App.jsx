@@ -258,6 +258,9 @@ export default function App() {
   const [awardsViewMode, setAwardsViewMode] = useState('grid'); 
   const [showcaseEditorOpen, setShowcaseEditorOpen] = useState(false);
   const [selectedFeaturedBadges, setSelectedFeaturedBadges] = useState([]);
+  const [selectedFeaturedBadges, setSelectedFeaturedBadges] = useState([]);
+  const [viewingBadge, setViewingBadge] = useState(null); // <-- 加入這行，用來控制勳章彈窗
+
   {/* --- START: 版本 12.6 修正 - 補上遺漏的函式 --- */}
 const handleSaveFeaturedBadges = async () => {
     if (!currentUserInfo) return;
@@ -1740,16 +1743,16 @@ const myDashboardData = useMemo(() => {
         ];
     }
 
-    const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+   const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
 
     return {
         winRate, wins, totalPlayed,
         attendanceRate, attendedSessions, totalScheduledSessions,
         pointsHistory: dynamicPointsHistory,
         recentMatches, latestAssessment, radarData,
-        achievements: [...new Set(studentAchievements.map(ach => ach.badgeId))]
+        achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
-}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
+}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, students]);
 
 
 
@@ -2184,8 +2187,35 @@ const myDashboardData = useMemo(() => {
     );
   };
 
-  {/* --- START: 版本 12.3 修正 - 完整 PlayerDashboard 組件 --- */}
-const PlayerDashboard = ({ student, data, onClose }) => {
+  const BadgeInfoModal = ({ badgeInfo, onClose }) => {
+      if (!badgeInfo) return null;
+      const badgeData = ACHIEVEMENT_DATA[badgeInfo.badgeId];
+      if (!badgeData) return null;
+      const levelData = badgeData.levels?.[badgeInfo.level] || badgeData.levels?.[1] || { name: badgeData.baseName, desc: '詳細描述待補充' };
+      
+      return (
+          <div className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in-50 duration-300" onClick={onClose}>
+              <div className="bg-white rounded-[3rem] w-full max-w-md p-10 shadow-2xl relative animate-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={onClose} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-800 transition-colors"><X size={24} /></button>
+                  <div className="flex flex-col items-center text-center">
+                      <div className="w-28 h-28 bg-slate-50 rounded-3xl flex items-center justify-center text-blue-600 shadow-inner border mb-6">
+                          {React.cloneElement(badgeData.icon, { size: 64 })}
+                      </div>
+                      <h3 className="text-3xl font-black text-slate-800 mb-2">{levelData.name}</h3>
+                      <div className="px-4 py-1.5 rounded-full text-xs font-bold border-2 text-blue-600 bg-blue-100 border-blue-200">
+                          {badgeData.rarity}
+                      </div>
+                      <p className="text-slate-500 mt-8 text-lg leading-relaxed font-bold">
+                          {levelData.desc}
+                      </p>
+                  </div>
+              </div>
+          </div>
+      );
+  };
+
+const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
+
     if (!student || !data) return null;
 
     return (
@@ -2313,14 +2343,19 @@ const PlayerDashboard = ({ student, data, onClose }) => {
                                 
                                 const currentLevelData = badgeData.levels?.[ach.level] || badgeData.levels?.[1] || { name: badgeData.baseName, desc: '詳細描述待補充' };
 
-                                return (
-                                    <div key={ach.badgeId} className="group relative flex flex-col items-center justify-center text-center p-2" title={currentLevelData.desc}>
-                                        <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
-                                            {badgeData.icon}
-                                        </div>
-                                        <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{currentLevelData.name}</p>
-                                    </div>
-                                );
+                              return (
+                                 <button 
+                                     key={ach.badgeId} 
+                                     onClick={() => onBadgeClick && onBadgeClick(ach)}
+                                     className="group relative flex flex-col items-center justify-center text-center p-2 rounded-2xl hover:bg-slate-50 transition-all focus:outline-none active:scale-95" 
+                                 >
+                                     <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-md border group-hover:scale-110 transition-transform">
+                                         {badgeData.icon}
+                                     </div>
+                                     <p className="text-[10px] font-bold text-slate-600 mt-2 truncate w-full">{currentLevelData.name}</p>
+                                 </button>
+                             );
+
                             })
                         ) : (
                             <p className="col-span-full text-center text-xs text-slate-400 py-4">還沒有獲得任何徽章。</p>
@@ -2807,12 +2842,23 @@ const PlayerDashboard = ({ student, data, onClose }) => {
             </div>
           )}
 
-          {viewingStudent && (<PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} />)}
+                    {/* 在此渲染彈窗 */}
+          {viewingBadge && (
+             <BadgeInfoModal badgeInfo={viewingBadge} onClose={() => setViewingBadge(null)} />
+          )}
+
+          {viewingStudent && (<PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} onBadgeClick={setViewingBadge} />)}
 
          {/* --- START: 版本 12.8 修正 - 完整 myDashboard 渲染區塊 --- */}
 {!viewingStudent && activeTab === 'myDashboard' && role === 'student' && (
     <>
-        <PlayerDashboard student={currentUserInfo} data={myDashboardData} onClose={null} />
+        <PlayerDashboard 
+            student={currentUserInfo} 
+            data={myDashboardData} 
+            onClose={null} 
+            onBadgeClick={setViewingBadge} 
+        />
+
 
         {/* 勳章展示牆編輯器 Modal 視窗 */}
         {showcaseEditorOpen && (
