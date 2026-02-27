@@ -2889,7 +2889,8 @@ const PlayerDashboard = ({ student, data, onClose }) => {
         <div className="mt-10 text-center">
             <button 
                 onClick={() => {
-                    setSelectedFeaturedBadges(currentUserInfo?.featuredBadges || []);
+                    const studentDataForShowcase = rankedStudents.find(s => s.id === currentUserInfo.id);
+                    setSelectedFeaturedBadges(studentDataForShowcase?.featuredBadges || []);
                     setShowcaseEditorOpen(true);
                 }}
                 className="inline-flex items-center gap-3 px-8 py-4 bg-white border-2 border-slate-100 text-slate-600 rounded-2xl shadow-sm hover:shadow-lg hover:border-blue-500 hover:text-blue-600 transition-all font-bold"
