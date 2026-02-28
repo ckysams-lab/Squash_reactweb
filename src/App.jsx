@@ -569,22 +569,20 @@ const handleSaveFeaturedBadges = async () => {
       }));
 
 
-      return () => listeners.forEach(unsub => unsub());
+            return () => listeners.forEach(unsub => unsub());
 
     } catch (e) {
       console.error("Firestore Init Error:", e);
     }
   }, [user]);
 
-    const awardAchievement = async (badgeId, studentId, level = 1) => {
+  const awardAchievement = async (badgeId, studentId, level = 1) => {
     if (!badgeId || !studentId) return;
     
-    // 檢查是否已有該徽章
     const existingBadge = achievements.find(ach => ach.studentId === studentId && ach.badgeId === badgeId);
     
     try {
         if (existingBadge) {
-            // 如果已有該徽章，且選擇的等級不同，則更新為新等級 (升級/降級)
             if (existingBadge.level !== level) {
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'achievements', existingBadge.id);
                 await updateDoc(docRef, { level: level, timestamp: serverTimestamp() });
@@ -596,7 +594,6 @@ const handleSaveFeaturedBadges = async () => {
             return;
         }
 
-        // 如果沒有，則新增
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'), {
             studentId,
             badgeId,
@@ -608,32 +605,6 @@ const handleSaveFeaturedBadges = async () => {
     } catch (e) {
         console.error("Failed to award achievement:", e);
         alert("授予失敗，請檢查網絡連線。");
-    }
-  };
-
-
-    if (!badgeId || !studentId) return;
-    const alreadyHasBadge = achievements.some(ach => ach.studentId === studentId && ach.badgeId === badgeId);
-    if (alreadyHasBadge) {
-      alert("該學員已擁有此徽章，無需重複授予。");
-      return;
-    }
-    try {
-      // 版本 12.0: 寫入成就時，增加 level: 1 基礎等級
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'), {
-        studentId,
-        badgeId,
-        level: 1, // <-- 新增
-        timestamp: serverTimestamp()
-      });
-      const student = students.find(s => s.id === studentId);
-      // 版本 12.0: 從新的數據結構中讀取勳章名稱
-      const badge = ACHIEVEMENT_DATA[badgeId];
-      const badgeName = badge.levels['1'] ? badge.levels['1'].name : badge.baseName;
-      alert(`✅ 成功授予 ${student?.name || '學員'} 「${badgeName}」 徽章！`);
-    } catch (e) {
-      console.error("Failed to award achievement:", e);
-      alert("授予失敗，請檢查網絡連線。");
     }
   };
 
