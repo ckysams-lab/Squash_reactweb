@@ -3839,27 +3839,47 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                                       </table>
                                     )}
 
-                                    <table className="w-full text-left mt-6">
+                                                                        <table className="w-full text-left mt-6">
                                         <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-black">
                                             <tr>
-                                                <th className="px-6 py-4">日期 / 地點</th>
-                                                <th className="px-6 py-4">對賽球員</th>
-                                                <th className="px-6 py-4 text-center">比分</th>
-                                                <th className="px-6 py-4 text-center">狀態</th>
-                                                <th className="px-6 py-4 text-center">人氣</th>
-                                                {role === 'admin' && <th className="px-6 py-4 text-center">操作</th>}
-                                                {role === 'admin' && <th className="px-6 py-4 text-center">操作</th>}
+                                                <th className="px-4 py-4 whitespace-nowrap">日期 / 地點</th>
+                                                <th className="px-4 py-4 whitespace-nowrap">對賽球員</th>
+                                                <th className="px-4 py-4 text-center whitespace-nowrap">比分</th>
+                                                <th className="px-4 py-4 text-center whitespace-nowrap">狀態</th>
+                                                <th className="px-4 py-4 text-center whitespace-nowrap">人氣</th>
+                                                {role === 'admin' && <th className="px-4 py-4 text-center whitespace-nowrap">操作</th>}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-200/50">
                                             {groupedMatches[groupName].sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)).map(match => (
                                                 <tr key={match.id} className={`transition-all ${match.status === 'completed' ? 'text-slate-400' : 'hover:bg-white/50'}`}>
-                                                    <td className="px-6 py-5">
-                                                        <div className="font-bold text-slate-800">{match.date} <span className="font-mono text-sm">{match.time}</span></div>
+                                                    <td className="px-4 py-5 whitespace-nowrap">
+                                                        <div className="font-bold text-slate-800">{match.date} <span className="font-mono text-sm ml-2">{match.time}</span></div>
                                                         <div className="text-xs">{match.venue}</div>
                                                     </td>
-                                                                                                      {/* 新增：聯賽列表的打氣按鈕 */}
-                                                    <td className="px-6 py-5 text-center">
+                                                    <td className="px-4 py-5 whitespace-nowrap">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`font-black text-base ${match.winnerId === match.player1Id ? 'text-blue-600' : 'text-slate-800'}`}>{match.player1Name}</div>
+                                                            <Swords size={14} className="text-slate-300 shrink-0"/>
+                                                            <div className={`font-black text-base ${match.winnerId === match.player2Id ? 'text-blue-600' : 'text-slate-800'}`}>{match.player2Name}</div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-5 text-center whitespace-nowrap">
+                                                        {match.status === 'completed' ? (
+                                                            <span className="font-mono font-black text-xl md:text-2xl text-slate-800 tracking-widest">{match.matchType === 'external' ? match.externalMatchScore : `${match.score1} : ${match.score2}`}</span>
+                                                        ) : (
+                                                            <span className="text-slate-300">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-5 text-center whitespace-nowrap">
+                                                        {match.status === 'completed' ? (
+                                                            <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-black rounded-full border border-emerald-200">已完賽</span>
+                                                        ) : (
+                                                            <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-black rounded-full border border-yellow-200">待開賽</span>
+                                                        )}
+                                                    </td>
+                                                    {/* 聯賽列表的打氣按鈕 */}
+                                                    <td className="px-4 py-5 text-center whitespace-nowrap">
                                                         {(() => {
                                                             const cheersCount = match.cheers?.length || 0;
                                                             const hasCheered = match.cheers?.includes(currentUserInfo?.id || 'admin');
@@ -3874,29 +3894,8 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                                                             );
                                                         })()}
                                                     </td>
-                                                    <td className="px-6 py-5">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className={`font-black text-base ${match.winnerId === match.player1Id ? 'text-blue-600' : 'text-slate-800'}`}>{match.player1Name}</div>
-                                                            <Swords size={14} className="text-slate-300"/>
-                                                            <div className={`font-black text-base ${match.winnerId === match.player2Id ? 'text-blue-600' : 'text-slate-800'}`}>{match.player2Name}</div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-5 text-center">
-                                                        {match.status === 'completed' ? (
-                                                            <span className="font-mono font-black text-2xl text-slate-800">{match.matchType === 'external' ? match.externalMatchScore : `${match.score1} : ${match.score2}`}</span>
-                                                        ) : (
-                                                            <span className="text-slate-300">-</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-6 py-5 text-center">
-                                                        {match.status === 'completed' ? (
-                                                            <span className="px-3 py-1 bg-emerald-100 text-emerald-600 text-[10px] font-black rounded-full border border-emerald-200">已完賽</span>
-                                                        ) : (
-                                                            <span className="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-black rounded-full border border-yellow-200">待開賽</span>
-                                                        )}
-                                                    </td>
                                                     {role === 'admin' && (
-                                                      <td className="px-6 py-5 text-center">
+                                                      <td className="px-4 py-5 text-center whitespace-nowrap">
                                                           <div className="flex justify-center gap-2">
                                                               {match.status === 'scheduled' && match.matchType !== 'external' && (
                                                                   <>
