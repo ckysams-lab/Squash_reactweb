@@ -3058,11 +3058,23 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                                         <button 
                                             key={ach.badgeId}
                                             disabled={isDisabled}
-                                            onClick={() => {
-                                                setSelectedFeaturedBadges(prev => 
-                                                    isSelected ? prev.filter(b => b !== ach.badgeId) : [...prev, ach.badgeId]
-                                                );
+                                                                                        onClick={() => {
+                                                setSelectedFeaturedBadges(prev => {
+                                                    // 防呆1：如果是取消選取，就過濾掉它
+                                                    if (isSelected) {
+                                                        return prev.filter(b => b !== ach.badgeId);
+                                                    }
+                                                    // 防呆2：先去重複，確保沒有幽靈資料
+                                                    const cleanPrev = [...new Set(prev)];
+                                                    // 防呆3：如果乾淨的陣列長度小於 3，才允許加入新勳章
+                                                    if (cleanPrev.length < 3) {
+                                                        return [...cleanPrev, ach.badgeId];
+                                                    }
+                                                    // 如果已經滿 3 個，就維持原樣不給加
+                                                    return cleanPrev;
+                                                });
                                             }}
+
                                             className={`flex flex-col items-center justify-center p-2 rounded-2xl border-2 transition-all ${
                                                 isSelected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-transparent hover:bg-slate-200'
                                             } ${isDisabled ? 'opacity-30 cursor-not-allowed' : ''}`}
