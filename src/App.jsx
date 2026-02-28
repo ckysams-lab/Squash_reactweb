@@ -963,7 +963,7 @@ const handleManualAward = (student) => {
     setIsUpdating(false);
   };
 
-    const handleUpdateDOB = async (student) => {
+      const handleUpdateDOB = async (student) => {
     const currentDob = student.dob || "";
     const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
     
@@ -982,7 +982,6 @@ const handleManualAward = (student) => {
     }
   };
 
-  // --- 新增：修改學生報名班別 ---
   const handleUpdateSquashClass = async (student) => {
     const currentClass = student.squashClass || "";
     const newClass = prompt(`請輸入 ${student.name} 的壁球班別 (例如: A班、B班、進階班):\n(若要清除請直接清空並按確定)`, currentClass);
@@ -1002,6 +1001,7 @@ const handleManualAward = (student) => {
         setIsUpdating(false);
     }
   };
+
 
 
     const currentDob = student.dob || "";
