@@ -3040,7 +3040,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                 <div className="bg-white rounded-[3rem] w-full max-w-3xl p-10 shadow-2xl relative animate-in fade-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => setShowcaseEditorOpen(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-800 transition-colors"><X size={24} /></button>
                     <h3 className="text-3xl font-black text-slate-800 mb-2">編輯我的勳章展示牆</h3>
-                    <p className="text-slate-400 mb-8">選擇最多 3 個你最自豪的勳章，它們將會顯示在你的名字旁邊！</p>
+                    <p className="text-slate-400 mb-8">選擇最多 2 個你最自豪的勳章，它們將會顯示在你的名字旁邊！</p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {/* 左側：可選勳章 */}
