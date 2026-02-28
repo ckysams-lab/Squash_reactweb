@@ -564,12 +564,11 @@ const handleSaveFeaturedBadges = async () => {
       listeners.push(onSnapshot(query(collections.league_matches, orderBy("date", "desc")), (snap) => setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(query(collections.external_tournaments, orderBy("name", "asc")), (snap) => setExternalTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(query(collections.monthly_stars, orderBy("month", "desc")), (snap) => setMonthlyStars(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-      listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => { // <- 新增
+            listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => { 
         setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }));
 
-
-            return () => listeners.forEach(unsub => unsub());
+      return () => listeners.forEach(unsub => unsub());
 
     } catch (e) {
       console.error("Firestore Init Error:", e);
@@ -613,25 +612,6 @@ const handleSaveFeaturedBadges = async () => {
       setShowAwardModal(true);
   };
 
-        const selectedIndex = parseInt(choice, 10) - 1;
-        if (selectedIndex >= 0 && selectedIndex < allBadges.length) {
-            const [badgeId, badgeData] = allBadges[selectedIndex];
-            
-            // 修正：從 levels[1].name 讀取 Lv.1 的實際名稱
-            const level1Name = badgeData.levels?.['1']?.name || badgeData.baseName;
-
-            if (confirm(`確定要授予 ${student.name} 「${level1Name}」徽章嗎？`)) {
-                awardAchievement(badgeId, student.id);
-            }
-        } else {
-            alert("無效的選擇。");
-        }
-    }
-};
-{/* --- END: 版本 12.4 修正 --- */}
-
-
-  const togglePendingAttendance = (studentId) => {
     setPendingAttendance(prev => 
       prev.includes(studentId) 
         ? prev.filter(id => id !== studentId)
