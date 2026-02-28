@@ -2356,11 +2356,45 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
-                    <TrophyIcon size={32} className="mx-auto text-yellow-500 mb-4"/>
-                    <p className="text-4xl font-black text-slate-800">{student.totalPoints}</p>
-                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Total Points</p>
+                                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center relative overflow-hidden group">
+                    {/* 背景光暈點綴 */}
+                    <div className="absolute -top-10 -right-10 w-32 h-32 bg-yellow-100 rounded-full blur-3xl opacity-50 group-hover:bg-yellow-200 transition-all duration-700 pointer-events-none"></div>
+                    
+                    <TrophyIcon size={32} className="mx-auto text-yellow-500 mb-2 relative z-10"/>
+                    <p className="text-4xl font-black text-slate-800 relative z-10">{student.totalPoints}</p>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest relative z-10">Total Points</p>
+                    
+                    {/* --- 新增：動態進度條邏輯 --- */}
+                    {(() => {
+                        const pts = student.totalPoints || 0;
+                        let currentRank = "見習球員";
+                        let nextRank = "新晉主力";
+                        let nextGoal = 100;
+                        let progress = 0;
+
+                        if (pts < 100) { currentRank = "見習球員"; nextRank = "新晉主力"; nextGoal = 100; progress = (pts / nextGoal) * 100; }
+                        else if (pts < 300) { currentRank = "新晉主力"; nextRank = "球場精英"; nextGoal = 300; progress = ((pts - 100) / 200) * 100; }
+                        else if (pts < 600) { currentRank = "球場精英"; nextRank = "壁球大師"; nextGoal = 600; progress = ((pts - 300) / 300) * 100; }
+                        else { currentRank = "傳說級大師 🏆"; nextRank = "頂點"; nextGoal = pts; progress = 100; }
+
+                        return (
+                            <div className="mt-5 relative z-10">
+                                <div className="flex justify-between items-end mb-2">
+                                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{currentRank}</span>
+                                    {progress < 100 && <span className="text-[9px] font-bold text-slate-400">尚差 {nextGoal - pts} 分晉升</span>}
+                                </div>
+                                <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                                    <div 
+                                        className="h-full bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full transition-all duration-1500 ease-out"
+                                        style={{ width: `${Math.max(5, progress)}%` }} // 至少顯示 5% 讓畫面好看
+                                    ></div>
+                                </div>
+                                {progress < 100 && <p className="text-[8px] text-slate-400 text-right mt-1 font-bold">下一階: {nextRank}</p>}
+                            </div>
+                        );
+                    })()}
                 </div>
+
                 <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
                     <Swords size={32} className="mx-auto text-blue-500 mb-4"/>
                     <p className="text-4xl font-black text-slate-800">{data.winRate}<span className="text-2xl">%</span></p>
