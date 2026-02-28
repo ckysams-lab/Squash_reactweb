@@ -964,6 +964,27 @@ const handleManualAward = (student) => {
   };
 
   const handleUpdateDOB = async (student) => {
+      // --- 新增：修改學生報名班別 ---
+  const handleUpdateSquashClass = async (student) => {
+    const currentClass = student.squashClass || "";
+    const newClass = prompt(`請輸入 ${student.name} 的壁球班別 (例如: A班、B班、進階班):\n(若要清除請直接清空並按確定)`, currentClass);
+    
+    if (newClass !== null) { 
+        setIsUpdating(true);
+        try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
+                squashClass: newClass.trim(),
+                lastUpdated: serverTimestamp()
+            });
+            alert(`✅ 已將 ${student.name} 的班別更新為「${newClass.trim() || '無'}」！`);
+        } catch (e) { 
+            console.error("Update Squash Class failed", e); 
+            alert("更新失敗，請檢查網絡連線。"); 
+        }
+        setIsUpdating(false);
+    }
+  };
+
     const currentDob = student.dob || "";
     const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
     
@@ -3148,12 +3169,14 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                         {/* --- END: 版本 12.9 新增 --- */}
                         {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
-                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-3" onClick={(e) => e.stopPropagation()}>
-                           <button onClick={() => handleManualAward(s)} className="text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 p-2 rounded-xl transition-all" title="授予徽章"><Award size={18}/></button>
-                           <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={18}/></button>
-                           <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={18}/></button>
-                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={18}/></button>
+                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
+                           <button onClick={() => handleManualAward(s)} className="text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 p-2 rounded-xl transition-all" title="授予徽章"><Award size={16}/></button>
+                           <button onClick={() => handleUpdateSquashClass(s)} className="text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 p-2 rounded-xl transition-all" title="設定報名班別"><Layers size={16}/></button>
+                           <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={16}/></button>
+                           <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={16}/></button>
+                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all" title="刪除隊員"><Trash2 size={16}/></button>
                         </div>
+
                      </div>
                    ))}
                    <button onClick={()=>{const name = prompt('隊員姓名');const cls = prompt('班別 (如: 6A)');if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });}} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group"><Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/><span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span></button>
