@@ -1769,39 +1769,27 @@ const handleSaveFeaturedBadges = async () => {
 // ========================================================================
 // Hook 1: playerDashboardData (供教練點擊查看任一學生)
 // ========================================================================
-// ========================================================================
-// Hook 1: playerDashboardData (動態支援教練查看與學生登入)
-// ========================================================================
 const playerDashboardData = useMemo(() => {
-    // 決定目標學生：如果是教練點擊查看，優先使用 viewingStudent；否則如果是學生登入，使用 currentUserInfo
-    const targetStudentInfo = viewingStudent || (role === 'student' ? currentUserInfo : null);
+    // 原始邏輯：依賴 viewingStudent
+    if (!viewingStudent) return null;
 
-    // 如果連目標都沒有 (可能剛登入還在載入中)，直接回傳 null 等待下次渲染
-    if (!targetStudentInfo) return null;
-
-    // 核心修復：強制從最新的 rankedStudents 中抓取完整資料，確保有總積分
-    const studentData = rankedStudents.find(s => s.id === targetStudentInfo.id) || targetStudentInfo;
-    
-    // 如果連最基本的 id 都沒有，無法撈取其他資料
-    if (!studentData || !studentData.id) return null;
-
-    const studentMatches = leagueMatches.filter(m => m.player1Id === studentData.id || m.player2Id === studentData.id);
+    const studentMatches = leagueMatches.filter(m => m.player1Id === viewingStudent.id || m.player2Id === viewingStudent.id);
     const completedMatches = studentMatches.filter(m => m.status === 'completed');
-    const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
-    const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
-    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => b.date.localeCompare(a.date));
+    const studentAttendance = attendanceLogs.filter(log => log.studentId === viewingStudent.id);
+    const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
+    const studentAssessments = assessments.filter(a => a.studentId === viewingStudent.id).sort((a, b) => b.date.localeCompare(a.date));
 
-    const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
+    const wins = completedMatches.filter(m => m.winnerId === viewingStudent.id).length;
     const totalPlayed = completedMatches.length;
     const winRate = totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : 0;
 
-    const totalScheduledSessions = schedules.filter(s => studentData.squashClass && s.trainingClass === studentData.squashClass).length;
+    const totalScheduledSessions = schedules.filter(s => viewingStudent.squashClass && s.trainingClass === viewingStudent.squashClass).length;
     const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
     const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
 
     const dynamicPointsHistory = [
-        { date: '初始積分', points: BADGE_DATA[studentData.badge]?.basePoints || 0 },
-        { date: '目前', points: studentData.totalPoints || studentData.points || 0 } // 加入備用方案防止 undefined
+        { date: '初始積分', points: BADGE_DATA[viewingStudent.badge]?.basePoints || 0 },
+        { date: '目前', points: viewingStudent.totalPoints }
     ];
 
     const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
@@ -1827,8 +1815,66 @@ const playerDashboardData = useMemo(() => {
         recentMatches, latestAssessment, radarData,
         achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
-// 依賴項加入 currentUserInfo, role 和 rankedStudents 確保登入瞬間能被重新觸發
-}, [viewingStudent, currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]); 
+}, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments]);
+
+// ========================================================================
+// Hook 2: myDashboardData (供學生登入後查看自己)
+// ========================================================================
+const myDashboardData = useMemo(() => {
+    // 新邏輯：依賴 currentUserInfo
+    if (role !== 'student' || !currentUserInfo) return null;
+    
+    const studentData = rankedStudents.find(s => s.id === currentUserInfo.id);
+    if (!studentData) return null;
+
+    const studentMatches = leagueMatches.filter(m => m.player1Id === studentData.id || m.player2Id === studentData.id);
+    const completedMatches = studentMatches.filter(m => m.status === 'completed');
+    const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
+    const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
+    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => b.date.localeCompare(a.date));
+
+    const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
+    const totalPlayed = completedMatches.length;
+    const winRate = totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : 0;
+
+    const totalScheduledSessions = schedules.filter(s => studentData.squashClass && s.trainingClass === studentData.squashClass).length;
+    const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
+    const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
+
+    const dynamicPointsHistory = [
+        { date: '初始積分', points: BADGE_DATA[studentData.badge]?.basePoints || 0 },
+        { date: '目前', points: studentData.totalPoints }
+    ];
+
+    const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
+    
+    let radarData = [];
+    if (latestAssessment) {
+        const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
+        radarData = [
+            { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 25), fullMark: 10 },
+            { subject: '力量 (仰臥/握力)', A: calcScore(((latestAssessment.situps || 0) + (latestAssessment.gripStrength || 0))/2, 50), fullMark: 10 },
+            { subject: '柔軟度', A: calcScore(latestAssessment.flexibility, 30), fullMark: 10 },
+            { subject: '正手技術', A: calcScore(((latestAssessment.fhDrive || 0) + (latestAssessment.fhVolley || 0))/2, 10), fullMark: 10 },
+            { subject: '反手技術', A: calcScore(((latestAssessment.bhDrive || 0) + (latestAssessment.bhVolley || 0))/2, 10), fullMark: 10 },
+        ];
+    }
+
+   const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+
+    return {
+        winRate, wins, totalPlayed,
+        attendanceRate, attendedSessions, totalScheduledSessions,
+        pointsHistory: dynamicPointsHistory,
+        recentMatches, latestAssessment, radarData,
+        achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
+    };
+}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, students]);
+
+
+
+
+
 
   const SchoolLogo = ({ size = 48, className = "" }) => {
     const [error, setError] = useState(false);
