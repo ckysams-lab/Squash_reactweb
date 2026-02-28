@@ -3116,10 +3116,14 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
         )}
 
         {/* "編輯我的勳章展示牆" 按鈕 */}
-        <div className="mt-10 text-center">
+                <div className="mt-10 text-center">
             <button 
                 onClick={() => {
-                    setSelectedFeaturedBadges(currentUserInfo?.featuredBadges || []);
+                    // 使用 Set 來過濾掉歷史遺留的重複勳章 ID
+                    const savedBadges = currentUserInfo?.featuredBadges || [];
+                    const uniqueBadges = [...new Set(savedBadges)].slice(0, 3); // 最多只取前3個
+                    
+                    setSelectedFeaturedBadges(uniqueBadges);
                     setShowcaseEditorOpen(true);
                 }}
                 className="inline-flex items-center gap-3 px-8 py-4 bg-white border-2 border-slate-100 text-slate-600 rounded-2xl shadow-sm hover:shadow-lg hover:border-blue-500 hover:text-blue-600 transition-all font-bold"
