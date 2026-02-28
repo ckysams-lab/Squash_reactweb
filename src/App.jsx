@@ -576,7 +576,7 @@ const handleSaveFeaturedBadges = async () => {
     }
   }, [user]);
 
-  const awardAchievement = async (badgeId, studentId, level = 1) => {
+    const awardAchievement = async (badgeId, studentId, level = 1) => {
     if (!badgeId || !studentId) return;
     
     // 檢查是否已有該徽章
@@ -610,6 +610,7 @@ const handleSaveFeaturedBadges = async () => {
         alert("授予失敗，請檢查網絡連線。");
     }
   };
+
 
     if (!badgeId || !studentId) return;
     const alreadyHasBadge = achievements.some(ach => ach.studentId === studentId && ach.badgeId === badgeId);
