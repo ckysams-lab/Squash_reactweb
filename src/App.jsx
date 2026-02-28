@@ -1492,6 +1492,41 @@ const handleSaveFeaturedBadges = async () => {
     return result; // 最後返回結果
   }, [filteredMatches]);
 
+    // --- 新增：為比賽打氣 (Team Cheers) ---
+    const handleCheerMatch = async (matchId, e) => {
+        e.stopPropagation(); // 防止點擊按鈕時觸發外層的點擊事件
+        // 如果沒有登入（防呆），就不給點
+        if (!currentUserInfo && role !== 'admin') {
+            alert("請先登入才能為隊友打氣喔！");
+            return;
+        }
+
+        // 使用學生ID或教練身分作為唯一識別碼，防止狂點
+        const userId = currentUserInfo?.id || 'admin';
+        const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', matchId);
+
+        try {
+            // 從目前的比賽列表中找到這場比賽
+            const currentMatch = leagueMatches.find(m => m.id === matchId);
+            const currentCheers = currentMatch?.cheers || [];
+
+            // 如果這個人已經打過氣了，就幫他取消 (收回 🔥)
+            if (currentCheers.includes(userId)) {
+                await updateDoc(matchRef, {
+                    cheers: currentCheers.filter(id => id !== userId)
+                });
+            } else {
+                // 如果還沒打過氣，就加進去
+                await updateDoc(matchRef, {
+                    cheers: [...currentCheers, userId]
+                });
+            }
+        } catch (error) {
+            console.error("Cheer failed:", error);
+        }
+    };
+
+  
     const handleUpdateLeagueMatchScore = async (match) => {
         const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
         if (score1_str === null) return;
@@ -2525,18 +2560,36 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                             const isWinner = match.winnerId === student.id;
                             const opponentName = match.player1Id === student.id ? match.player2Name : match.player1Name;
                             const score = match.matchType === 'external' ? match.externalMatchScore : (match.player1Id === student.id ? `${match.score1} - ${match.score2}` : `${match.score2} - ${match.score1}`);
+                            const cheersCount = match.cheers?.length || 0;
+                            const hasCheered = match.cheers?.includes(currentUserInfo?.id || 'admin');
+
                             return (
-                                <div key={match.id} className={`p-6 rounded-3xl flex items-center justify-between gap-4 ${isWinner ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
-                                    <div>
+                                <div key={match.id} className={`p-6 rounded-3xl flex items-center justify-between gap-4 relative overflow-hidden transition-all hover:scale-[1.01] ${isWinner ? 'bg-emerald-50 border border-emerald-200 shadow-emerald-50' : 'bg-rose-50 border border-rose-200 shadow-rose-50'}`}>
+                                    <div className="flex-1">
                                         <p className="text-xs text-slate-400 font-bold">{match.date} - {match.tournamentName}</p>
-                                        <p className="font-bold text-slate-700">vs. {opponentName}</p>
+                                        <p className="font-bold text-slate-700 text-lg">vs. {opponentName}</p>
                                     </div>
-                                    <div className="text-right">
-                                        <p className={`font-black text-2xl ${isWinner ? 'text-emerald-600' : 'text-rose-600'}`}>{score}</p>
-                                        <p className={`text-xs font-bold ${isWinner ? 'text-emerald-500' : 'text-rose-500'}`}>{isWinner ? '勝利' : '落敗'}</p>
+                                    <div className="text-right pr-4 border-r border-slate-200/50 mr-2">
+                                        <p className={`font-black text-2xl font-mono ${isWinner ? 'text-emerald-600' : 'text-rose-600'}`}>{score}</p>
+                                        <p className={`text-[10px] font-black uppercase tracking-widest ${isWinner ? 'text-emerald-500' : 'text-rose-500'}`}>{isWinner ? 'WIN' : 'LOSS'}</p>
+                                    </div>
+                                    
+                                    {/* 🔥 打氣按鈕區塊 */}
+                                    <div className="flex flex-col items-center justify-center min-w-[50px]">
+                                        <button 
+                                            onClick={(e) => handleCheerMatch(match.id, e)}
+                                            className={`p-2 rounded-full transition-all active:scale-75 ${hasCheered ? 'bg-orange-100 text-orange-500 shadow-inner' : 'bg-white text-slate-300 hover:text-orange-400 shadow-sm border border-slate-100'}`}
+                                            title="為這場精彩比賽打氣！"
+                                        >
+                                            <Zap size={20} className={hasCheered ? 'fill-orange-400' : ''} />
+                                        </button>
+                                        <span className={`text-[10px] font-black mt-1 ${hasCheered ? 'text-orange-500' : 'text-slate-400'}`}>
+                                            {cheersCount > 0 ? cheersCount : '打氣'}
+                                        </span>
                                     </div>
                                 </div>
                             )
+
                         }) : <p className="text-center text-slate-400 py-10">暫無比賽記錄</p>}
                     </div>
                 </div>
@@ -3793,6 +3846,8 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                                                 <th className="px-6 py-4">對賽球員</th>
                                                 <th className="px-6 py-4 text-center">比分</th>
                                                 <th className="px-6 py-4 text-center">狀態</th>
+                                                <th className="px-6 py-4 text-center">人氣</th>
+                                                {role === 'admin' && <th className="px-6 py-4 text-center">操作</th>}
                                                 {role === 'admin' && <th className="px-6 py-4 text-center">操作</th>}
                                             </tr>
                                         </thead>
@@ -3802,6 +3857,22 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                                                     <td className="px-6 py-5">
                                                         <div className="font-bold text-slate-800">{match.date} <span className="font-mono text-sm">{match.time}</span></div>
                                                         <div className="text-xs">{match.venue}</div>
+                                                    </td>
+                                                                                                      {/* 新增：聯賽列表的打氣按鈕 */}
+                                                    <td className="px-6 py-5 text-center">
+                                                        {(() => {
+                                                            const cheersCount = match.cheers?.length || 0;
+                                                            const hasCheered = match.cheers?.includes(currentUserInfo?.id || 'admin');
+                                                            return (
+                                                                <button 
+                                                                    onClick={(e) => handleCheerMatch(match.id, e)}
+                                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black transition-all active:scale-95 border ${hasCheered ? 'bg-orange-50 text-orange-600 border-orange-200 shadow-sm' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-white hover:text-orange-500 hover:border-orange-200 hover:shadow-sm'}`}
+                                                                >
+                                                                    <Zap size={14} className={hasCheered ? 'fill-orange-500' : ''}/>
+                                                                    {cheersCount > 0 ? cheersCount : ''}
+                                                                </button>
+                                                            );
+                                                        })()}
                                                     </td>
                                                     <td className="px-6 py-5">
                                                         <div className="flex items-center gap-4">
