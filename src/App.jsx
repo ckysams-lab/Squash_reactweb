@@ -963,25 +963,6 @@ const handleManualAward = (student) => {
     setIsUpdating(false);
   };
 
-      const handleUpdateDOB = async (student) => {
-    const currentDob = student.dob || "";
-    const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
-    
-    if (newDob !== null) { 
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(newDob) && newDob !== "") {
-            alert("格式錯誤！請使用 YYYY-MM-DD 格式 (例如: 2012-05-20)");
-            return;
-        }
-        try {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
-                dob: newDob,
-                lastUpdated: serverTimestamp()
-            });
-        } catch (e) { console.error("Update DOB failed", e); alert("更新失敗"); }
-    }
-  };
-
     const handleUpdateDOB = async (student) => {
     const currentDob = student.dob || "";
     const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
