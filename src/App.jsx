@@ -2858,15 +2858,15 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
           {viewingStudent && (<PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} onBadgeClick={setViewingBadge} />)}
 
          {/* --- START: 版本 12.8 修正 - 完整 myDashboard 渲染區塊 --- */}
+         {/* --- START: 版本 12.8 修正 - 完整 myDashboard 渲染區塊 --- */}
 {!viewingStudent && activeTab === 'myDashboard' && role === 'student' && (
     <>
         <PlayerDashboard 
-            student={currentUserInfo} 
+            student={rankedStudents.find(s => s.id === currentUserInfo?.id) || currentUserInfo} 
             data={myDashboardData} 
             onClose={null} 
             onBadgeClick={setViewingBadge} 
         />
-
 
         {/* 勳章展示牆編輯器 Modal 視窗 */}
         {showcaseEditorOpen && (
