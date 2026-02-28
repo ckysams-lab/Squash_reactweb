@@ -385,7 +385,10 @@ export default function App() {
   const [awardsViewMode, setAwardsViewMode] = useState('grid'); 
   const [showcaseEditorOpen, setShowcaseEditorOpen] = useState(false);
   const [selectedFeaturedBadges, setSelectedFeaturedBadges] = useState([]);
-  const [viewingBadge, setViewingBadge] = useState(null); // <-- 加入這行，用來控制勳章彈窗
+  const [viewingBadge, setViewingBadge] = useState(null); 
+  const [showAwardModal, setShowAwardModal] = useState(false);
+  const [studentToAward, setStudentToAward] = useState(null);
+
 
   {/* --- START: 版本 12.6 修正 - 補上遺漏的函式 --- */}
 const handleSaveFeaturedBadges = async () => {
@@ -573,7 +576,41 @@ const handleSaveFeaturedBadges = async () => {
     }
   }, [user]);
 
-    const awardAchievement = async (badgeId, studentId) => {
+  const awardAchievement = async (badgeId, studentId, level = 1) => {
+    if (!badgeId || !studentId) return;
+    
+    // 檢查是否已有該徽章
+    const existingBadge = achievements.find(ach => ach.studentId === studentId && ach.badgeId === badgeId);
+    
+    try {
+        if (existingBadge) {
+            // 如果已有該徽章，且選擇的等級不同，則更新為新等級 (升級/降級)
+            if (existingBadge.level !== level) {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'achievements', existingBadge.id);
+                await updateDoc(docRef, { level: level, timestamp: serverTimestamp() });
+                const badgeName = ACHIEVEMENT_DATA[badgeId].levels[level].name;
+                alert(`✅ 成功將學員徽章更新為「${badgeName}」！`);
+            } else {
+                alert("該學員已擁有此等級的徽章，無需重複授予。");
+            }
+            return;
+        }
+
+        // 如果沒有，則新增
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'), {
+            studentId,
+            badgeId,
+            level: level,
+            timestamp: serverTimestamp()
+        });
+        const badgeName = ACHIEVEMENT_DATA[badgeId].levels[level].name;
+        alert(`✅ 成功授予學員「${badgeName}」徽章！`);
+    } catch (e) {
+        console.error("Failed to award achievement:", e);
+        alert("授予失敗，請檢查網絡連線。");
+    }
+  };
+
     if (!badgeId || !studentId) return;
     const alreadyHasBadge = achievements.some(ach => ach.studentId === studentId && ach.badgeId === badgeId);
     if (alreadyHasBadge) {
@@ -599,19 +636,11 @@ const handleSaveFeaturedBadges = async () => {
     }
   };
 
+  const handleManualAward = (student) => {
+      setStudentToAward(student);
+      setShowAwardModal(true);
+  };
 
-  {/* --- START: 版本 12.4 修正 - handleManualAward 函式 --- */}
-const handleManualAward = (student) => {
-    const allBadges = Object.entries(ACHIEVEMENT_DATA);
-    let promptMsg = `請為 ${student.name} 選擇要授予的徽章 (輸入代號):\n\n`;
-    
-    // 修正：從 data.baseName 讀取基礎名稱
-    allBadges.forEach(([, data], index) => {
-        promptMsg += `${index + 1}. ${data.baseName}\n`; 
-    });
-  
-    const choice = prompt(promptMsg);
-    if (choice && !isNaN(choice)) {
         const selectedIndex = parseInt(choice, 10) - 1;
         if (selectedIndex >= 0 && selectedIndex < allBadges.length) {
             const [badgeId, badgeData] = allBadges[selectedIndex];
@@ -2982,6 +3011,59 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
              <BadgeInfoModal badgeInfo={viewingBadge} onClose={() => setViewingBadge(null)} />
           )}
 
+          {/* --- 全新：授予勳章選擇視窗 --- */}
+          {showAwardModal && studentToAward && (
+              <div className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setShowAwardModal(false)}>
+                  <div className="bg-white rounded-[2rem] w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+                      <div className="p-6 border-b flex justify-between items-center bg-slate-50 rounded-t-[2rem]">
+                          <div>
+                              <h3 className="text-2xl font-black text-slate-800">授予徽章</h3>
+                              <p className="text-sm font-bold text-slate-500 mt-1">目前選擇學員：<span className="text-blue-600">{studentToAward.name} ({studentToAward.class})</span></p>
+                          </div>
+                          <button onClick={() => setShowAwardModal(false)} className="p-2 bg-white rounded-full text-slate-400 hover:text-slate-800 shadow-sm transition-colors"><X size={20} /></button>
+                      </div>
+                      
+                      <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {Object.entries(ACHIEVEMENT_DATA).map(([badgeId, badgeData]) => (
+                              <div key={badgeId} className="bg-white border rounded-2xl p-4 shadow-sm hover:shadow-md transition-all">
+                                  <div className="flex items-center gap-3 mb-3 border-b pb-3">
+                                      <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center border shadow-inner">
+                                          {badgeData.icon}
+                                      </div>
+                                      <div>
+                                          <h4 className="font-black text-slate-800 text-sm">{badgeData.baseName}</h4>
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{badgeData.rarity}</span>
+                                      </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                      {Object.entries(badgeData.levels).map(([levelStr, levelData]) => {
+                                          const level = parseInt(levelStr);
+                                          return (
+                                              <button 
+                                                  key={level}
+                                                  onClick={() => {
+                                                      if(confirm(`確定要授予 ${studentToAward.name} 「${levelData.name}」嗎？`)){
+                                                          awardAchievement(badgeId, studentToAward.id, level);
+                                                          setShowAwardModal(false);
+                                                      }
+                                                  }}
+                                                  className="w-full text-left p-2 rounded-xl text-xs hover:bg-blue-50 hover:text-blue-700 transition-colors group flex flex-col gap-1 border border-transparent hover:border-blue-100"
+                                              >
+                                                  <span className="font-bold text-slate-700 group-hover:text-blue-700">{levelData.name}</span>
+                                                  <span className="text-[10px] text-slate-400 line-clamp-1">{levelData.desc}</span>
+                                              </button>
+                                          )
+                                      })}
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              </div>
+          )}
+          {/* --------------------------------- */}
+
+          
           {viewingStudent && (<PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} onBadgeClick={setViewingBadge} />)}
 
          {/* --- START: 版本 12.8 修正 - 完整 myDashboard 渲染區塊 --- */}
