@@ -1770,26 +1770,29 @@ const handleSaveFeaturedBadges = async () => {
 // Hook 1: playerDashboardData (供教練點擊查看任一學生)
 // ========================================================================
 const playerDashboardData = useMemo(() => {
-    // 原始邏輯：依賴 viewingStudent
-    if (!viewingStudent) return null;
+    const targetStudentInfo = viewingStudent || (role === 'student' ? currentUserInfo : null);
+    if (!targetStudentInfo) return null;
 
-    const studentMatches = leagueMatches.filter(m => m.player1Id === viewingStudent.id || m.player2Id === viewingStudent.id);
+    const studentData = rankedStudents.find(s => s.id === targetStudentInfo.id) || targetStudentInfo;
+    if (!studentData || !studentData.id) return null;
+
+    const studentMatches = leagueMatches.filter(m => m.player1Id === studentData.id || m.player2Id === studentData.id);
     const completedMatches = studentMatches.filter(m => m.status === 'completed');
-    const studentAttendance = attendanceLogs.filter(log => log.studentId === viewingStudent.id);
-    const studentAchievements = achievements.filter(ach => ach.studentId === viewingStudent.id);
-    const studentAssessments = assessments.filter(a => a.studentId === viewingStudent.id).sort((a, b) => b.date.localeCompare(a.date));
+    const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
+    const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
+    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => b.date.localeCompare(a.date));
 
-    const wins = completedMatches.filter(m => m.winnerId === viewingStudent.id).length;
+    const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
     const totalPlayed = completedMatches.length;
     const winRate = totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : 0;
 
-    const totalScheduledSessions = schedules.filter(s => viewingStudent.squashClass && s.trainingClass === viewingStudent.squashClass).length;
+    const totalScheduledSessions = schedules.filter(s => studentData.squashClass && s.trainingClass === studentData.squashClass).length;
     const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
     const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
 
     const dynamicPointsHistory = [
-        { date: '初始積分', points: BADGE_DATA[viewingStudent.badge]?.basePoints || 0 },
-        { date: '目前', points: viewingStudent.totalPoints }
+        { date: '初始積分', points: BADGE_DATA[studentData.badge]?.basePoints || 0 },
+        { date: '目前', points: studentData.totalPoints || studentData.points || 0 }
     ];
 
     const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
@@ -1815,7 +1818,8 @@ const playerDashboardData = useMemo(() => {
         recentMatches, latestAssessment, radarData,
         achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
-}, [viewingStudent, leagueMatches, attendanceLogs, schedules, achievements, rankedStudents, assessments]);
+}, [viewingStudent, currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
+
 
 // ========================================================================
 // Hook 2: myDashboardData (供學生登入後查看自己)
