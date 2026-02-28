@@ -612,7 +612,8 @@ const handleSaveFeaturedBadges = async () => {
       setShowAwardModal(true);
   };
 
-    setPendingAttendance(prev => 
+   const togglePendingAttendance = (studentId) => { 
+      setPendingAttendance(prev => 
       prev.includes(studentId) 
         ? prev.filter(id => id !== studentId)
         : [...prev, studentId]
@@ -3024,7 +3025,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
     <>
         <PlayerDashboard 
             student={rankedStudents.find(s => s.id === currentUserInfo?.id) || currentUserInfo} 
-            data={myDashboardData} 
+            data={playerDashboardData} 
             onClose={null} 
             onBadgeClick={setViewingBadge} 
         />
