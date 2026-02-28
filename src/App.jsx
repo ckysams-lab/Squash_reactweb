@@ -3043,7 +3043,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                         <div className="bg-slate-50 p-6 rounded-3xl border">
                             <h4 className="font-bold text-slate-600 mb-4 text-center">我獲得的勳章</h4>
                             <div className="grid grid-cols-4 gap-4 max-h-96 overflow-y-auto">
-                                {myDashboardData?.achievements.map(ach => {
+                                {playerDashboardData?.achievements.map(ach => {
                                     const badgeData = ACHIEVEMENT_DATA[ach.badgeId];
                                     if (!badgeData) return null;
                                     const levelData = badgeData.levels?.[ach.level] || badgeData.levels?.[1] || {};
