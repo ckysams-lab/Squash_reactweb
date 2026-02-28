@@ -982,28 +982,7 @@ const handleManualAward = (student) => {
     }
   };
 
-  const handleUpdateSquashClass = async (student) => {
-    const currentClass = student.squashClass || "";
-    const newClass = prompt(`請輸入 ${student.name} 的壁球班別 (例如: A班、B班、進階班):\n(若要清除請直接清空並按確定)`, currentClass);
-    
-    if (newClass !== null) { 
-        setIsUpdating(true);
-        try {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
-                squashClass: newClass.trim(),
-                lastUpdated: serverTimestamp()
-            });
-            alert(`✅ 已將 ${student.name} 的班別更新為「${newClass.trim() || '無'}」！`);
-        } catch (e) { 
-            console.error("Update Squash Class failed", e); 
-            alert("更新失敗，請檢查網絡連線。"); 
-        }
-        setIsUpdating(false);
-    }
-  };
-
-
-
+    const handleUpdateDOB = async (student) => {
     const currentDob = student.dob || "";
     const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
     
@@ -1022,29 +1001,23 @@ const handleManualAward = (student) => {
     }
   };
 
-  const handleSetupStudentAuth = async (student) => {
-    if (!student.class || !student.classNo) {
-        alert(`錯誤：學生 ${student.name} 的班別或班號為空，無法設定登入資料。`);
-        return;
-    }
-    const authEmail = `${student.class.toLowerCase().trim()}${student.classNo.trim()}@bcklas.squash`;
-    const currentAuthEmail = student.authEmail || '尚未設定';
-    const confirmMsg = `即將為學生 ${student.name} (${student.class} ${student.classNo}) 設定或更新登入識別碼。\n\n` +
-                     `舊識別碼: ${currentAuthEmail}\n` +
-                     `新識別碼: ${authEmail}\n\n` +
-                     `確認後，請手動前往 Firebase 後台，使用「${authEmail}」為該學生建立帳戶並設定密碼。\n\n` +
-                     `確定要更新嗎？`;
-    if (confirm(confirmMsg)) {
+  const handleUpdateSquashClass = async (student) => {
+    const currentClass = student.squashClass || "";
+    const newClass = prompt(`請輸入 ${student.name} 的壁球班別 (例如: A班、B班、進階班):\n(若要清除請直接清空並按確定)`, currentClass);
+    
+    if (newClass !== null) { 
+        setIsUpdating(true);
         try {
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
-                authEmail: authEmail,
+                squashClass: newClass.trim(),
                 lastUpdated: serverTimestamp()
             });
-            alert(`✅ 設定成功！\n\n學生 ${student.name} 的登入識別碼已更新為：\n${authEmail}\n\n下一步：請到 Firebase Authentication 後台使用此電郵建立用戶。`);
-        } catch (e) {
-            console.error("Setup Auth Email failed", e);
-            alert("更新失敗，請檢查網絡或聯絡管理員。");
+            alert(`✅ 已將 ${student.name} 的班別更新為「${newClass.trim() || '無'}」！`);
+        } catch (e) { 
+            console.error("Update Squash Class failed", e); 
+            alert("更新失敗，請檢查網絡連線。"); 
         }
+        setIsUpdating(false);
     }
   };
 
