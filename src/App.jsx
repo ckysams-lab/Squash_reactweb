@@ -2513,9 +2513,32 @@ const myDashboardData = useMemo(() => {
   };
 
 const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
-
     if (!student || !data) return null;
 
+// 找出該學生作為 A(擊球) 或 B(回球) 的所有數據
+    const myTacticalShots = tacticalShots.filter(s => s.playerA === student.name || s.playerB === student.name);
+    
+    // 計算 T-Zone 控制率：(站在 T-Zone 擊球的次數 / 總擊球次數) * 100
+    const totalMyShots = myTacticalShots.length;
+    const tZoneShots = myTacticalShots.filter(s => 
+        (s.playerA === student.name && s.shotA === 'T-Zone') || 
+        (s.playerB === student.name && s.shotB === 'T-Zone')
+    ).length;
+    const tZoneDominance = totalMyShots > 0 ? Math.round((tZoneShots / totalMyShots) * 100) : 0;
+
+    // 計算落點熱圖 (我把球打到哪裡)
+    const heatMap = {
+        'Front-Left': 0, 'Front-Center': 0, 'Front-Right': 0,
+        'Mid-Left': 0, 'T-Zone': 0, 'Mid-Right': 0,
+        'Back-Left': 0, 'Back-Center': 0, 'Back-Right': 0
+    };
+    myTacticalShots.forEach(s => {
+        // 如果我是A，我的落點就是B接球的地方 (shotB)
+        if (s.playerA === student.name && s.shotB) heatMap[s.shotB]++;
+        // 如果我是B，我的落點就是下一拍A接球的地方(這裡簡化處理為我方回球位置紀錄)
+        // 因目前邏輯為一次性紀錄 A擊球->B落點，所以只統計我是 A 的時候的落點
+    });
+  
     return (
         <div className="animate-in fade-in duration-500 font-bold">
             <div className="flex items-center gap-6 mb-10">
@@ -2590,6 +2613,46 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
+                          {/* --- [11.3] 戰術分析可視化 --- */}
+            {myTacticalShots.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-10">
+                    {/* T-Zone 指數 */}
+                    <div className="bg-gradient-to-br from-indigo-900 to-slate-800 p-8 rounded-[3rem] text-white shadow-xl relative overflow-hidden">
+                        <div className="absolute -right-10 -bottom-10 opacity-10"><Target size={150}/></div>
+                        <h4 className="text-xl font-black mb-2 text-indigo-200">T-Zone 統治率</h4>
+                        <p className="text-xs text-indigo-300 mb-6">控制 T 字位，就控制了比賽</p>
+                        <div className="flex items-end gap-2 relative z-10">
+                            <span className="text-7xl font-black font-mono">{tZoneDominance}</span>
+                            <span className="text-2xl font-bold text-indigo-400 mb-2">%</span>
+                        </div>
+                        <div className="mt-4 w-full bg-slate-700 h-3 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-red-500 to-yellow-400" style={{ width: `${tZoneDominance}%` }}></div>
+                        </div>
+                    </div>
+
+                    {/* 落點熱圖 */}
+                    <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col">
+                        <h4 className="text-xl font-black text-slate-800 mb-2">攻擊落點熱圖 (Heatmap)</h4>
+                        <p className="text-xs text-slate-400 mb-4">顏色越深代表擊球至該區域的頻率越高</p>
+                        <div className="flex-1 grid grid-cols-3 gap-1 bg-slate-800 p-2 rounded-2xl">
+                            {['Front-Left', 'Front-Center', 'Front-Right', 'Mid-Left', 'T-Zone', 'Mid-Right', 'Back-Left', 'Back-Center', 'Back-Right'].map(zone => {
+                                const count = heatMap[zone];
+                                const maxCount = Math.max(...Object.values(heatMap), 1);
+                                const intensity = count / maxCount; // 0 到 1
+                                return (
+                                    <div key={zone} 
+                                        className="rounded-lg flex flex-col items-center justify-center border border-white/5 transition-all"
+                                        style={{ backgroundColor: `rgba(239, 68, 68, ${Math.max(0.1, intensity)})` }} // 紅色深淺
+                                    >
+                                        <span className="text-white text-lg font-black">{count}</span>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
                 <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col">
                     <h4 className="text-2xl font-black mb-2 flex items-center gap-3"><TrendingUp className="text-blue-500"/> 積分走勢圖</h4>
                     <p className="text-xs text-slate-400 mb-6">顯示該學員參與校內比賽後的積分變化軌跡</p>
