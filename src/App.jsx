@@ -2656,7 +2656,6 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
 };
 {/* --- END: 版本 12.3 修正 --- */}
 
-
   const MonthlyStarsPage = ({ monthlyStarsData }) => {
     const [displayMonth, setDisplayMonth] = useState('');
 
