@@ -465,7 +465,11 @@ const handleSaveFeaturedBadges = async () => {
 };
 
 
-
+  const [tacticalShots, setTacticalShots] = useState([]);
+  const [showTacticalBoard, setShowTacticalBoard] = useState(false);
+  const [tacticalData, setTacticalData] = useState({ playerA: '', playerB: '' });
+  const [tacticalStep, setTacticalStep] = useState(0); 
+  const [currentShotA, setCurrentShotA] = useState(null);
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
     announcements: [],
