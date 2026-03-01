@@ -4255,3 +4255,4 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
     </div>
   );
 }
+}
