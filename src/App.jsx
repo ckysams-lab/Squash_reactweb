@@ -1900,6 +1900,39 @@ const handleSaveFeaturedBadges = async () => {
       }
   };
 
+    // --- [11.5] 美化版：極速戰術板 Modal 元件 ---
+  const handleTacticalClick = async (zone) => {
+      if (!tacticalData.p1) {
+          alert("請至少輸入一位我方球員的姓名！");
+          return;
+      }
+      
+      const playerName = activePlayer === 1 ? tacticalData.p1 : tacticalData.p2;
+      const opponentName = activePlayer === 1 ? tacticalData.p2 : tacticalData.p1;
+      
+      // 視覺回饋
+      setLastRecorded({ player: playerName, zone: zone });
+      setTimeout(() => setLastRecorded(null), 800);
+
+      // 自動切換到另一個人
+      if (tacticalData.p2) {
+          setActivePlayer(activePlayer === 1 ? 2 : 1);
+      }
+
+      // 非同步寫入資料庫
+      try {
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots'), {
+              player: playerName,
+              opponent: opponentName || '未知對手',
+              zone: zone,
+              timestamp: serverTimestamp(),
+              date: new Date().toISOString().split('T')[0]
+          });
+      } catch(e) {
+          console.error("戰術紀錄失敗", e);
+      }
+  };
+
   const TacticalBoardModal = () => {
       const zones = [
           { id: 'Front-Left', label: '前左' }, { id: 'Front-Center', label: '前中' }, { id: 'Front-Right', label: '前右' },
@@ -1908,58 +1941,82 @@ const handleSaveFeaturedBadges = async () => {
       ];
 
       return (
-          <div className="fixed inset-0 z-[500] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowTacticalBoard(false)}>
-              <div className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => setShowTacticalBoard(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X size={24}/></button>
-                  <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-2"><Target className="text-blue-600"/> 極速落點紀錄板</h3>
+          <div className="fixed inset-0 z-[500] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowTacticalBoard(false)}>
+              <div className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl relative border-4 border-slate-100" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => setShowTacticalBoard(false)} className="absolute top-6 right-6 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all z-50"><X size={20}/></button>
                   
-                  <div className="flex gap-4 mb-4">
+                  <div className="text-center mb-6 pr-10">
+                      <h3 className="text-2xl font-black text-slate-800 flex items-center justify-center gap-2"><Target className="text-blue-600"/> 實戰落點紀錄</h3>
+                      <p className="text-xs text-slate-400 mt-1 font-bold">點擊球場區域，系統將自動記錄並切換擊球方</p>
+                  </div>
+                  
+                  {/* 球員對戰面板 */}
+                  <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-2xl border border-slate-100 shadow-inner">
                       <div 
-                          className={`flex-1 p-3 rounded-xl border-2 transition-all cursor-pointer ${activePlayer === 1 ? 'border-blue-500 bg-blue-50' : 'border-slate-100 bg-white opacity-50'}`}
+                          className={`flex-1 p-3 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden ${activePlayer === 1 ? 'border-blue-500 bg-white shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}
                           onClick={() => setActivePlayer(1)}
                       >
-                          <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest block mb-1">球員 1 (藍方)</label>
-                          <input type="text" value={tacticalData.p1} onChange={e => setTacticalData({...tacticalData, p1: e.target.value})} className="w-full bg-transparent font-black text-lg outline-none" placeholder="輸入我方姓名"/>
+                          {activePlayer === 1 && <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>}
+                          <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest block mb-0.5">藍方 (先發)</label>
+                          <input type="text" value={tacticalData.p1} onChange={e => setTacticalData({...tacticalData, p1: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none placeholder:text-slate-300" placeholder="輸入我方"/>
                       </div>
+                      <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-400 text-xs shadow-inner italic">VS</div>
                       <div 
-                          className={`flex-1 p-3 rounded-xl border-2 transition-all cursor-pointer ${activePlayer === 2 ? 'border-rose-500 bg-rose-50' : 'border-slate-100 bg-white opacity-50'}`}
+                          className={`flex-1 p-3 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden ${activePlayer === 2 ? 'border-rose-500 bg-white shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}
                           onClick={() => setActivePlayer(2)}
                       >
-                          <label className="text-[10px] font-black text-rose-600 uppercase tracking-widest block mb-1">球員 2 (紅方)</label>
-                          <input type="text" value={tacticalData.p2} onChange={e => setTacticalData({...tacticalData, p2: e.target.value})} className="w-full bg-transparent font-black text-lg outline-none" placeholder="輸入對手姓名"/>
+                          {activePlayer === 2 && <div className="absolute top-0 right-0 w-1 h-full bg-rose-500"></div>}
+                          <label className="text-[9px] font-black text-rose-500 uppercase tracking-widest block mb-0.5 text-right">紅方 (對手)</label>
+                          <input type="text" value={tacticalData.p2} onChange={e => setTacticalData({...tacticalData, p2: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none text-right placeholder:text-slate-300" placeholder="輸入對手"/>
                       </div>
                   </div>
 
-                  <div className="text-center mb-4 min-h-[24px]">
+                  <div className="text-center mb-4 h-6 flex items-center justify-center">
                       {lastRecorded ? (
-                          <span className="text-emerald-600 font-bold animate-in fade-in zoom-in text-sm">✅ 已記錄：{lastRecorded.player} 擊向 {lastRecorded.zone}</span>
+                          <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
+                              🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
+                          </span>
                       ) : (
-                          <span className="text-slate-400 text-sm font-bold">點擊宮格記錄【{activePlayer === 1 ? (tacticalData.p1 || '藍方') : (tacticalData.p2 || '紅方')}】的擊球落點</span>
+                          <span className={`text-sm font-black px-4 py-1 rounded-full animate-pulse ${activePlayer === 1 ? 'text-blue-600 bg-blue-50' : 'text-rose-600 bg-rose-50'}`}>
+                              等待【{activePlayer === 1 ? (tacticalData.p1 || '藍方') : (tacticalData.p2 || '紅方')}】擊球...
+                          </span>
                       )}
                   </div>
 
-                  {/* 壁球場 9 宮格 */}
-                  <div className="grid grid-cols-3 gap-2 aspect-[3/4] bg-slate-100 p-2 rounded-xl border-4 border-slate-300 relative">
-                      <div className="absolute -top-6 left-0 right-0 text-center text-xs font-black text-slate-400 tracking-widest">FRONT WALL (前牆)</div>
-                      {zones.map(zone => (
-                          <button 
-                              key={zone.id}
-                              onClick={() => handleTacticalClick(zone.id)}
-                              className="rounded-lg border-2 border-slate-200 bg-white text-slate-500 font-black hover:bg-slate-200 active:bg-slate-300 active:scale-95 transition-all flex items-center justify-center text-lg shadow-sm"
-                          >
-                              {zone.label}
-                          </button>
-                      ))}
-                  </div>
-                  
-                  <div className="mt-4 flex justify-between">
-                     <button onClick={() => setActivePlayer(1)} className="text-xs font-bold text-slate-400 hover:text-blue-600 px-4 py-2 bg-slate-50 rounded-lg">強制換藍方發球</button>
-                     <button onClick={() => setActivePlayer(2)} className="text-xs font-bold text-slate-400 hover:text-rose-600 px-4 py-2 bg-slate-50 rounded-lg">強制換紅方發球</button>
+                  {/* 擬真壁球場 9 宮格 */}
+                  <div className="relative w-full aspect-[3/4] bg-[#fdf5e6] border-[6px] border-slate-800 rounded-t-sm rounded-b-sm overflow-hidden shadow-inner">
+                      {/* 球場紅線裝飾 (純視覺) */}
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-red-500/80"></div> {/* Tin line */}
+                      <div className="absolute top-[55%] left-0 right-0 border-t-[3px] border-red-500/50"></div> {/* Short line */}
+                      <div className="absolute top-[55%] bottom-0 left-1/2 -translate-x-1/2 border-l-[3px] border-red-500/50"></div> {/* Half court line */}
+                      <div className="absolute top-[55%] left-0 w-[30%] aspect-square border-[3px] border-l-0 border-red-500/50"></div> {/* Left Service Box */}
+                      <div className="absolute top-[55%] right-0 w-[30%] aspect-square border-[3px] border-r-0 border-red-500/50"></div> {/* Right Service Box */}
+                      
+                      {/* 前牆標示 */}
+                      <div className="absolute top-2 left-0 right-0 text-center text-[10px] font-black text-red-800/40 tracking-[0.3em] pointer-events-none z-10">FRONT WALL</div>
+
+                      {/* 9 宮格點擊區 */}
+                      <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
+                          {zones.map(zone => (
+                              <button 
+                                  key={zone.id}
+                                  onClick={() => handleTacticalClick(zone.id)}
+                                  className="relative group border border-slate-400/20 hover:bg-blue-500/20 active:bg-blue-600/40 transition-all flex flex-col items-center justify-center outline-none"
+                              >
+                                  <span className="opacity-0 group-hover:opacity-100 transition-opacity w-10 h-10 bg-black/40 rounded-full flex items-center justify-center text-white shadow-lg backdrop-blur-sm scale-75 group-hover:scale-100">
+                                      <Target size={20}/>
+                                  </span>
+                                  {/* 隱藏預設文字，讓畫面更乾淨，保留結構 */}
+                                  <span className="sr-only">{zone.label}</span>
+                              </button>
+                          ))}
+                      </div>
                   </div>
               </div>
           </div>
       );
   };
+
 
 
 const playerDashboardData = useMemo(() => {
@@ -2615,40 +2672,74 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
-                                      {/* --- [11.4] 戰術落點熱圖 --- */}
+                        {/* --- [11.5] 美化版：戰術落點熱圖 --- */}
             {myTacticalShots.length > 0 && (
-                <div className="mb-10">
-                    <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm max-w-2xl mx-auto flex flex-col">
-                        <div className="flex items-center justify-between mb-6">
+                <div className="mb-10 animate-in slide-in-from-bottom-6 duration-700">
+                    <div className="bg-white p-8 md:p-10 rounded-[4rem] border border-slate-100 shadow-sm max-w-4xl mx-auto">
+                        <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
                             <div>
-                                <h4 className="text-2xl font-black text-slate-800 flex items-center gap-2"><Target className="text-red-500"/> 攻擊落點熱圖</h4>
-                                <p className="text-xs text-slate-400 mt-1">紀錄該學員擊球至各區域的次數 (顏色越紅代表頻率越高)</p>
+                                <h4 className="text-3xl font-black text-slate-800 flex items-center gap-3"><Target className="text-red-500" size={32}/> 攻擊落點熱圖</h4>
+                                <p className="text-sm font-bold text-slate-400 mt-2">分析 {student.name} 的擊球落點分佈 (基於 {myTacticalShots.length} 筆紀錄)</p>
                             </div>
-                            <div className="bg-slate-100 px-4 py-2 rounded-2xl text-center">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">總記錄球數</p>
-                                <p className="text-2xl font-black text-slate-700">{myTacticalShots.length}</p>
+                            <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100 text-xs font-bold text-slate-500">
+                                <span>冷區</span>
+                                <div className="w-24 h-3 rounded-full bg-gradient-to-r from-blue-100 via-yellow-200 to-red-500"></div>
+                                <span>熱區</span>
                             </div>
                         </div>
                         
-                        <div className="grid grid-cols-3 gap-1.5 bg-slate-800 p-3 rounded-[2rem] aspect-square">
-                            {['Front-Left', 'Front-Center', 'Front-Right', 'Mid-Left', 'T-Zone', 'Mid-Right', 'Back-Left', 'Back-Center', 'Back-Right'].map(zone => {
-                                const count = heatMap[zone] || 0;
-                                const maxCount = Math.max(...Object.values(heatMap), 1);
-                                const intensity = count / maxCount; // 0 到 1
-                                
-                                return (
-                                    <div key={zone} 
-                                        className="rounded-2xl flex flex-col items-center justify-center border-2 border-white/10 transition-all relative overflow-hidden"
-                                        style={{ backgroundColor: `rgba(239, 68, 68, ${Math.max(0.05, intensity)})` }}
-                                    >
-                                        <span className={`text-3xl font-black ${intensity > 0.5 ? 'text-white' : 'text-slate-400'}`}>{count}</span>
-                                    </div>
-                                )
-                            })}
+                        <div className="flex justify-center">
+                            {/* 儀表板中的擬真壁球場 */}
+                            <div className="relative w-full max-w-sm aspect-[3/4] bg-[#fdf5e6] border-[8px] border-slate-800 rounded-t-sm rounded-b-sm shadow-2xl overflow-hidden">
+                                {/* 球場紅線 */}
+                                <div className="absolute top-0 left-0 right-0 h-1.5 bg-red-500/70"></div>
+                                <div className="absolute top-[55%] left-0 right-0 border-t-[4px] border-red-500/50"></div>
+                                <div className="absolute top-[55%] bottom-0 left-1/2 -translate-x-1/2 border-l-[4px] border-red-500/50"></div>
+                                <div className="absolute top-[55%] left-0 w-[30%] aspect-square border-[4px] border-l-0 border-red-500/50"></div>
+                                <div className="absolute top-[55%] right-0 w-[30%] aspect-square border-[4px] border-r-0 border-red-500/50"></div>
+                                <div className="absolute top-3 left-0 right-0 text-center text-xs font-black text-red-800/40 tracking-[0.4em] pointer-events-none z-10">FRONT WALL</div>
+
+                                {/* 熱圖渲染層 */}
+                                <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 z-20">
+                                    {['Front-Left', 'Front-Center', 'Front-Right', 'Mid-Left', 'T-Zone', 'Mid-Right', 'Back-Left', 'Back-Center', 'Back-Right'].map(zone => {
+                                        const count = heatMap[zone] || 0;
+                                        const maxCount = Math.max(...Object.values(heatMap), 1);
+                                        const intensity = count / maxCount; // 相對最高點的強度 (0~1)
+                                        const percentage = Math.round((count / myTacticalShots.length) * 100) || 0;
+                                        
+                                        // 決定熱圖顏色：高強度為紅色，中等為黃/橙色，低強度透明
+                                        let heatColor = 'transparent';
+                                        if (intensity > 0.7) heatColor = 'rgba(239, 68, 68, 0.85)'; // Red-500
+                                        else if (intensity > 0.4) heatColor = 'rgba(245, 158, 11, 0.7)'; // Amber-500
+                                        else if (intensity > 0.1) heatColor = 'rgba(252, 211, 77, 0.5)'; // Yellow-300
+                                        else if (intensity > 0) heatColor = 'rgba(147, 197, 253, 0.3)'; // Blue-300
+
+                                        return (
+                                            <div key={zone} className="relative flex flex-col items-center justify-center border border-slate-800/5 transition-all group">
+                                                {/* 顏色遮罩 */}
+                                                <div className="absolute inset-0 transition-all duration-1000" style={{ backgroundColor: heatColor, filter: 'blur(4px)', transform: 'scale(1.1)' }}></div>
+                                                
+                                                {/* 數據顯示 */}
+                                                {count > 0 && (
+                                                    <div className="relative z-10 flex flex-col items-center justify-center w-12 h-12 md:w-16 md:h-16 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white/50 group-hover:scale-110 transition-transform">
+                                                        <span className={`text-sm md:text-xl font-black ${intensity > 0.7 ? 'text-red-600' : intensity > 0.4 ? 'text-amber-600' : 'text-slate-700'}`}>{percentage}%</span>
+                                                        <span className="text-[8px] md:text-[10px] font-bold text-slate-400 -mt-1">{count} 球</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="mt-8 bg-blue-50 p-4 rounded-2xl flex items-center justify-center gap-3 text-sm font-bold text-blue-800">
+                           <Info size={18} className="text-blue-500"/>
+                           教練提示：高水平球員的落點應集中在「後左」與「後右」角落。
                         </div>
                     </div>
                 </div>
             )}
+
 
 
                 <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col">
