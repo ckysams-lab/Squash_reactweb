@@ -4237,22 +4237,19 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                       <p className="text-[10px] text-slate-400 font-bold leading-relaxed">修改密碼後請妥善保存，否則將無法進入教練後台。系統預設密碼為 "admin"。</p>
                     </div>
                  </div>
-                 <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">Copyright © 2026 正覺壁球. All Rights Reserved.</div>
+                                  <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">Copyright © 2026 正覺壁球. All Rights Reserved.</div>
              </div>
           )}
           
         </div>
-              {/* --- 新增：全局 Toast 提示畫面 --- */}
+
+        {/* --- 新增：全局 Toast 提示畫面 --- */}
         <div className={`fixed bottom-10 right-10 z-[500] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
             <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border backdrop-blur-xl ${toast.type === 'success' ? 'bg-emerald-500/90 border-emerald-400 text-white' : 'bg-rose-500/90 border-rose-400 text-white'}`}>
                 {toast.type === 'success' ? <CheckCircle2 size={24} /> : <Info size={24} />}
                 <p className="font-black tracking-wide">{toast.message}</p>
             </div>
         </div>
-      </main>
-    </div>
-  );
-}
 
       </main>
     </div>
