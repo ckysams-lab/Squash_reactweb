@@ -2736,30 +2736,94 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
     );
   };
 
-    if (loading) return (
-    <div className="min-h-screen flex font-sans overflow-hidden bg-slate-50">
-      {/* 側邊欄骨架 */}
-      <aside className="w-80 border-r bg-white p-10 flex flex-col gap-6">
-        <div className="flex items-center gap-4 mb-10">
-           <div className="w-16 h-16 bg-slate-200 rounded-full animate-pulse"></div>
-           <div className="space-y-2"><div className="w-24 h-6 bg-slate-200 rounded-md animate-pulse"></div><div className="w-16 h-3 bg-slate-100 rounded-md animate-pulse"></div></div>
+      // --- 載入中畫面 (骨架屏) ---
+  if (loading) {
+    return (
+      <div className="min-h-screen flex font-sans overflow-hidden bg-slate-50">
+        <aside className="w-80 border-r bg-white p-10 flex flex-col gap-6 hidden md:flex">
+          <div className="flex items-center gap-4 mb-10">
+             <div className="w-16 h-16 bg-slate-200 rounded-full animate-pulse"></div>
+             <div className="space-y-2"><div className="w-24 h-6 bg-slate-200 rounded-md animate-pulse"></div><div className="w-16 h-3 bg-slate-100 rounded-md animate-pulse"></div></div>
+          </div>
+          {[1,2,3,4,5,6].map(i => <div key={i} className="w-full h-14 bg-slate-100 rounded-2xl animate-pulse"></div>)}
+        </aside>
+        <main className="flex-1 p-10 flex flex-col justify-center items-center">
+            <Loader2 className="animate-spin text-blue-600 mb-6" size={64} />
+            <p className="text-xl font-black text-slate-400 animate-pulse">載入球隊資料中...</p>
+        </main>
+      </div>
+    );
+  }
+
+  // --- 正式主畫面 ---
+  return (
+    <div className="min-h-screen flex font-sans overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-text-primary)' }}>
+      
+      {/* 隱藏的海報模板 */}
+      <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100}}>
+          <PosterTemplate ref={posterRef} data={posterData} />
+      </div>
+
+      <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" multiple onChange={handleGalleryImageUpload} />
+      
+      {/* 登入視窗 */}
+      {showLoginModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1594420314182-1a48c4349635?q=80&w=2000&auto=format&fit=crop')" }}>
+              <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"></div>
+              <div className="relative bg-white/90 backdrop-blur-2xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/30 animate-in fade-in-50 zoom-in-95 duration-700 ease-out">
+                  <div className="flex justify-center mb-10"><SchoolLogo className="text-white" size={80} /></div>
+                  <h2 className="text-4xl font-black text-center text-slate-800 mb-2">正覺壁球</h2>
+                  <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
+                  
+                  <div className="space-y-6">
+                      <div className="bg-slate-50 p-1 rounded-[2rem] flex mb-4 relative">
+                          <div className={`absolute top-1 bottom-1 w-1/2 bg-white rounded-[1.8rem] shadow-sm transition-all duration-300 ease-out ${loginTab === 'admin' ? 'left-1/2' : 'left-1'}`}></div>
+                          <button onClick={() => setLoginTab('student')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'student' ? 'text-blue-600' : 'text-slate-400'}`}>學員入口</button>
+                          <button onClick={() => setLoginTab('admin')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'admin' ? 'text-blue-600' : 'text-slate-400'}`}>教練登入</button>
+                      </div>
+                      {loginTab === 'student' ? (
+                          <div className="space-y-3 font-bold">
+                              <div className="flex gap-3">
+                                  <input type="text" value={loginClass} onChange={(e) => setLoginClass(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" placeholder="班別 (如 6A)" />
+                                  <input type="text" value={loginClassNo} onChange={(e) => setLoginClassNo(e.target.value)} className="w-1/2 bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" placeholder="班號" />
+                              </div>
+                              <div className="relative">
+                                  <span className="absolute left-5 top-5 text-slate-300"><Lock size={18}/></span>
+                                  <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" placeholder="學生密碼" />
+                              </div>
+                              <button onClick={() => handleLogin('student')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">進入系統</button>
+                          </div>
+                      ) : (
+                          <div className="space-y-3 font-bold">
+                              <div className="relative">
+                                  <span className="absolute left-5 top-5 text-slate-300"><Mail size={18}/></span>
+                                  <input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" placeholder="教練電郵" />
+                              </div>
+                              <div className="relative">
+                                  <span className="absolute left-5 top-5 text-slate-300"><Lock size={18}/></span>
+                                  <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" placeholder="教練密碼" />
+                              </div>
+                              <button onClick={() => handleLogin('admin')} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-slate-200 transition-all active:scale-[0.98]">管理員登入</button>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- 全局 Toast 提示 --- */}
+      {toast?.show && (
+        <div className={`fixed bottom-10 right-10 z-[500] transition-all duration-500 transform animate-in slide-in-from-bottom-10`}>
+            <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border backdrop-blur-xl ${toast.type === 'success' ? 'bg-emerald-500/90 border-emerald-400 text-white' : 'bg-rose-500/90 border-rose-400 text-white'}`}>
+                {toast.type === 'success' ? <CheckCircle2 size={24} /> : <Info size={24} />}
+                <p className="font-black tracking-wide">{toast.message}</p>
+            </div>
         </div>
-        {[1,2,3,4,5,6].map(i => <div key={i} className="w-full h-14 bg-slate-100 rounded-2xl animate-pulse"></div>)}
-      </aside>
-      {/* 主內容骨架 */}
-      <main className="flex-1 p-10">
-        <header className="flex justify-between items-center mb-10">
-            <div className="space-y-3"><div className="w-64 h-10 bg-slate-200 rounded-xl animate-pulse"></div><div className="w-40 h-4 bg-slate-100 rounded-md animate-pulse"></div></div>
-            <div className="w-32 h-10 bg-slate-200 rounded-xl animate-pulse"></div>
-        </header>
-        <div className="grid grid-cols-4 gap-6 mb-10">
-            {[1,2,3,4].map(i => <div key={i} className="w-full h-40 bg-white border border-slate-100 rounded-[3rem] shadow-sm animate-pulse flex flex-col items-center justify-center gap-4"><div className="w-12 h-12 bg-slate-100 rounded-full"></div><div className="w-16 h-6 bg-slate-100 rounded-md"></div></div>)}
-        </div>
-        <div className="w-full h-96 bg-white border border-slate-100 rounded-[4rem] shadow-sm animate-pulse"></div>
-      </main>
+      )}
+
     </div>
   );
-
+}
 
   return (
     <div className="min-h-screen flex font-sans overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-text-primary)' }}>
