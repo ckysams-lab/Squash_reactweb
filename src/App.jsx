@@ -360,31 +360,6 @@ const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
   });
 PosterTemplate.displayName = 'PosterTemplate';
 
- const SchoolLogo = ({ size = 48, className = "", customUrl = null }) => {
-    const [error, setError] = React.useState(false);
-    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = customUrl || defaultLogoUrl;
-    
-    if (error) {
-      return <ShieldCheck className={`${className}`} size={size} />;
-    }
-    return (
-      <img 
-        src={logoUrl} 
-        alt="BCKLAS Logo" 
-        className={`object-contain ${className}`}
-        style={{ width: size * 2, height: size * 2 }}
-        loading="eager"
-        crossOrigin="anonymous" 
-        onError={(e) => {
-          console.error("Logo load failed", e);
-          setError(true);
-        }}
-      />
-    );
-};
-
-
 export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
@@ -480,11 +455,11 @@ const handleSaveFeaturedBadges = async () => {
         // 更新當前的 currentUserInfo 狀態，讓畫面能即時反應
         setCurrentUserInfo(prev => ({ ...prev, featuredBadges: selectedFeaturedBadges }));
         
-        showToast('勳章展示牆已成功更新！', 'success');
+        alert('✅ 你的勳章展示牆已成功更新！');
         setShowcaseEditorOpen(false);
     } catch (e) {
         console.error("Failed to save featured badges:", e);
-        showToast('儲存失敗，請檢查網路！', 'error');
+        alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網絡。`);
     }
     setIsUpdating(false);
 };
@@ -504,13 +479,7 @@ const handleSaveFeaturedBadges = async () => {
   const [viewingImage, setViewingImage] = useState(null);
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
-  const showToast = (message, type = 'success') => {
-      setToast({ show: true, message, type });
-      setTimeout(() => {
-          setToast(prev => ({ ...prev, show: false }));
-      }, 3000); // 3秒後自動消失
-  };
+  
   const [loginEmail, setLoginEmail] = useState('');
   const [loginClass, setLoginClass] = useState('');
   const [loginClassNo, setLoginClassNo] = useState('');
@@ -731,11 +700,11 @@ const handleSaveFeaturedBadges = async () => {
       });
       
       await batch.commit();
-      showToast('成功儲存 ${pendingAttendance.length} 筆點名紀錄！', 'success');
+      alert(`✅ 成功儲存 ${pendingAttendance.length} 筆點名紀錄！`);
       setPendingAttendance([]);
     } catch (e) {
       console.error("Batch attendance save failed:", e);
-      showToast('儲存失敗，請檢查網路！', 'error');
+      alert("儲存失敗，請檢查網絡或聯絡管理員。");
     }
     setIsUpdating(false);
   };
@@ -878,10 +847,10 @@ const handleSaveFeaturedBadges = async () => {
         }
       });
       await batch.commit();
-      showToast('成功匯入 ${count} 個校外賽事名稱！', 'success');
+      alert(`✅ 成功匯入 ${count} 個校外賽事名稱！`);
     } catch (err) {
       console.error("External tournament import failed:", err);
-      showToast('匯入失敗，請確認 CSV 格式 (單欄，第一行為標題)！', 'error');
+      alert('匯入失敗，請確認 CSV 格式 (單欄，第一行為標題)。');
     }
     setIsUpdating(false);
     e.target.value = null;
@@ -907,13 +876,13 @@ const handleSaveFeaturedBadges = async () => {
         bhVolley: Number(bhVolley) || 0,
         timestamp: serverTimestamp()
       });
-      showToast('綜合能力評估儲存成功！', 'success');
+      alert('✅ 綜合能力評估儲存成功！');
       setNewAssessment({
         studentId: '', date: new Date().toISOString().split('T')[0], situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', fhDrive: '', bhDrive: '', fhVolley: '', bhVolley: '', notes: ''
       });
     } catch (e) {
       console.error("Failed to save assessment", e);
-      showToast('儲存失敗，請檢查網路！', 'error');
+      alert('儲存失敗，請檢查網絡連線。');
     }
     setIsUpdating(false);
   };
@@ -945,11 +914,11 @@ const handleSaveFeaturedBadges = async () => {
           ...newAwardData,
           timestamp: serverTimestamp()
         });
-        showToast('獎項新增成功！', 'success');
+        alert('🏆 獎項新增成功！');
         setShowAddAwardModal(false); // 關閉 Modal
       } catch (e) {
         console.error("Failed to save award:", e);
-        showToast('儲存失敗，請檢查網路！', 'error');
+        alert('新增失敗，請檢查網絡連線。');
       }
       setIsUpdating(false);
     };
@@ -964,7 +933,7 @@ const handleSaveFeaturedBadges = async () => {
 
     const player = students.find(s => s.id === player1Id);
     if (!player) {
-      showToast('找不到指定的學生資料！', 'error');
+      alert('找不到指定的學生資料！');
       return;
     }
 
@@ -989,7 +958,7 @@ const handleSaveFeaturedBadges = async () => {
       
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'), matchData);
       
-      showToast('校外賽記錄已成功儲存！', 'success');
+      alert('✅ 校外賽記錄已成功儲存！');
       setNewExternalMatch({
         tournamentName: '',
         date: new Date().toISOString().split('T')[0],
@@ -1002,7 +971,7 @@ const handleSaveFeaturedBadges = async () => {
 
     } catch (e) {
       console.error("Failed to save external match:", e);
-      showToast('儲存失敗，請檢查網路！', 'error');
+      alert('儲存失敗，請檢查網絡連線。');
     }
     setIsUpdating(false);
   };
@@ -1137,10 +1106,10 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(true);
     try {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance'), financeConfig);
-      showToast('財務設定已儲存！', 'success');
+      alert('財務設定已儲存！');
     } catch (e) {
       console.error(e);
-      showToast('儲存失敗，請檢查網路！', 'error');
+      alert('儲存失敗');
     }
     setIsUpdating(false);
   };
@@ -1363,10 +1332,10 @@ const handleSaveFeaturedBadges = async () => {
               description: desc,
               timestamp: serverTimestamp()
            });
-          showToast('影片新增成功！', 'success'); 
+           alert('影片新增成功！');
         } catch (e) {
            console.error(e);
-           showToast('儲存失敗！', 'error');
+           alert('新增失敗');
         }
       }
   };
@@ -1432,8 +1401,8 @@ const handleSaveFeaturedBadges = async () => {
         }
       });
       await batch.commit();
-      showToast('訓練班日程匯入成功！', 'success');
-    } catch (err) {showToast('匯入失敗，請確認 CSV 格式！', 'error'); 
+      alert('訓練班日程匯入成功！');
+    } catch (err) { alert('匯入失敗，請確認 CSV 格式'); }
     setIsUpdating(false);
     e.target.value = null;
   };
@@ -1465,8 +1434,8 @@ const handleSaveFeaturedBadges = async () => {
         }
       });
       await batch.commit();
-      showToast('隊員名單更新成功！', 'success');
-    } catch (err) { showToast('匯入失敗！', 'error');}
+      alert('隊員名單更新成功！');
+    } catch (err) { alert('匯入失敗'); }
     setIsUpdating(false);
     e.target.value = null;
   };
@@ -1676,10 +1645,10 @@ const handleSaveFeaturedBadges = async () => {
                 });
                 
                 await batch.commit();
-                showToast('賽果已成功儲存並更新積分！', 'success');
+                alert("✅ 賽果已成功儲存並更新積分！");
             } catch (e) {
                 console.error("Update match score failed", e);
-                showToast('儲存失敗，請檢查網路！', 'error');
+                alert("儲存失敗，請檢查網絡連線。");
             }
             setIsUpdating(false);
         }
@@ -1994,6 +1963,34 @@ const myDashboardData = useMemo(() => {
         achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
 }, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, students]);
+
+
+
+
+
+
+  const SchoolLogo = ({ size = 48, className = "" }) => {
+    const [error, setError] = useState(false);
+    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
+    if (error) {
+      return <ShieldCheck className={`${className}`} size={size} />;
+    }
+    return (
+      <img 
+        src={logoUrl} 
+        alt="BCKLAS Logo" 
+        className={`object-contain ${className}`}
+        style={{ width: size * 2, height: size * 2 }}
+        loading="eager"
+        crossOrigin="anonymous" 
+        onError={(e) => {
+          console.error("Logo load failed", e);
+          setError(true);
+        }}
+      />
+    );
+  };
 
   const handleAddAward = () => {
   // 重置表單數據
@@ -2311,7 +2308,7 @@ const myDashboardData = useMemo(() => {
         <div className="relative max-w-md w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
           <div ref={cardRef} className="w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-100 relative">
             <div className="bg-slate-50 border-b p-6 flex justify-between items-center relative">
-              <SchoolLogo size={24} customUrl={systemConfig?.schoolLogo} />
+              <SchoolLogo size={24} />
               <div className="text-center flex-1 z-10">
                 <h3 className="font-black text-slate-800 tracking-widest text-sm">BCKLAS SQUASH TEAM</h3>
               </div>
@@ -2656,6 +2653,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
 };
 {/* --- END: 版本 12.3 修正 --- */}
 
+
   const MonthlyStarsPage = ({ monthlyStarsData }) => {
     const [displayMonth, setDisplayMonth] = useState('');
 
@@ -2732,98 +2730,16 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
     );
   };
 
-      // --- 載入中畫面 (骨架屏) ---
-  if (loading) {
-    return (
-      <div className="min-h-screen flex font-sans overflow-hidden bg-slate-50">
-        <aside className="w-80 border-r bg-white p-10 flex flex-col gap-6 hidden md:flex">
-          <div className="flex items-center gap-4 mb-10">
-             <div className="w-16 h-16 bg-slate-200 rounded-full animate-pulse"></div>
-             <div className="space-y-2"><div className="w-24 h-6 bg-slate-200 rounded-md animate-pulse"></div><div className="w-16 h-3 bg-slate-100 rounded-md animate-pulse"></div></div>
-          </div>
-          {[1,2,3,4,5,6].map(i => <div key={i} className="w-full h-14 bg-slate-100 rounded-2xl animate-pulse"></div>)}
-        </aside>
-        <main className="flex-1 p-10 flex flex-col justify-center items-center">
-            <Loader2 className="animate-spin text-blue-600 mb-6" size={64} />
-            <p className="text-xl font-black text-slate-400 animate-pulse">載入球隊資料中...</p>
-        </main>
+  if (loading) return (
+    <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+      <div className="mb-8 animate-pulse">
+        <SchoolLogo size={96} />
       </div>
-    );
-  }
-
-  // --- 正式主畫面 ---
-  return (
-    <div className="min-h-screen flex font-sans overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-text-primary)' }}>
-      
-      {/* 隱藏的海報模板 */}
-      <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100}}>
-          <PosterTemplate ref={posterRef} data={posterData} />
-      </div>
-
-      <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" multiple onChange={handleGalleryImageUpload} />
-      
-      {/* 登入視窗 */}
-      {showLoginModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1594420314182-1a48c4349635?q=80&w=2000&auto=format&fit=crop')" }}>
-              <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"></div>
-              <div className="relative bg-white/90 backdrop-blur-2xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/30 animate-in fade-in-50 zoom-in-95 duration-700 ease-out">
-                  <div className="flex justify-center mb-10">
-                      <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center shadow-inner">
-                          <ShieldCheck size={48} className="text-blue-600" />
-                      </div>
-                    </div>
-                  <h2 className="text-4xl font-black text-center text-slate-800 mb-2">正覺壁球</h2>
-                  <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
-                  
-                  <div className="space-y-6">
-                      <div className="bg-slate-50 p-1 rounded-[2rem] flex mb-4 relative">
-                          <div className={`absolute top-1 bottom-1 w-1/2 bg-white rounded-[1.8rem] shadow-sm transition-all duration-300 ease-out ${loginTab === 'admin' ? 'left-1/2' : 'left-1'}`}></div>
-                          <button onClick={() => setLoginTab('student')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'student' ? 'text-blue-600' : 'text-slate-400'}`}>學員入口</button>
-                          <button onClick={() => setLoginTab('admin')} className={`flex-1 py-3 text-sm font-black z-10 transition-colors ${loginTab === 'admin' ? 'text-blue-600' : 'text-slate-400'}`}>教練登入</button>
-                      </div>
-                      {loginTab === 'student' ? (
-                          <div className="space-y-3 font-bold">
-                              <div className="flex gap-3">
-                                  <input type="text" value={loginClass} onChange={(e) => setLoginClass(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" placeholder="班別 (如 6A)" />
-                                  <input type="text" value={loginClassNo} onChange={(e) => setLoginClassNo(e.target.value)} className="w-1/2 bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 outline-none text-lg" placeholder="班號" />
-                              </div>
-                              <div className="relative">
-                                  <span className="absolute left-5 top-5 text-slate-300"><Lock size={18}/></span>
-                                  <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" placeholder="學生密碼" />
-                              </div>
-                              <button onClick={() => handleLogin('student')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]">進入系統</button>
-                          </div>
-                      ) : (
-                          <div className="space-y-3 font-bold">
-                              <div className="relative">
-                                  <span className="absolute left-5 top-5 text-slate-300"><Mail size={18}/></span>
-                                  <input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" placeholder="教練電郵" />
-                              </div>
-                              <div className="relative">
-                                  <span className="absolute left-5 top-5 text-slate-300"><Lock size={18}/></span>
-                                  <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-5 pl-14 outline-none text-lg" placeholder="教練密碼" />
-                              </div>
-                              <button onClick={() => handleLogin('admin')} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-5 rounded-[2rem] font-black text-xl shadow-xl shadow-slate-200 transition-all active:scale-[0.98]">管理員登入</button>
-                          </div>
-                      )}
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* --- 全局 Toast 提示 --- */}
-      {toast?.show && (
-        <div className={`fixed bottom-10 right-10 z-[500] transition-all duration-500 transform animate-in slide-in-from-bottom-10`}>
-            <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border backdrop-blur-xl ${toast.type === 'success' ? 'bg-emerald-500/90 border-emerald-400 text-white' : 'bg-rose-500/90 border-rose-400 text-white'}`}>
-                {toast.type === 'success' ? <CheckCircle2 size={24} /> : <Info size={24} />}
-                <p className="font-black tracking-wide">{toast.message}</p>
-            </div>
-        </div>
-      )}
-
+      <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
+      <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
+      <p className="text-xs text-slate-300 mt-2 font-mono">v{CURRENT_VERSION}</p>
     </div>
   );
-}
 
   return (
     <div className="min-h-screen flex font-sans overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-text-primary)' }}>
@@ -2897,7 +2813,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                         animate-in fade-in-50 zoom-in-95 duration-700 ease-out">
             
             <div className="flex justify-center mb-10 animate-in slide-in-from-bottom-8 delay-200 duration-500">
-                <SchoolLogo className="text-white" size={80} customUrl={systemConfig?.schoolLogo} />
+                <SchoolLogo className="text-white" size={80} />
             </div>
 
             <div className="animate-in slide-in-from-bottom-8 delay-300 duration-500">
@@ -2954,7 +2870,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
       >
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
-            <div className="flex items-center justify-center"><SchoolLogo size={32} customUrl={systemConfig?.schoolLogo} /></div>
+            <div className="flex items-center justify-center"><SchoolLogo size={32} /></div>
             <div>
               <h2 className="text-2xl font-black tracking-tighter">正覺壁球</h2>
               <p className="text-[10px] text-slate-300 uppercase tracking-[0.2em] -mt-1">BCKLAS SYSTEM v{CURRENT_VERSION}</p>
@@ -4301,20 +4217,11 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                       <p className="text-[10px] text-slate-400 font-bold leading-relaxed">修改密碼後請妥善保存，否則將無法進入教練後台。系統預設密碼為 "admin"。</p>
                     </div>
                  </div>
-                                  <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">Copyright © 2026 正覺壁球. All Rights Reserved.</div>
+                 <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">Copyright © 2026 正覺壁球. All Rights Reserved.</div>
              </div>
           )}
           
         </div>
-
-        {/* --- 新增：全局 Toast 提示畫面 --- */}
-        <div className={`fixed bottom-10 right-10 z-[500] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
-            <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border backdrop-blur-xl ${toast.type === 'success' ? 'bg-emerald-500/90 border-emerald-400 text-white' : 'bg-rose-500/90 border-rose-400 text-white'}`}>
-                {toast.type === 'success' ? <CheckCircle2 size={24} /> : <Info size={24} />}
-                <p className="font-black tracking-wide">{toast.message}</p>
-            </div>
-        </div>
-
       </main>
     </div>
   );
