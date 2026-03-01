@@ -578,7 +578,7 @@ const handleSaveFeaturedBadges = async () => {
         league_matches: collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'),
         external_tournaments: collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'),
         monthly_stars: collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars'),
-        assessments: collection(db, 'artifacts', appId, 'public', 'data', 'assessments') 
+        assessments: collection(db, 'artifacts', appId, 'public', 'data', 'assessments'), 
         tactical_shots: collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots')
       };
 
