@@ -1861,45 +1861,6 @@ const handleSaveFeaturedBadges = async () => {
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
-// 版本 11.8: 修正 playerDashboardData 和 myDashboardData 程式碼合併錯誤
-
-// ========================================================================
-// Hook 1: playerDashboardData (供教練點擊查看任一學生)
-// ========================================================================
-
-    // --- [11.4] 極速戰術板 Modal 元件 ---
-  const handleTacticalClick = async (zone) => {
-      if (!tacticalData.p1) {
-          alert("請至少輸入一位球員的姓名！");
-          return;
-      }
-      
-      const playerName = activePlayer === 1 ? tacticalData.p1 : tacticalData.p2;
-      const opponentName = activePlayer === 1 ? tacticalData.p2 : tacticalData.p1;
-      
-      // 視覺回饋
-      setLastRecorded({ player: playerName, zone: zone });
-      setTimeout(() => setLastRecorded(null), 800);
-
-      // 自動切換到另一個人 (如果有輸入 P2 的話)
-      if (tacticalData.p2) {
-          setActivePlayer(activePlayer === 1 ? 2 : 1);
-      }
-
-      // 非同步寫入資料庫，不卡住畫面
-      try {
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots'), {
-              player: playerName,
-              opponent: opponentName || '未知對手',
-              zone: zone,
-              timestamp: serverTimestamp(),
-              date: new Date().toISOString().split('T')[0]
-          });
-      } catch(e) {
-          console.error("戰術紀錄失敗", e);
-      }
-  };
-
     // --- [11.5] 美化版：極速戰術板 Modal 元件 ---
   const handleTacticalClick = async (zone) => {
       if (!tacticalData.p1) {
