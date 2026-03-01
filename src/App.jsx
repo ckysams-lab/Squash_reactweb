@@ -2771,7 +2771,11 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1594420314182-1a48c4349635?q=80&w=2000&auto=format&fit=crop')" }}>
               <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"></div>
               <div className="relative bg-white/90 backdrop-blur-2xl w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 border border-white/30 animate-in fade-in-50 zoom-in-95 duration-700 ease-out">
-                  <div className="flex justify-center mb-10"><SchoolLogo className="text-white" size={80} /></div>
+                  <div className="flex justify-center mb-10">
+                      <div className="w-20 h-20 bg-blue-100 rounded-2xl flex items-center justify-center shadow-inner">
+                          <ShieldCheck size={48} className="text-blue-600" />
+                      </div>
+                    </div>
                   <h2 className="text-4xl font-black text-center text-slate-800 mb-2">正覺壁球</h2>
                   <p className="text-center text-slate-400 font-bold mb-10">BCKLAS Squash Team System</p>
                   
