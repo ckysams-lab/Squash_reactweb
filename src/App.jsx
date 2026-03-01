@@ -1866,37 +1866,6 @@ const handleSaveFeaturedBadges = async () => {
 // ========================================================================
 // Hook 1: playerDashboardData (供教練點擊查看任一學生)
 // ========================================================================
-  // --- [11.3] 戰術板 Modal 元件 ---
-  const handleTacticalClick = async (zone) => {
-      if (!tacticalData.playerA || !tacticalData.playerB) {
-          alert("請先輸入 A 同學與 B 同學的姓名！");
-          return;
-      }
-      if (tacticalStep === 0) {
-          setCurrentShotA(zone);
-          setTacticalStep(1); // 進入等待 B 回球
-      } else {
-          // 儲存 A 的擊球與 B 的回球
-          setIsUpdating(true);
-          try {
-              await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots'), {
-                  playerA: tacticalData.playerA,
-                  playerB: tacticalData.playerB,
-                  shotA: currentShotA, // A 擊球位置
-                  shotB: zone,         // B 回球落點
-                  timestamp: serverTimestamp(),
-                  date: new Date().toISOString().split('T')[0]
-              });
-              // 重置，準備下一拍
-              setTacticalStep(0);
-              setCurrentShotA(null);
-          } catch(e) {
-              console.error(e);
-              alert("紀錄失敗");
-          }
-          setIsUpdating(false);
-      }
-  };
 
     // --- [11.4] 極速戰術板 Modal 元件 ---
   const handleTacticalClick = async (zone) => {
