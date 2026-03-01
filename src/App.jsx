@@ -360,6 +360,31 @@ const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
   });
 PosterTemplate.displayName = 'PosterTemplate';
 
+ const SchoolLogo = ({ size = 48, className = "", customUrl = null }) => {
+    const [error, setError] = React.useState(false);
+    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    const logoUrl = customUrl || defaultLogoUrl;
+    
+    if (error) {
+      return <ShieldCheck className={`${className}`} size={size} />;
+    }
+    return (
+      <img 
+        src={logoUrl} 
+        alt="BCKLAS Logo" 
+        className={`object-contain ${className}`}
+        style={{ width: size * 2, height: size * 2 }}
+        loading="eager"
+        crossOrigin="anonymous" 
+        onError={(e) => {
+          console.error("Logo load failed", e);
+          setError(true);
+        }}
+      />
+    );
+};
+
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
@@ -1970,34 +1995,6 @@ const myDashboardData = useMemo(() => {
     };
 }, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, students]);
 
-
-
-
-
-
-  const SchoolLogo = ({ size = 48, className = "" }) => {
-    const [error, setError] = useState(false);
-    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
-    if (error) {
-      return <ShieldCheck className={`${className}`} size={size} />;
-    }
-    return (
-      <img 
-        src={logoUrl} 
-        alt="BCKLAS Logo" 
-        className={`object-contain ${className}`}
-        style={{ width: size * 2, height: size * 2 }}
-        loading="eager"
-        crossOrigin="anonymous" 
-        onError={(e) => {
-          console.error("Logo load failed", e);
-          setError(true);
-        }}
-      />
-    );
-  };
-
   const handleAddAward = () => {
   // 重置表單數據
   setNewAwardData({
@@ -2314,7 +2311,7 @@ const myDashboardData = useMemo(() => {
         <div className="relative max-w-md w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
           <div ref={cardRef} className="w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-100 relative">
             <div className="bg-slate-50 border-b p-6 flex justify-between items-center relative">
-              <SchoolLogo size={24} />
+              <SchoolLogo size={24} customUrl={systemConfig?.schoolLogo} />
               <div className="text-center flex-1 z-10">
                 <h3 className="font-black text-slate-800 tracking-widest text-sm">BCKLAS SQUASH TEAM</h3>
               </div>
@@ -2901,7 +2898,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                         animate-in fade-in-50 zoom-in-95 duration-700 ease-out">
             
             <div className="flex justify-center mb-10 animate-in slide-in-from-bottom-8 delay-200 duration-500">
-                <SchoolLogo className="text-white" size={80} />
+                <SchoolLogo className="text-white" size={80} customUrl={systemConfig?.schoolLogo} />
             </div>
 
             <div className="animate-in slide-in-from-bottom-8 delay-300 duration-500">
@@ -2958,7 +2955,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
       >
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
-            <div className="flex items-center justify-center"><SchoolLogo size={32} /></div>
+            <div className="flex items-center justify-center"><SchoolLogo size={32} customUrl={systemConfig?.schoolLogo} /></div>
             <div>
               <h2 className="text-2xl font-black tracking-tighter">正覺壁球</h2>
               <p className="text-[10px] text-slate-300 uppercase tracking-[0.2em] -mt-1">BCKLAS SYSTEM v{CURRENT_VERSION}</p>
