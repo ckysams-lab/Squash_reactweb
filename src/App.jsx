@@ -739,30 +739,42 @@ const handleSaveFeaturedBadges = async () => {
     };
   }, [schedules, competitions, awards]);
 
-  const galleryAlbums = useMemo(() => {
+    const galleryAlbums = useMemo(() => {
     const albums = {};
     const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
+    
+    // 1. 先處理原本 Firebase 裡的照片
     safeGallery.forEach(item => {
       const title = item.title || "未分類";
       if (!albums[title]) {
-        albums[title] = {
-          title,
-          cover: item.url, 
-          count: 0,
-          items: [],
-          type: item.type,
-          lastUpdated: item.timestamp
-        };
+        albums[title] = { title, cover: item.url, count: 0, items: [], type: item.type, lastUpdated: item.timestamp?.seconds || 0 };
       }
       albums[title].count += 1;
       albums[title].items.push(item);
-      if (item.timestamp && albums[title].lastUpdated && item.timestamp > albums[title].lastUpdated) {
+      if (item.timestamp?.seconds && item.timestamp.seconds > albums[title].lastUpdated) {
          albums[title].cover = item.url;
-         albums[title].lastUpdated = item.timestamp;
+         albums[title].lastUpdated = item.timestamp.seconds;
       }
     });
-    return Object.values(albums).sort((a,b) => (b.lastUpdated?.seconds || 0) - (a.lastUpdated?.seconds || 0));
-  }, [galleryItems]);
+
+    // 2. 把 Google Drive 抓下來的相簿加進去
+    const safeDriveAlbums = Array.isArray(driveAlbums) ? driveAlbums : [];
+    safeDriveAlbums.forEach(driveAlbum => {
+      // 如果已經有同名的 Firebase 相簿，Drive 會蓋過去或者獨立成一包，這裡當作獨立的新相簿處理
+      albums[`[Drive] ${driveAlbum.album}`] = {
+         title: driveAlbum.album,
+         cover: driveAlbum.cover,
+         count: driveAlbum.count,
+         items: driveAlbum.photos.map(p => ({ id: p.id, url: p.url, type: 'image', description: p.name })), // 轉換成系統看得懂的格式
+         type: 'image',
+         lastUpdated: Date.now() / 1000, // Drive 抓下來的預設排在最前面
+         isDrive: true // 標記這是 Drive 來的
+      };
+    });
+
+    return Object.values(albums).sort((a,b) => b.lastUpdated - a.lastUpdated);
+  }, [galleryItems, driveAlbums]); // 加上 driveAlbums 作為依賴
+
 
   const BADGE_DATA = {
     "白金章": { color: "text-slate-400", bg: "bg-slate-100", icon: "💎", border: "border-slate-200", shadow: "shadow-slate-100", basePoints: 400, level: 4, desc: "最高榮譽" },
@@ -3721,21 +3733,21 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                     {currentAlbum ? (<button onClick={() => setCurrentAlbum(null)} className="p-4 bg-slate-100 text-slate-500 hover:text-blue-600 rounded-2xl transition-all"><ArrowLeft size={24}/></button>) : (<div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><ImageIcon/></div>)}
                     <div><h3 className="text-xl font-black">{currentAlbum ? currentAlbum : "精彩花絮 (Gallery)"}</h3><p className="text-xs text-slate-400 mt-1">{currentAlbum ? "瀏覽相簿內容" : "回顧訓練與比賽的珍貴時刻"}</p></div>
                   </div>
-                  {role === 'admin' && (<div className="flex items-center gap-3">{isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}<button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50"><PlusCircle size={18}/> 新增相片/影片</button></div>)}
-               </div>
-               {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
-            </div>
-           )}
+                {role === 'admin' && (
+                 <div className="flex items-center gap-3">
+                     {isUploading && <span className="text-xs text-blue-600 animate-pulse font-bold">上傳壓縮中...</span>}
+                     {/* 新增：Google Drive 同步按鈕 */}
+                     <button onClick={syncGoogleDriveGallery} disabled={isSyncingDrive} className="bg-blue-500 text-white px-6 py-4 rounded-2xl flex items-center gap-2 hover:bg-blue-600 shadow-xl shadow-blue-100 transition-all font-black text-sm disabled:opacity-50">
+                         {isSyncingDrive ? <Loader2 className="animate-spin" size={18}/> : <Folder size={18}/>} 
+                         從 Drive 同步
+                     </button>
+                     <button onClick={handleAddMedia} disabled={isUploading} className="bg-orange-500 text-white px-6 py-4 rounded-2xl flex items-center gap-2 cursor-pointer hover:bg-orange-600 shadow-xl shadow-orange-100 transition-all font-black text-sm disabled:opacity-50">
+                         <PlusCircle size={18}/> 新增
+                     </button>
+                 </div>
+               )}
 
-          {role === 'admin' && (
-              <div className="flex items-center gap-3">
-                   <button onClick={syncGoogleDriveGallery} disabled={isSyncingDrive} className="bg-blue-500 text-white px-6 py-4 rounded-2xl flex items-center gap-3 hover:bg-blue-600 shadow-xl transition-all font-black text-sm disabled:opacity-50">
-                      {isSyncingDrive ? <Loader2 className="animate-spin"/> : <Folder/>} 
-                      從 Google Drive 同步相簿
-                  </button>
-                  {/* 原本的新增相片按鈕可以保留或刪除 */}
-              </div>
-          )}
+
 
           {/* AWARDS TAB */}
           {!viewingStudent && activeTab === 'awards' && (
