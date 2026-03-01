@@ -351,7 +351,31 @@ export default function App() {
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
   const [competitions, setCompetitions] = useState([]);
   const [schedules, setSchedules] = useState([]); 
-  const [galleryItems, setGalleryItems] = useState([]); 
+  const [galleryItems, setGalleryItems] = useState([]);
+  const [driveAlbums, setDriveAlbums] = useState([]); // 儲存來自 Google Drive 的相簿
+  const [isSyncingDrive, setIsSyncingDrive] = useState(false);
+    const syncGoogleDriveGallery = async () => {
+      setIsSyncingDrive(true);
+      try {
+          // 👇 把這裡的網址，換成您剛剛在第二階段拿到的 Web App URL 👇
+          const gasUrl = "https://script.google.com/macros/s/AKfycby_ynudWf8U11QIpm5SdVJgFvFoOM4yVZzw_b-VrT5f6t2BnVavzYjdDBUMP3JIg91zfw/exec"; 
+          
+          const response = await fetch(gasUrl);
+          const result = await response.json();
+          
+          if (result.status === 'success') {
+              setDriveAlbums(result.data);
+              alert("✅ 成功從 Google Drive 同步相簿！");
+          } else {
+              alert("同步失敗：" + result.message);
+          }
+      } catch (error) {
+          console.error("Drive sync error:", error);
+          alert("網路錯誤，無法連接 Google Drive");
+      }
+      setIsSyncingDrive(false);
+  };
+
   const [awards, setAwards] = useState([]); 
   const [achievements, setAchievements] = useState([]); 
   const [leagueMatches, setLeagueMatches] = useState([]);
@@ -3702,6 +3726,16 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                {galleryItems.length === 0 ? (<div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center"><div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200 mb-6"><ImageIcon size={40}/></div><p className="text-xl font-black text-slate-400">目前暫無花絮內容</p><p className="text-sm text-slate-300 mt-2">請教練新增精彩相片或影片</p></div>) : (<>{!currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryAlbums.map((album) => (<div key={album.title} onClick={() => setCurrentAlbum(album.title)} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-6">{album.cover ? (album.type === 'video' ? (<div className="w-full h-full flex items-center justify-center bg-slate-900/5 text-slate-300"><Video size={48}/></div>) : (<img src={album.cover} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700" alt="Cover"/>)) : (<div className="w-full h-full flex items-center justify-center bg-slate-50 text-slate-300"><Folder size={48}/></div>)}<div className="absolute bottom-3 right-3 bg-black/50 text-white px-3 py-1 rounded-full text-[10px] font-black backdrop-blur-sm">{album.count} 項目</div></div><div className="px-2 pb-2"><h4 className="font-black text-xl text-slate-800 line-clamp-1 group-hover:text-blue-600 transition-colors">{album.title}</h4><p className="text-xs text-slate-400 mt-1">點擊查看相簿內容 <ChevronRight size={12} className="inline ml-1"/></p></div></div>))}</div>)}{currentAlbum && (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{galleryItems.filter(item => (item.title || "未分類") === currentAlbum).sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)).map(item => (<div key={item.id} className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all"><div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-100 mb-4">{item.type === 'video' ? (getYouTubeEmbedUrl(item.url) ? (<iframe src={getYouTubeEmbedUrl(item.url)} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={item.title}/>) : (<div className="w-full h-full flex items-center justify-center text-slate-400"><Video size={48}/><span className="ml-2 text-xs">影片連結無效</span></div>)) : (<img src={item.url} alt={item.title} onClick={() => setViewingImage(item)} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700 cursor-zoom-in"/>)}<div className="absolute top-3 right-3 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 pointer-events-none">{item.type === 'video' ? <Video size={12}/> : <ImageIcon size={12}/>}{item.type === 'video' ? 'Video' : 'Photo'}</div></div><div className="px-2"><p className="text-xs text-slate-500 font-bold line-clamp-2">{item.description || "沒有描述"}</p></div>{role === 'admin' && (<div className="mt-6 pt-4 border-t border-slate-50 flex justify-end"><button onClick={() => deleteItem('gallery', item.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={18}/></button></div>)}</div>))}</div>)}</>)}
             </div>
            )}
+
+          {role === 'admin' && (
+              <div className="flex items-center gap-3">
+                   <button onClick={syncGoogleDriveGallery} disabled={isSyncingDrive} className="bg-blue-500 text-white px-6 py-4 rounded-2xl flex items-center gap-3 hover:bg-blue-600 shadow-xl transition-all font-black text-sm disabled:opacity-50">
+                      {isSyncingDrive ? <Loader2 className="animate-spin"/> : <Folder/>} 
+                      從 Google Drive 同步相簿
+                  </button>
+                  {/* 原本的新增相片按鈕可以保留或刪除 */}
+              </div>
+          )}
 
           {/* AWARDS TAB */}
           {!viewingStudent && activeTab === 'awards' && (
