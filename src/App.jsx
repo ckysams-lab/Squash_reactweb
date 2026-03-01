@@ -56,33 +56,29 @@ try {
     throw new Error("Firebase config not found. Please set VITE_FIREBASE_CONFIG in your .env.local file or define __firebase_config globally.");
   }
 
-    if (firebaseConfig) {
+  if (firebaseConfig) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
 
     // --- 新增：啟動 Firebase 離線優先快取 (Offline Persistence) ---
-    // 這會讓網頁在沒有網路時依然能讀取舊資料，並在連線後自動同步離線操作。
     try {
         enableIndexedDbPersistence(db, {
-            // 設定快取無限大，確保圖片網址等大資料不會被清掉
             cacheSizeBytes: CACHE_SIZE_UNLIMITED
         }).catch((err) => {
             if (err.code === 'failed-precondition') {
-                // 如果開啟了多個分頁，只有一個分頁能使用離線快取
                 console.warn("離線快取啟動失敗：可能開啟了多個系統分頁。");
             } else if (err.code === 'unimplemented') {
-                // 瀏覽器太舊，不支援（通常只有非常舊的瀏覽器會遇到）
                 console.warn("當前瀏覽器不支援離線快取功能。");
             }
         });
     } catch (e) {
-        // 捕捉開發環境中可能的重複啟動錯誤
         console.warn("IndexedDB 可能已在運作中", e);
     }
     // -----------------------------------------------------------
   } else {
-
+    throw new Error("firebaseConfig object is empty or invalid after parsing.");
+  }
 
 } catch (e) {
   console.error("Firebase Initialization Failed:", e.message);
@@ -93,6 +89,7 @@ try {
      document.body.innerText = "Application failed to load. Please contact the administrator.";
   }
 }
+
 
 // Calendar Localizer
 const localizer = momentLocalizer(moment);
