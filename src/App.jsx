@@ -455,11 +455,11 @@ const handleSaveFeaturedBadges = async () => {
         // 更新當前的 currentUserInfo 狀態，讓畫面能即時反應
         setCurrentUserInfo(prev => ({ ...prev, featuredBadges: selectedFeaturedBadges }));
         
-        alert('✅ 你的勳章展示牆已成功更新！');
+        showToast('勳章展示牆已成功更新！', 'success');
         setShowcaseEditorOpen(false);
     } catch (e) {
         console.error("Failed to save featured badges:", e);
-        alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網絡。`);
+        showToast('儲存失敗，請檢查網路！', 'error');
     }
     setIsUpdating(false);
 };
@@ -479,7 +479,13 @@ const handleSaveFeaturedBadges = async () => {
   const [viewingImage, setViewingImage] = useState(null);
   const [currentAlbum, setCurrentAlbum] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const showToast = (message, type = 'success') => {
+      setToast({ show: true, message, type });
+      setTimeout(() => {
+          setToast(prev => ({ ...prev, show: false }));
+      }, 3000); // 3秒後自動消失
+  };
   const [loginEmail, setLoginEmail] = useState('');
   const [loginClass, setLoginClass] = useState('');
   const [loginClassNo, setLoginClassNo] = useState('');
@@ -700,11 +706,11 @@ const handleSaveFeaturedBadges = async () => {
       });
       
       await batch.commit();
-      alert(`✅ 成功儲存 ${pendingAttendance.length} 筆點名紀錄！`);
+      showToast('成功儲存 ${pendingAttendance.length} 筆點名紀錄！', 'success');
       setPendingAttendance([]);
     } catch (e) {
       console.error("Batch attendance save failed:", e);
-      alert("儲存失敗，請檢查網絡或聯絡管理員。");
+      showToast('儲存失敗，請檢查網路！', 'error');
     }
     setIsUpdating(false);
   };
@@ -847,10 +853,10 @@ const handleSaveFeaturedBadges = async () => {
         }
       });
       await batch.commit();
-      alert(`✅ 成功匯入 ${count} 個校外賽事名稱！`);
+      showToast('成功匯入 ${count} 個校外賽事名稱！', 'success');
     } catch (err) {
       console.error("External tournament import failed:", err);
-      alert('匯入失敗，請確認 CSV 格式 (單欄，第一行為標題)。');
+      showToast('匯入失敗，請確認 CSV 格式 (單欄，第一行為標題)！', 'error');
     }
     setIsUpdating(false);
     e.target.value = null;
@@ -876,13 +882,13 @@ const handleSaveFeaturedBadges = async () => {
         bhVolley: Number(bhVolley) || 0,
         timestamp: serverTimestamp()
       });
-      alert('✅ 綜合能力評估儲存成功！');
+      showToast('綜合能力評估儲存成功！', 'success');
       setNewAssessment({
         studentId: '', date: new Date().toISOString().split('T')[0], situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', fhDrive: '', bhDrive: '', fhVolley: '', bhVolley: '', notes: ''
       });
     } catch (e) {
       console.error("Failed to save assessment", e);
-      alert('儲存失敗，請檢查網絡連線。');
+      showToast('儲存失敗，請檢查網路！', 'error');
     }
     setIsUpdating(false);
   };
@@ -914,11 +920,11 @@ const handleSaveFeaturedBadges = async () => {
           ...newAwardData,
           timestamp: serverTimestamp()
         });
-        alert('🏆 獎項新增成功！');
+        showToast('獎項新增成功！', 'success');
         setShowAddAwardModal(false); // 關閉 Modal
       } catch (e) {
         console.error("Failed to save award:", e);
-        alert('新增失敗，請檢查網絡連線。');
+        showToast('儲存失敗，請檢查網路！', 'error');
       }
       setIsUpdating(false);
     };
@@ -933,7 +939,7 @@ const handleSaveFeaturedBadges = async () => {
 
     const player = students.find(s => s.id === player1Id);
     if (!player) {
-      alert('找不到指定的學生資料！');
+      showToast('找不到指定的學生資料！', 'error');
       return;
     }
 
@@ -958,7 +964,7 @@ const handleSaveFeaturedBadges = async () => {
       
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'), matchData);
       
-      alert('✅ 校外賽記錄已成功儲存！');
+      showToast('校外賽記錄已成功儲存！', 'success');
       setNewExternalMatch({
         tournamentName: '',
         date: new Date().toISOString().split('T')[0],
@@ -971,7 +977,7 @@ const handleSaveFeaturedBadges = async () => {
 
     } catch (e) {
       console.error("Failed to save external match:", e);
-      alert('儲存失敗，請檢查網絡連線。');
+      showToast('儲存失敗，請檢查網路！', 'error');
     }
     setIsUpdating(false);
   };
@@ -1106,10 +1112,10 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(true);
     try {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance'), financeConfig);
-      alert('財務設定已儲存！');
+      showToast('財務設定已儲存！', 'success');
     } catch (e) {
       console.error(e);
-      alert('儲存失敗');
+      showToast('儲存失敗，請檢查網路！', 'error');
     }
     setIsUpdating(false);
   };
@@ -1332,10 +1338,10 @@ const handleSaveFeaturedBadges = async () => {
               description: desc,
               timestamp: serverTimestamp()
            });
-           alert('影片新增成功！');
+          showToast('影片新增成功！', 'success'); 
         } catch (e) {
            console.error(e);
-           alert('新增失敗');
+           showToast('儲存失敗！', 'error');
         }
       }
   };
@@ -1401,8 +1407,8 @@ const handleSaveFeaturedBadges = async () => {
         }
       });
       await batch.commit();
-      alert('訓練班日程匯入成功！');
-    } catch (err) { alert('匯入失敗，請確認 CSV 格式'); }
+      showToast('訓練班日程匯入成功！', 'success');
+    } catch (err) {showToast('匯入失敗，請確認 CSV 格式！', 'error'); 
     setIsUpdating(false);
     e.target.value = null;
   };
@@ -1434,8 +1440,8 @@ const handleSaveFeaturedBadges = async () => {
         }
       });
       await batch.commit();
-      alert('隊員名單更新成功！');
-    } catch (err) { alert('匯入失敗'); }
+      showToast('隊員名單更新成功！', 'success');
+    } catch (err) { showToast('匯入失敗！', 'error');}
     setIsUpdating(false);
     e.target.value = null;
   };
@@ -1645,10 +1651,10 @@ const handleSaveFeaturedBadges = async () => {
                 });
                 
                 await batch.commit();
-                alert("✅ 賽果已成功儲存並更新積分！");
+                showToast('賽果已成功儲存並更新積分！', 'success');
             } catch (e) {
                 console.error("Update match score failed", e);
-                alert("儲存失敗，請檢查網絡連線。");
+                showToast('儲存失敗，請檢查網路！', 'error');
             }
             setIsUpdating(false);
         }
@@ -2730,16 +2736,30 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
     );
   };
 
-  if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
-      <div className="mb-8 animate-pulse">
-        <SchoolLogo size={96} />
-      </div>
-      <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
-      <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
-      <p className="text-xs text-slate-300 mt-2 font-mono">v{CURRENT_VERSION}</p>
+    if (loading) return (
+    <div className="min-h-screen flex font-sans overflow-hidden bg-slate-50">
+      {/* 側邊欄骨架 */}
+      <aside className="w-80 border-r bg-white p-10 flex flex-col gap-6">
+        <div className="flex items-center gap-4 mb-10">
+           <div className="w-16 h-16 bg-slate-200 rounded-full animate-pulse"></div>
+           <div className="space-y-2"><div className="w-24 h-6 bg-slate-200 rounded-md animate-pulse"></div><div className="w-16 h-3 bg-slate-100 rounded-md animate-pulse"></div></div>
+        </div>
+        {[1,2,3,4,5,6].map(i => <div key={i} className="w-full h-14 bg-slate-100 rounded-2xl animate-pulse"></div>)}
+      </aside>
+      {/* 主內容骨架 */}
+      <main className="flex-1 p-10">
+        <header className="flex justify-between items-center mb-10">
+            <div className="space-y-3"><div className="w-64 h-10 bg-slate-200 rounded-xl animate-pulse"></div><div className="w-40 h-4 bg-slate-100 rounded-md animate-pulse"></div></div>
+            <div className="w-32 h-10 bg-slate-200 rounded-xl animate-pulse"></div>
+        </header>
+        <div className="grid grid-cols-4 gap-6 mb-10">
+            {[1,2,3,4].map(i => <div key={i} className="w-full h-40 bg-white border border-slate-100 rounded-[3rem] shadow-sm animate-pulse flex flex-col items-center justify-center gap-4"><div className="w-12 h-12 bg-slate-100 rounded-full"></div><div className="w-16 h-6 bg-slate-100 rounded-md"></div></div>)}
+        </div>
+        <div className="w-full h-96 bg-white border border-slate-100 rounded-[4rem] shadow-sm animate-pulse"></div>
+      </main>
     </div>
   );
+
 
   return (
     <div className="min-h-screen flex font-sans overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-text-primary)' }}>
@@ -4222,6 +4242,18 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
           )}
           
         </div>
+              {/* --- 新增：全局 Toast 提示畫面 --- */}
+        <div className={`fixed bottom-10 right-10 z-[500] transition-all duration-500 transform ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
+            <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border backdrop-blur-xl ${toast.type === 'success' ? 'bg-emerald-500/90 border-emerald-400 text-white' : 'bg-rose-500/90 border-rose-400 text-white'}`}>
+                {toast.type === 'success' ? <CheckCircle2 size={24} /> : <Info size={24} />}
+                <p className="font-black tracking-wide">{toast.message}</p>
+            </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
       </main>
     </div>
   );
