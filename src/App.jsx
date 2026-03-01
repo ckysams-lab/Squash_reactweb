@@ -36,7 +36,7 @@ import {
 } from 'recharts';
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "11.2";
+const CURRENT_VERSION = "12.0";
 
 // --- Firebase 初始化 ---
 let firebaseConfig;
@@ -578,7 +578,8 @@ const handleSaveFeaturedBadges = async () => {
         league_matches: collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'),
         external_tournaments: collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'),
         monthly_stars: collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars'),
-        assessments: collection(db, 'artifacts', appId, 'public', 'data', 'assessments') // <-- 在此新增
+        assessments: collection(db, 'artifacts', appId, 'public', 'data', 'assessments') 
+        tactical_shots: collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots')
       };
 
 
@@ -609,7 +610,11 @@ const handleSaveFeaturedBadges = async () => {
             listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => { 
         setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }));
-
+// [11.3] 新增戰術數據監聽
+      listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
+        setTacticalShots(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }));
+    
       return () => listeners.forEach(unsub => unsub());
 
     } catch (e) {
@@ -1858,6 +1863,89 @@ const handleSaveFeaturedBadges = async () => {
 // ========================================================================
 // Hook 1: playerDashboardData (供教練點擊查看任一學生)
 // ========================================================================
+  // --- [11.3] 戰術板 Modal 元件 ---
+  const handleTacticalClick = async (zone) => {
+      if (!tacticalData.playerA || !tacticalData.playerB) {
+          alert("請先輸入 A 同學與 B 同學的姓名！");
+          return;
+      }
+      if (tacticalStep === 0) {
+          setCurrentShotA(zone);
+          setTacticalStep(1); // 進入等待 B 回球
+      } else {
+          // 儲存 A 的擊球與 B 的回球
+          setIsUpdating(true);
+          try {
+              await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots'), {
+                  playerA: tacticalData.playerA,
+                  playerB: tacticalData.playerB,
+                  shotA: currentShotA, // A 擊球位置
+                  shotB: zone,         // B 回球落點
+                  timestamp: serverTimestamp(),
+                  date: new Date().toISOString().split('T')[0]
+              });
+              // 重置，準備下一拍
+              setTacticalStep(0);
+              setCurrentShotA(null);
+          } catch(e) {
+              console.error(e);
+              alert("紀錄失敗");
+          }
+          setIsUpdating(false);
+      }
+  };
+
+  const TacticalBoardModal = () => {
+      const zones = [
+          { id: 'Front-Left', label: '前左' }, { id: 'Front-Center', label: '前中' }, { id: 'Front-Right', label: '前右' },
+          { id: 'Mid-Left', label: '中左' }, { id: 'T-Zone', label: 'T字位' }, { id: 'Mid-Right', label: '中右' },
+          { id: 'Back-Left', label: '後左' }, { id: 'Back-Center', label: '後中' }, { id: 'Back-Right', label: '後右' }
+      ];
+
+      return (
+          <div className="fixed inset-0 z-[500] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowTacticalBoard(false)}>
+              <div className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => setShowTacticalBoard(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500"><X size={24}/></button>
+                  <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-2"><Target className="text-blue-600"/> 即時戰術紀錄板</h3>
+                  
+                  <div className="flex gap-4 mb-6">
+                      <div className="flex-1">
+                          <label className="text-xs font-bold text-slate-500">A 同學 (先擊球)</label>
+                          <input type="text" value={tacticalData.playerA} onChange={e => setTacticalData({...tacticalData, playerA: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl p-2 mt-1 focus:border-blue-500 outline-none font-bold" placeholder="輸入姓名"/>
+                      </div>
+                      <div className="flex-1">
+                          <label className="text-xs font-bold text-slate-500">B 同學 (後回球)</label>
+                          <input type="text" value={tacticalData.playerB} onChange={e => setTacticalData({...tacticalData, playerB: e.target.value})} className="w-full border-2 border-slate-200 rounded-xl p-2 mt-1 focus:border-rose-500 outline-none font-bold" placeholder="輸入姓名"/>
+                      </div>
+                  </div>
+
+                  <div className={`p-4 rounded-xl mb-6 text-center font-black text-lg transition-all ${tacticalStep === 0 ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'}`}>
+                      {tacticalStep === 0 ? `👉 請點擊【${tacticalData.playerA || 'A同學'}】的擊球位置` : `🎯 請點擊【${tacticalData.playerB || 'B同學'}】的回球落點`}
+                  </div>
+
+                  {/* 壁球場 9 宮格 */}
+                  <div className="grid grid-cols-3 gap-2 aspect-[3/4] bg-slate-100 p-2 rounded-xl border-4 border-slate-300 relative">
+                      {/* 前牆標示 */}
+                      <div className="absolute -top-6 left-0 right-0 text-center text-xs font-black text-slate-400 tracking-widest">FRONT WALL (前牆)</div>
+                      
+                      {zones.map(zone => (
+                          <button 
+                              key={zone.id}
+                              onClick={() => handleTacticalClick(zone.id)}
+                              className={`rounded-lg border-2 font-black transition-all flex items-center justify-center
+                                  ${zone.id === 'T-Zone' ? 'border-red-300 bg-red-50 text-red-500' : 'border-slate-200 bg-white text-slate-400 hover:bg-blue-50 hover:border-blue-300'}
+                                  ${currentShotA === zone.id ? 'ring-4 ring-blue-400 bg-blue-100' : ''}
+                              `}
+                          >
+                              {zone.label}
+                          </button>
+                      ))}
+                  </div>
+              </div>
+          </div>
+      );
+  };
+
 const playerDashboardData = useMemo(() => {
     const targetStudentInfo = viewingStudent || (role === 'student' ? currentUserInfo : null);
     if (!targetStudentInfo) return null;
@@ -3925,9 +4013,17 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
           {!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
               <div className="space-y-10 animate-in fade-in duration-500 font-bold">
                   <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
+                                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
                           <div>
-                              <h3 className="text-4xl font-black mb-2">🗓️ 聯賽專區</h3>
+                              <div className="flex items-center gap-4 mb-2">
+                                <h3 className="text-4xl font-black">🗓️ 聯賽專區</h3>
+                                {/* [11.3] 新增戰術板按鈕 */}
+                                {role === 'admin' && (
+                                    <button onClick={() => setShowTacticalBoard(true)} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl shadow-md hover:bg-indigo-700 font-bold text-sm">
+                                        <Target size={16}/> 開啟即時戰術板
+                                    </button>
+                                )}
+                              </div>
                               <p className="text-slate-400">查看賽程、賽果及歷史賽事</p>
                           </div>
                            <div className="flex w-full md:w-auto items-center gap-3">
