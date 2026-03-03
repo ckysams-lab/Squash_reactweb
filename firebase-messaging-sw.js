@@ -4,10 +4,10 @@ importScripts('https://www.gstatic.com/firebasejs/9.x.x/firebase-messaging-compa
 
 // 貼上您的 Firebase Config (請從專案設定中獲取)
 firebase.initializeApp({
-  apiKey: "YOUR_API_KEY",
-  projectId: "YOUR_PROJECT_ID",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAYm_63S9pKMZ51Qb2ZlCHRsfuGzy2gstw",
+  projectId: "squashreact",
+  messagingSenderId: "342733564194",
+  appId: "1:342733564194:web:7345d90d7d22c0b605dd7b"
 });
 
 const messaging = firebase.messaging();
