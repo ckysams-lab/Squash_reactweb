@@ -1,14 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { VitePWA } from 'vite-plugin-pwa' // 👉 新增這行引入 PWA 套件
+// import { VitePWA } from 'vite-plugin-pwa' // 
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    // 👉 新增 PWA 設定區塊
+    
+    /*
     VitePWA({
       registerType: 'autoUpdate', // 只要有新版本發佈，會在背景自動更新
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'], // 預先快取的靜態資源
