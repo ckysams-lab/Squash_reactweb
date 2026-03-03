@@ -4782,16 +4782,8 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                                                               {match.status === 'scheduled' && match.matchType !== 'external' && (
                                                                   <>
                                                                     {/* 👉 將這場賽事送入轉播台 */}
-                                                                    <button 
-                                                                        onClick={() => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }} 
-                                                                        className="p-3 bg-red-50 text-red-600 rounded-xl border hover:bg-red-500 hover:text-white transition-all animate-pulse" 
-                                                                        title="啟動即時轉播"
-                                                                    >
-                                                                        <PlayCircle size={16}/>
-                                                                    </button>
-
+                                                                    <button onClick={() => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }} className="p-3 bg-red-50 text-red-600 rounded-xl border hover:bg-red-500 hover:text-white transition-all animate-pulse" title="啟動即時轉播"><PlayCircle size={16}/></button>
                                                                     <button onClick={() => { setActiveTacticalMatch(match); setShowTacticalBoard(true); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl border hover:bg-indigo-600 hover:text-white transition-all" title="記錄戰術落點"><Target size={16}/></button>
-        
                                                                     <button onClick={() => handleUpdateLeagueMatchScore(match)} className="p-3 bg-white text-blue-600 rounded-xl border hover:bg-blue-600 hover:text-white transition-all" title="輸入比分"><FileText size={16}/></button>
                                                                     <button onClick={() => handleEditLeagueMatch(match)} className="p-3 bg-white text-gray-600 rounded-xl border hover:bg-gray-600 hover:text-white transition-all" title="編輯比賽"><Pencil size={16}/></button>
                                                                 </>
@@ -4799,7 +4791,6 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                                                                     
                                                                     <button onClick={() => handleUpdateLeagueMatchScore(match)} className="p-3 bg-white text-blue-600 rounded-xl border hover:bg-blue-600 hover:text-white transition-all" title="輸入比分"><FileText size={16}/></button>
                                                                     <button onClick={() => handleEditLeagueMatch(match)} className="p-3 bg-white text-gray-600 rounded-xl border hover:bg-gray-600 hover:text-white transition-all" title="編輯比賽"><Pencil size={16}/></button>
-                                                                  </>
                                                               )}
                                                               <button onClick={() => deleteItem('league_matches', match.id)} className="p-3 bg-white text-red-500 rounded-xl border hover:bg-red-600 hover:text-white transition-all" title="刪除比賽"><Trash2 size={16}/></button>
                                                           </div>
