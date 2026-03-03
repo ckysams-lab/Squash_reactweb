@@ -4779,16 +4779,30 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                                                     {role === 'admin' && (
                                                       <td className="px-4 py-5 text-center whitespace-nowrap">
                                                           <div className="flex justify-center gap-2">
+                                                              
+                                                              {/* 待開賽的按鈕 */}
                                                               {match.status === 'scheduled' && match.matchType !== 'external' && (
                                                                   <>
-                                                                    {/* 👉 將這場賽事送入轉播台 */}
                                                                     <button onClick={() => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }} className="p-3 bg-red-50 text-red-600 rounded-xl border hover:bg-red-500 hover:text-white transition-all animate-pulse" title="啟動即時轉播"><PlayCircle size={16}/></button>
                                                                     <button onClick={() => { setActiveTacticalMatch(match); setShowTacticalBoard(true); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl border hover:bg-indigo-600 hover:text-white transition-all" title="記錄戰術落點"><Target size={16}/></button>
                                                                     <button onClick={() => handleUpdateLeagueMatchScore(match)} className="p-3 bg-white text-blue-600 rounded-xl border hover:bg-blue-600 hover:text-white transition-all" title="輸入比分"><FileText size={16}/></button>
                                                                     <button onClick={() => handleEditLeagueMatch(match)} className="p-3 bg-white text-gray-600 rounded-xl border hover:bg-gray-600 hover:text-white transition-all" title="編輯比賽"><Pencil size={16}/></button>
                                                                 </>
-                                                            )}
-                                                                    <button onClick={() => deleteItem('league_matches', match.id)} className="p-3 bg-white text-red-500 rounded-xl border hover:bg-red-600 hover:text-white transition-all" title="刪除比賽"><Trash2 size={16}/></button>
+                                                              )}
+                                                    
+                                                              {/* 👉 新增：已完賽的比賽，顯示賽後報告按鈕 */}
+                                                              {match.status === 'completed' && match.matchType !== 'external' && (
+                                                                  <button 
+                                                                      onClick={() => setViewingMatchReport(match)} 
+                                                                      className="p-3 bg-blue-50 text-blue-600 rounded-xl border border-blue-200 hover:bg-blue-600 hover:text-white transition-all" 
+                                                                      title="查看賽後數據報告"
+                                                                  >
+                                                                      <FileBarChart size={16}/>
+                                                                  </button>
+                                                              )}
+                                                    
+                                                              {/* 刪除比賽按鈕 */}
+                                                              <button onClick={() => deleteItem('league_matches', match.id)} className="p-3 bg-white text-red-500 rounded-xl border hover:bg-red-600 hover:text-white transition-all" title="刪除比賽"><Trash2 size={16}/></button>
                                                           </div>
                                                       </td>
                                                     )}
@@ -4803,18 +4817,6 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                   </div>
               </div>
            )}
-
-          {/* 👉 新增：已完賽的比賽，顯示賽後報告按鈕 */}
-          {match.status === 'completed' && match.matchType !== 'external' && (
-              <button 
-                  onClick={() => setViewingMatchReport(match)} 
-                  className="p-3 bg-blue-50 text-blue-600 rounded-xl border border-blue-200 hover:bg-blue-600 hover:text-white transition-all mr-2" 
-                  title="查看賽後數據報告"
-              >
-                  <FileBarChart size={16}/>
-              </button>
-          )}
-
           
           {/* EXTERNAL MATCHES TAB */}
           {!viewingStudent && activeTab === 'externalMatches' && role === 'admin' && (
