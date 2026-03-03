@@ -985,40 +985,7 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(false);
   };
 
-  // 👉 貼在這裡：請求推播通知並儲存 Token
-  const requestNotificationPermission = async (studentData) => {
-    // 確保 app 已經初始化，且有找到學生資料才執行
-    if (!app || !studentData || !studentData.id) return;
-
-    try {
-      const messaging = getMessaging(app);
-      // 請求瀏覽器通知權限
-      const permission = await Notification.requestPermission();
-      
-      if (permission === 'granted') {
-        // 替換成您在 Firebase 後台拿到的 VAPID Key
-        const currentToken = await getToken(messaging, { 
-            vapidKey: '在此貼上您的_VAPID_KEY' 
-        });
-        
-        if (currentToken) {
-          // 將 Token 寫入該名學生的 Firestore 資料中
-          const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', studentData.id);
-          await updateDoc(userRef, {
-            fcmToken: currentToken,
-            lastTokenUpdate: serverTimestamp() // 記錄最後更新時間
-          });
-          console.log("✅ 推播通知設定成功！Token已儲存。");
-        }
-      } else {
-        console.log("🚫 使用者拒絕了推播通知。");
-      }
-    } catch (error) {
-      console.error("⚠️ 無法獲取推播 Token:", error);
-    }
-  };
-
-  // 👉 貼在這裡：請求推播通知並儲存 Token
+    // 👉 貼在這裡：請求推播通知並儲存 Token
   const requestNotificationPermission = async (studentData) => {
     // 確保 app 已經初始化，且有找到學生資料才執行
     if (!app || !studentData || !studentData.id) return;
