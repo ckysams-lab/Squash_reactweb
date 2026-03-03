@@ -4788,11 +4788,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                                                                     <button onClick={() => handleEditLeagueMatch(match)} className="p-3 bg-white text-gray-600 rounded-xl border hover:bg-gray-600 hover:text-white transition-all" title="編輯比賽"><Pencil size={16}/></button>
                                                                 </>
                                                             )}
-                                                                    
-                                                                    <button onClick={() => handleUpdateLeagueMatchScore(match)} className="p-3 bg-white text-blue-600 rounded-xl border hover:bg-blue-600 hover:text-white transition-all" title="輸入比分"><FileText size={16}/></button>
-                                                                    <button onClick={() => handleEditLeagueMatch(match)} className="p-3 bg-white text-gray-600 rounded-xl border hover:bg-gray-600 hover:text-white transition-all" title="編輯比賽"><Pencil size={16}/></button>
-                                                              )}
-                                                              <button onClick={() => deleteItem('league_matches', match.id)} className="p-3 bg-white text-red-500 rounded-xl border hover:bg-red-600 hover:text-white transition-all" title="刪除比賽"><Trash2 size={16}/></button>
+                                                                    <button onClick={() => deleteItem('league_matches', match.id)} className="p-3 bg-white text-red-500 rounded-xl border hover:bg-red-600 hover:text-white transition-all" title="刪除比賽"><Trash2 size={16}/></button>
                                                           </div>
                                                       </td>
                                                     )}
