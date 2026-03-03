@@ -18,14 +18,15 @@ import {
   addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where,
   enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED
 } from 'firebase/firestore';
+import { initializeApp, deleteApp } from 'firebase/app'; // 記得要有 deleteApp
 import { 
   getAuth, 
-  signInWithCustomToken, 
-  signInAnonymously, 
   signInWithEmailAndPassword, 
   signOut,
-  onAuthStateChanged 
+  onAuthStateChanged,
+  createUserWithEmailAndPassword // 新增這個用來創建帳號
 } from 'firebase/auth';
+
 import { getMessaging, getToken } from 'firebase/messaging'; // 👉 新增這行
 import html2canvas from 'html2canvas';
 import QRCode from 'qrcode.react';
@@ -940,6 +941,48 @@ const handleSaveFeaturedBadges = async () => {
     }
   };
 
+    const handleSetupStudentAuth = async (student) => {
+    // 1. 彈出視窗讓教練直接輸入密碼
+    const password = prompt(`請為 ${student.name} 設定登入密碼 (最少 6 位數):`);
+    if (!password || password.length < 6) {
+        alert("密碼無效或太短 (Firebase 規定最少 6 位數)！已取消操作。");
+        return;
+    }
+
+    // 2. 自動組合專屬信箱格式：班別+班號@bcklas.squash (例如 6a01@bcklas.squash)
+    const studentAuthEmail = `${student.class.toLowerCase().trim()}${student.classNo.trim()}@bcklas.squash`;
+
+    setIsUpdating(true);
+    try {
+        // 3. 【核心技巧】建立一個「暫時的」Firebase實例，避免教練被強制登出
+        const tempApp = initializeApp(firebaseConfig, "TempApp");
+        const tempAuth = getAuth(tempApp);
+
+        // 4. 在暫時的實例中建立學生帳號
+        await createUserWithEmailAndPassword(tempAuth, studentAuthEmail, password);
+
+        // 5. 更新 Firestore 中的學生資料，綁定 authEmail 作為紀錄
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
+            authEmail: studentAuthEmail,
+            lastUpdated: serverTimestamp()
+        });
+
+        // 6. 刪除暫時的實例，釋放系統資源
+        await deleteApp(tempApp);
+
+        alert(`✅ 成功為 ${student.name} 建立登入帳號！\n\n請通知學生：\n登入班別：${student.class}\n登入學號：${student.classNo}\n登入密碼：${password}`);
+    } catch (error) {
+        console.error("建立學生帳號失敗:", error);
+        if (error.code === 'auth/email-already-in-use') {
+            alert(`建立失敗：這個帳號 (${studentAuthEmail}) 已經被註冊過了！\n如需重設密碼，目前仍需透過 Firebase 後台操作。`);
+        } else {
+            alert(`建立帳號發生錯誤: ${error.message}`);
+        }
+    }
+    setIsUpdating(false);
+  };
+
+  
   const handleLogin = async (type) => {
     if (type === 'admin') {
       if (!loginEmail || !loginPassword) {
