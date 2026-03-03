@@ -361,91 +361,6 @@ const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
   });
 PosterTemplate.displayName = 'PosterTemplate';
 
-// ==========================================
-// 📺 2. 學生/家長端：公開即時大螢幕顯示板 (支援勝負特效)
-// ==========================================
-const LiveScoreboardDisplay = ({ liveMatches, TrophyIcon }) => {
-    if (!liveMatches || !Array.isArray(liveMatches)) return null;
-    const activeMatches = liveMatches.filter(m => m.status === 'live');
-    if (activeMatches.length === 0) return null;
-
-    return (
-        <div className="mb-10 animate-in fade-in slide-in-from-top-4 duration-700">
-            <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-4">
-                <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>
-                即時比分轉播 (LIVE)
-            </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {activeMatches.map(match => {
-                    const isFinished = match.matchWinner !== null;
-                    const gamesNeeded = match.bestOf === 3 ? 2 : 3;
-
-                    return (
-                    <div key={match.id} className={`bg-slate-900 rounded-[2.5rem] p-6 shadow-2xl border-4 relative overflow-hidden flex flex-col justify-center transition-all duration-1000 ${isFinished ? 'border-yellow-500 scale-[1.02]' : 'border-slate-800'}`}>
-                        {!isFinished && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-1 bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)]"></div>}
-                        <div className="absolute top-4 left-4 bg-slate-800 text-slate-400 text-[9px] font-black px-2 py-1 rounded border border-slate-700 tracking-widest">
-                            {match.format} 分制 / {match.bestOf} 局勝
-                        </div>
-                        {isFinished && (
-                            <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-0 overflow-hidden">
-                                <div className="w-[150%] h-[150%] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-yellow-500/20 via-slate-900/0 to-transparent animate-spin-slow"></div>
-                            </div>
-                        )}
-
-                        <div className="flex justify-between items-center text-white relative z-10 mt-6">
-                            <div className="flex-1 text-center relative">
-                                {match.matchWinner === 1 && TrophyIcon && <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce"><TrophyIcon size={32} fill="currentColor"/></div>}
-                                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Player 1</p>
-                                <h4 className={`text-2xl md:text-3xl font-black truncate px-2 mb-4 ${match.matchWinner === 1 ? 'text-yellow-400' : ''}`}>{match.player1}</h4>
-                                <div className="flex justify-center items-end gap-2">
-                                    <span className={`text-lg font-bold px-3 py-1 rounded-lg border ${match.games1 === gamesNeeded ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50' : 'bg-slate-800 text-slate-500 border-slate-700'}`}>局 {match.games1}</span>
-                                    <span className={`text-6xl md:text-8xl font-mono font-black transition-all ${match.server === 1 && !isFinished ? 'text-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)] scale-110' : 'text-slate-100'}`}>
-                                        {match.score1}
-                                    </span>
-                                </div>
-                                <div className="h-8 mt-6">
-                                    {match.server === 1 && !isFinished && (
-                                        <div className="inline-flex items-center gap-2 bg-yellow-400/20 border border-yellow-400/50 text-yellow-400 px-4 py-1.5 rounded-full animate-bounce">
-                                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,1)]"></div>
-                                            <span className="text-xs font-black tracking-widest">{match.serveSide === 'L' ? '左區發球 (L)' : '右區發球 (R)'}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            
-                            <div className="w-px h-32 bg-slate-700/50 mx-4 relative shrink-0">
-                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 text-slate-500 text-xs font-black px-2 py-1 rounded-full border border-slate-700">VS</div>
-                            </div>
-
-                            <div className="flex-1 text-center relative">
-                                {match.matchWinner === 2 && TrophyIcon && <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-yellow-400 animate-bounce"><TrophyIcon size={32} fill="currentColor"/></div>}
-                                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Player 2</p>
-                                <h4 className={`text-2xl md:text-3xl font-black truncate px-2 mb-4 ${match.matchWinner === 2 ? 'text-yellow-400' : ''}`}>{match.player2}</h4>
-                                <div className="flex justify-center items-end gap-2 flex-row-reverse">
-                                    <span className={`text-lg font-bold px-3 py-1 rounded-lg border ${match.games2 === gamesNeeded ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50' : 'bg-slate-800 text-slate-500 border-slate-700'}`}>局 {match.games2}</span>
-                                    <span className={`text-6xl md:text-8xl font-mono font-black transition-all ${match.server === 2 && !isFinished ? 'text-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)] scale-110' : 'text-slate-100'}`}>
-                                        {match.score2}
-                                    </span>
-                                </div>
-                                <div className="h-8 mt-6">
-                                    {match.server === 2 && !isFinished && (
-                                        <div className="inline-flex items-center gap-2 bg-yellow-400/20 border border-yellow-400/50 text-yellow-400 px-4 py-1.5 rounded-full animate-bounce">
-                                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,1)]"></div>
-                                            <span className="text-xs font-black tracking-widest">{match.serveSide === 'L' ? '左區發球 (L)' : '右區發球 (R)'}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )})}
-            </div>
-        </div>
-    );
-};
-
-
 export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
@@ -453,9 +368,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [students, setStudents] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
-  // 尋找您原本的 useState，加入這兩行：
-  const [activeTacticalMatch, setActiveTacticalMatch] = useState(null); // 紀錄正在畫戰術板的比賽
-  const [viewingMatchReport, setViewingMatchReport] = useState(null);   // 紀錄正在看哪場比賽的賽後報告
   const [competitions, setCompetitions] = useState([]);
   const [schedules, setSchedules] = useState([]); 
   const [liveMatches, setLiveMatches] = useState([]);
@@ -2026,206 +1938,89 @@ const handleSaveFeaturedBadges = async () => {
       }
   };
 
-  // ==========================================
-// 🎯 升級版：實戰落點戰術板 (支援綁定特定賽事)
-// ==========================================
-const TacticalBoardModal = ({ match, onClose }) => {
-    // 如果有傳入特定比賽，自動帶入雙方名字
-    const [tacticalData, setTacticalData] = useState({ 
-        p1: match ? match.player1Name : '', 
-        p2: match ? match.player2Name : '' 
-    });
-    const [activePlayer, setActivePlayer] = useState(1);
-    const [lastRecorded, setLastRecorded] = useState(null);
+  const TacticalBoardModal = () => {
+      const zones = [
+          { id: 'Front-Left', label: '前左' }, { id: 'Front-Center', label: '前中' }, { id: 'Front-Right', label: '前右' },
+          { id: 'Mid-Left', label: '中左' }, { id: 'T-Zone', label: 'T字位' }, { id: 'Mid-Right', label: '中右' },
+          { id: 'Back-Left', label: '後左' }, { id: 'Back-Center', label: '後中' }, { id: 'Back-Right', label: '後右' }
+      ];
 
-    const zones = [
-        { id: 'Front-Left', label: '前左' }, { id: 'Front-Center', label: '前中' }, { id: 'Front-Right', label: '前右' },
-        { id: 'Mid-Left', label: '中左' }, { id: 'T-Zone', label: 'T字位' }, { id: 'Mid-Right', label: '中右' },
-        { id: 'Back-Left', label: '後左' }, { id: 'Back-Center', label: '後中' }, { id: 'Back-Right', label: '後右' }
-    ];
+      return (
+          <div className="fixed inset-0 z-[500] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowTacticalBoard(false)}>
+              <div className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl relative border-4 border-slate-100" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => setShowTacticalBoard(false)} className="absolute top-6 right-6 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all z-50"><X size={20}/></button>
+                  
+                  <div className="text-center mb-6 pr-10">
+                      <h3 className="text-2xl font-black text-slate-800 flex items-center justify-center gap-2"><Target className="text-blue-600"/> 實戰落點紀錄</h3>
+                      <p className="text-xs text-slate-400 mt-1 font-bold">點擊球場區域，系統將自動記錄並切換擊球方</p>
+                  </div>
+                  
+                  {/* 球員對戰面板 */}
+                  <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-2xl border border-slate-100 shadow-inner">
+                      <div 
+                          className={`flex-1 p-3 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden ${activePlayer === 1 ? 'border-blue-500 bg-white shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                          onClick={() => setActivePlayer(1)}
+                      >
+                          {activePlayer === 1 && <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>}
+                          <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest block mb-0.5">藍方 (先發)</label>
+                          <input type="text" value={tacticalData.p1} onChange={e => setTacticalData({...tacticalData, p1: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none placeholder:text-slate-300" placeholder="輸入我方"/>
+                      </div>
+                      <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-400 text-xs shadow-inner italic">VS</div>
+                      <div 
+                          className={`flex-1 p-3 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden ${activePlayer === 2 ? 'border-rose-500 bg-white shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                          onClick={() => setActivePlayer(2)}
+                      >
+                          {activePlayer === 2 && <div className="absolute top-0 right-0 w-1 h-full bg-rose-500"></div>}
+                          <label className="text-[9px] font-black text-rose-500 uppercase tracking-widest block mb-0.5 text-right">紅方 (對手)</label>
+                          <input type="text" value={tacticalData.p2} onChange={e => setTacticalData({...tacticalData, p2: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none text-right placeholder:text-slate-300" placeholder="輸入對手"/>
+                      </div>
+                  </div>
 
-    const handleTacticalClick = async (zone) => {
-        if (!tacticalData.p1) return alert("請至少輸入一位我方球員的姓名！");
-        
-        const playerName = activePlayer === 1 ? tacticalData.p1 : tacticalData.p2;
-        const opponentName = activePlayer === 1 ? tacticalData.p2 : tacticalData.p1;
-        
-        setLastRecorded({ player: playerName, zone: zone });
-        setTimeout(() => setLastRecorded(null), 800);
-        if (tacticalData.p2) setActivePlayer(activePlayer === 1 ? 2 : 1);
+                  <div className="text-center mb-4 h-6 flex items-center justify-center">
+                      {lastRecorded ? (
+                          <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
+                              🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
+                          </span>
+                      ) : (
+                          <span className={`text-sm font-black px-4 py-1 rounded-full animate-pulse ${activePlayer === 1 ? 'text-blue-600 bg-blue-50' : 'text-rose-600 bg-rose-50'}`}>
+                              等待【{activePlayer === 1 ? (tacticalData.p1 || '藍方') : (tacticalData.p2 || '紅方')}】擊球...
+                          </span>
+                      )}
+                  </div>
 
-        try {
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots'), {
-                player: playerName,
-                opponent: opponentName || '未知對手',
-                zone: zone,
-                leagueMatchId: match ? match.id : null, // 👉 核心：將這顆球綁定到特定比賽
-                timestamp: serverTimestamp(),
-                date: new Date().toISOString().split('T')[0]
-            });
-        } catch(e) { console.error("戰術紀錄失敗", e); }
-    };
+                  {/* 擬真壁球場 9 宮格 */}
+                  <div className="relative w-full aspect-[3/4] bg-[#fdf5e6] border-[6px] border-slate-800 rounded-t-sm rounded-b-sm overflow-hidden shadow-inner">
+                      {/* 球場紅線裝飾 (純視覺) */}
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-red-500/80"></div> {/* Tin line */}
+                      <div className="absolute top-[55%] left-0 right-0 border-t-[3px] border-red-500/50"></div> {/* Short line */}
+                      <div className="absolute top-[55%] bottom-0 left-1/2 -translate-x-1/2 border-l-[3px] border-red-500/50"></div> {/* Half court line */}
+                      <div className="absolute top-[55%] left-0 w-[30%] aspect-square border-[3px] border-l-0 border-red-500/50"></div> {/* Left Service Box */}
+                      <div className="absolute top-[55%] right-0 w-[30%] aspect-square border-[3px] border-r-0 border-red-500/50"></div> {/* Right Service Box */}
+                      
+                      {/* 前牆標示 */}
+                      <div className="absolute top-2 left-0 right-0 text-center text-[10px] font-black text-red-800/40 tracking-[0.3em] pointer-events-none z-10">FRONT WALL</div>
 
-    return (
-        <div className="fixed inset-0 z-[500] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
-            <div className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl relative border-4 border-slate-100" onClick={(e) => e.stopPropagation()}>
-                <button onClick={onClose} className="absolute top-6 right-6 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 transition-all z-50"><X size={20}/></button>
-                
-                <div className="text-center mb-6 pr-10">
-                    <h3 className="text-2xl font-black text-slate-800 flex items-center justify-center gap-2"><Target className="text-blue-600"/> 實戰落點紀錄</h3>
-                    {match ? (
-                        <p className="text-xs text-blue-500 mt-1 font-bold bg-blue-50 inline-block px-3 py-1 rounded-full">🔗 已綁定賽事：{match.player1Name} vs {match.player2Name}</p>
-                    ) : (
-                        <p className="text-xs text-slate-400 mt-1 font-bold">點擊球場區域，系統將自動記錄</p>
-                    )}
-                </div>
-                
-                {/* 球員對戰面板 */}
-                <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-2xl border border-slate-100 shadow-inner">
-                    <div className={`flex-1 p-3 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden ${activePlayer === 1 ? 'border-blue-500 bg-white shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`} onClick={() => setActivePlayer(1)}>
-                        {activePlayer === 1 && <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>}
-                        <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest block mb-0.5">藍方 (P1)</label>
-                        <input type="text" value={tacticalData.p1} onChange={e => setTacticalData({...tacticalData, p1: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none placeholder:text-slate-300" placeholder="輸入我方"/>
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-400 text-xs shadow-inner italic">VS</div>
-                    <div className={`flex-1 p-3 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden ${activePlayer === 2 ? 'border-rose-500 bg-white shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`} onClick={() => setActivePlayer(2)}>
-                        {activePlayer === 2 && <div className="absolute top-0 right-0 w-1 h-full bg-rose-500"></div>}
-                        <label className="text-[9px] font-black text-rose-500 uppercase tracking-widest block mb-0.5 text-right">紅方 (P2)</label>
-                        <input type="text" value={tacticalData.p2} onChange={e => setTacticalData({...tacticalData, p2: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none text-right placeholder:text-slate-300" placeholder="輸入對手"/>
-                    </div>
-                </div>
-
-                <div className="text-center mb-4 h-6 flex items-center justify-center">
-                    {lastRecorded ? (
-                        <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}</span>
-                    ) : (
-                        <span className={`text-sm font-black px-4 py-1 rounded-full animate-pulse ${activePlayer === 1 ? 'text-blue-600 bg-blue-50' : 'text-rose-600 bg-rose-50'}`}>等待【{activePlayer === 1 ? (tacticalData.p1 || '藍方') : (tacticalData.p2 || '紅方')}】擊球...</span>
-                    )}
-                </div>
-
-                {/* 擬真壁球場 9 宮格 */}
-                <div className="relative w-full aspect-[3/4] bg-[#fdf5e6] border-[6px] border-slate-800 rounded-t-sm rounded-b-sm overflow-hidden shadow-inner">
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-red-500/80"></div>
-                    <div className="absolute top-[55%] left-0 right-0 border-t-[3px] border-red-500/50"></div>
-                    <div className="absolute top-[55%] bottom-0 left-1/2 -translate-x-1/2 border-l-[3px] border-red-500/50"></div>
-                    <div className="absolute top-[55%] left-0 w-[30%] aspect-square border-[3px] border-l-0 border-red-500/50"></div>
-                    <div className="absolute top-[55%] right-0 w-[30%] aspect-square border-[3px] border-r-0 border-red-500/50"></div>
-                    <div className="absolute top-2 left-0 right-0 text-center text-[10px] font-black text-red-800/40 tracking-[0.3em] pointer-events-none z-10">FRONT WALL</div>
-                    <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
-                        {zones.map(zone => (
-                            <button key={zone.id} onClick={() => handleTacticalClick(zone.id)} className="relative group border border-slate-400/20 hover:bg-blue-500/20 active:bg-blue-600/40 transition-all flex flex-col items-center justify-center outline-none">
-                                <span className="opacity-0 group-hover:opacity-100 transition-opacity w-10 h-10 bg-black/40 rounded-full flex items-center justify-center text-white shadow-lg backdrop-blur-sm scale-75 group-hover:scale-100"><Target size={20}/></span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// ==========================================
-// 📊 全新：專屬賽後報告與熱圖分析 (Post-Match Report)
-// ==========================================
-const MatchReportModal = ({ match, onClose }) => {
-    if (!match) return null;
-    
-    // 過濾出屬於這場比賽的落點紀錄
-    const matchShots = tacticalShots.filter(s => s.leagueMatchId === match.id);
-    
-    // 計算雙方的熱圖數據
-    const generateHeatmap = (playerName) => {
-        const heatMap = { 'Front-Left': 0, 'Front-Center': 0, 'Front-Right': 0, 'Mid-Left': 0, 'T-Zone': 0, 'Mid-Right': 0, 'Back-Left': 0, 'Back-Center': 0, 'Back-Right': 0 };
-        let total = 0;
-        matchShots.filter(s => s.player === playerName).forEach(s => {
-            if (heatMap[s.zone] !== undefined) { heatMap[s.zone]++; total++; }
-        });
-        return { data: heatMap, total };
-    };
-
-    const p1Stats = generateHeatmap(match.player1Name);
-    const p2Stats = generateHeatmap(match.player2Name);
-
-    const HeatmapCourt = ({ stats, colorTheme }) => {
-        const zones = ['Front-Left', 'Front-Center', 'Front-Right', 'Mid-Left', 'T-Zone', 'Mid-Right', 'Back-Left', 'Back-Center', 'Back-Right'];
-        return (
-            <div className="relative w-full max-w-[200px] mx-auto aspect-[3/4] bg-[#fdf5e6] border-[4px] border-slate-800 rounded shadow-md overflow-hidden">
-                <div className="absolute top-[55%] left-0 right-0 border-t-[2px] border-red-500/50"></div>
-                <div className="absolute top-[55%] bottom-0 left-1/2 -translate-x-1/2 border-l-[2px] border-red-500/50"></div>
-                <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 z-20">
-                    {zones.map(zone => {
-                        const count = stats.data[zone] || 0;
-                        const maxCount = Math.max(...Object.values(stats.data), 1);
-                        const intensity = count / maxCount;
-                        const percentage = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
-                        
-                        let heatColor = 'transparent';
-                        if (intensity > 0.7) heatColor = colorTheme === 'blue' ? 'rgba(37, 99, 235, 0.8)' : 'rgba(225, 29, 72, 0.8)';
-                        else if (intensity > 0.4) heatColor = colorTheme === 'blue' ? 'rgba(96, 165, 250, 0.6)' : 'rgba(244, 63, 94, 0.6)';
-                        else if (intensity > 0.1) heatColor = colorTheme === 'blue' ? 'rgba(191, 219, 254, 0.4)' : 'rgba(253, 164, 175, 0.4)';
-
-                        return (
-                            <div key={zone} className="relative flex flex-col items-center justify-center border border-slate-800/10 transition-all">
-                                <div className="absolute inset-0 transition-all duration-1000" style={{ backgroundColor: heatColor, filter: 'blur(2px)' }}></div>
-                                {count > 0 && (
-                                    <div className="relative z-10 text-center drop-shadow-md bg-white/50 backdrop-blur-sm rounded-lg px-1 py-0.5">
-                                        <span className="text-[10px] font-black text-slate-800 block">{percentage}%</span>
-                                    </div>
-                                )}
-                            </div>
-                        )
-                    })}
-                </div>
-            </div>
-        );
-    };
-
-    return (
-        <div className="fixed inset-0 z-[500] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
-            <div className="bg-white rounded-[3rem] p-8 max-w-4xl w-full shadow-2xl relative border-4 border-slate-100" onClick={(e) => e.stopPropagation()}>
-                <button onClick={onClose} className="absolute top-6 right-6 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 transition-all"><X size={20}/></button>
-                
-                <h3 className="text-3xl font-black text-slate-800 text-center mb-2">📊 賽後專屬報告</h3>
-                <p className="text-center text-slate-400 font-bold mb-8">{match.date} • {match.tournamentName}</p>
-
-                {/* 比分區塊 */}
-                <div className="flex justify-center items-center gap-8 mb-10 bg-slate-50 p-6 rounded-[2rem] border">
-                    <div className="text-right flex-1">
-                        <p className={`text-2xl font-black ${match.winnerId === match.player1Id ? 'text-blue-600' : 'text-slate-600'}`}>{match.player1Name}</p>
-                    </div>
-                    <div className="px-6 py-2 bg-slate-800 text-white rounded-2xl text-4xl font-mono font-black tracking-widest shadow-inner">
-                        {match.matchType === 'external' ? match.externalMatchScore : `${match.score1} : ${match.score2}`}
-                    </div>
-                    <div className="text-left flex-1">
-                        <p className={`text-2xl font-black ${match.winnerId === match.player2Id ? 'text-red-600' : 'text-slate-600'}`}>{match.player2Name}</p>
-                    </div>
-                </div>
-
-                {/* 熱圖區塊 */}
-                {matchShots.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-8">
-                        <div className="bg-blue-50/50 p-6 rounded-3xl border border-blue-100 text-center">
-                            <h4 className="font-black text-blue-800 mb-2">{match.player1Name} 的攻擊熱區</h4>
-                            <p className="text-xs text-blue-500 font-bold mb-6">總記錄：{p1Stats.total} 球</p>
-                            <HeatmapCourt stats={p1Stats} colorTheme="blue" />
-                        </div>
-                        <div className="bg-rose-50/50 p-6 rounded-3xl border border-rose-100 text-center">
-                            <h4 className="font-black text-rose-800 mb-2">{match.player2Name} 的攻擊熱區</h4>
-                            <p className="text-xs text-rose-500 font-bold mb-6">總記錄：{p2Stats.total} 球</p>
-                            <HeatmapCourt stats={p2Stats} colorTheme="red" />
-                        </div>
-                    </div>
-                ) : (
-                    <div className="py-20 text-center text-slate-300 font-bold bg-slate-50 rounded-3xl border border-dashed">
-                        <Target size={48} className="mx-auto mb-4 opacity-50"/>
-                        <p>本場比賽沒有留下任何戰術落點紀錄</p>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
+                      {/* 9 宮格點擊區 */}
+                      <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
+                          {zones.map(zone => (
+                              <button 
+                                  key={zone.id}
+                                  onClick={() => handleTacticalClick(zone.id)}
+                                  className="relative group border border-slate-400/20 hover:bg-blue-500/20 active:bg-blue-600/40 transition-all flex flex-col items-center justify-center outline-none"
+                              >
+                                  <span className="opacity-0 group-hover:opacity-100 transition-opacity w-10 h-10 bg-black/40 rounded-full flex items-center justify-center text-white shadow-lg backdrop-blur-sm scale-75 group-hover:scale-100">
+                                      <Target size={20}/>
+                                  </span>
+                                  {/* 隱藏預設文字，讓畫面更乾淨，保留結構 */}
+                                  <span className="sr-only">{zone.label}</span>
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+              </div>
+          </div>
+      );
+  };
 
 // ==========================================
 // 🎾 1. 教練專用：即時裁判控制器 (自動連動內部聯賽)
@@ -2339,11 +2134,11 @@ const UmpirePanelModal = () => {
                 }
             }
         }
+        
         updateData.updatedAt = serverTimestamp();
         await updateDoc(matchRef, updateData);
     };
 
-  
     const updateServeSide = async (matchId, side) => {
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'live_matches', matchId), { serveSide: side });
     };
@@ -3439,12 +3234,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
       </div>
 
       <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" multiple onChange={handleGalleryImageUpload} />
-      {/* 👉 渲染戰術板 (支援自動帶入賽事) */}
-      {showTacticalBoard && <TacticalBoardModal match={activeTacticalMatch} onClose={() => { setShowTacticalBoard(false); setActiveTacticalMatch(null); }} />}
-      
-      {/* 👉 渲染賽後報告 */}
-      {viewingMatchReport && <MatchReportModal match={viewingMatchReport} onClose={() => setViewingMatchReport(null)} />}
-
+      {showTacticalBoard && <TacticalBoardModal />}
       {showTournamentModal && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowTournamentModal(false)}>
             <div className="bg-white rounded-[3rem] w-full max-w-2xl p-10 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
@@ -4779,29 +4569,21 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                                                     {role === 'admin' && (
                                                       <td className="px-4 py-5 text-center whitespace-nowrap">
                                                           <div className="flex justify-center gap-2">
-                                                              
-                                                              {/* 待開賽的按鈕 */}
                                                               {match.status === 'scheduled' && match.matchType !== 'external' && (
                                                                   <>
-                                                                    <button onClick={() => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }} className="p-3 bg-red-50 text-red-600 rounded-xl border hover:bg-red-500 hover:text-white transition-all animate-pulse" title="啟動即時轉播"><PlayCircle size={16}/></button>
-                                                                    <button onClick={() => { setActiveTacticalMatch(match); setShowTacticalBoard(true); }} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl border hover:bg-indigo-600 hover:text-white transition-all" title="記錄戰術落點"><Target size={16}/></button>
+                                                                    {/* 👉 將這場賽事送入轉播台 */}
+                                                                    <button 
+                                                                        onClick={() => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }} 
+                                                                        className="p-3 bg-red-50 text-red-600 rounded-xl border hover:bg-red-500 hover:text-white transition-all animate-pulse" 
+                                                                        title="啟動即時轉播"
+                                                                    >
+                                                                        <PlayCircle size={16}/>
+                                                                    </button>
+
                                                                     <button onClick={() => handleUpdateLeagueMatchScore(match)} className="p-3 bg-white text-blue-600 rounded-xl border hover:bg-blue-600 hover:text-white transition-all" title="輸入比分"><FileText size={16}/></button>
                                                                     <button onClick={() => handleEditLeagueMatch(match)} className="p-3 bg-white text-gray-600 rounded-xl border hover:bg-gray-600 hover:text-white transition-all" title="編輯比賽"><Pencil size={16}/></button>
-                                                                </>
+                                                                  </>
                                                               )}
-                                                    
-                                                              {/* 👉 新增：已完賽的比賽，顯示賽後報告按鈕 */}
-                                                              {match.status === 'completed' && match.matchType !== 'external' && (
-                                                                  <button 
-                                                                      onClick={() => setViewingMatchReport(match)} 
-                                                                      className="p-3 bg-blue-50 text-blue-600 rounded-xl border border-blue-200 hover:bg-blue-600 hover:text-white transition-all" 
-                                                                      title="查看賽後數據報告"
-                                                                  >
-                                                                      <FileBarChart size={16}/>
-                                                                  </button>
-                                                              )}
-                                                    
-                                                              {/* 刪除比賽按鈕 */}
                                                               <button onClick={() => deleteItem('league_matches', match.id)} className="p-3 bg-white text-red-500 rounded-xl border hover:bg-red-600 hover:text-white transition-all" title="刪除比賽"><Trash2 size={16}/></button>
                                                           </div>
                                                       </td>
@@ -4817,7 +4599,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                   </div>
               </div>
            )}
-          
+
           {/* EXTERNAL MATCHES TAB */}
           {!viewingStudent && activeTab === 'externalMatches' && role === 'admin' && (
               <div className="max-w-2xl mx-auto space-y-10 animate-in fade-in duration-500 font-bold">
