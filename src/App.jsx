@@ -12,7 +12,6 @@ import {
   Zap, Shield as ShieldIcon, Sun, Sparkles, Heart, Rocket, Coffee,
   Pencil, Percent, UserPlus, Printer, Eye, Columns, BookMarked, Activity
 } from 'lucide-react';
-import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
   addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where,
