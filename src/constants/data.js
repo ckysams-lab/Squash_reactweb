@@ -1,4 +1,13 @@
-const ACHIEVEMENT_DATA = {
+import React from 'react';
+// 必須把 ACHIEVEMENT_DATA 裡面有用到的 Icon 引入進來
+import { 
+  Star, Rocket, ShieldIcon, Zap, Swords, Crown, TrendingUp, Activity, 
+  Heart, Clock, Medal, Trophy as TrophyIcon, Sparkles, Sun, Coffee, 
+  Users, BookOpen, MapPin, Target, Globe 
+} from 'lucide-react';
+
+// 👉 在原本的 const 前面加上 export
+export const ACHIEVEMENT_DATA = {
   // ================= 賽事實踐類 =================
   'first-participation': {
     baseName: '賽場新星',
@@ -167,7 +176,7 @@ const ACHIEVEMENT_DATA = {
   }
 };
 
-const BADGE_DATA = {
+export const BADGE_DATA = {
     "白金章": { color: "text-slate-400", bg: "bg-slate-100", icon: "💎", border: "border-slate-200", shadow: "shadow-slate-100", basePoints: 400, level: 4, desc: "最高榮譽" },
     "金章": { color: "text-yellow-600", bg: "bg-yellow-50", icon: "🥇", border: "border-yellow-200", shadow: "shadow-yellow-100", basePoints: 200, level: 3, desc: "卓越表現" },
     "銀章": { color: "text-slate-500", bg: "bg-slate-100", icon: "🥈", border: "border-slate-200", shadow: "shadow-slate-100", basePoints: 100, level: 2, desc: "進步神速" },
