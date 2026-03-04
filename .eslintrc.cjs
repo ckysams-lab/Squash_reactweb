@@ -21,3 +21,12 @@ module.exports = {
     ],
   },
 };
+
+"overrides": [
+  {
+    "files": ["firebase-messaging-sw.js"],
+    "env": {
+      "serviceworker": true
+    }
+  }
+]
