@@ -1916,13 +1916,13 @@ listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
           alert(`✅ 成功打包儲存 ${localTactics.length} 筆落點數據！`);
           setLocalTactics([]);         // 清空暫存
           setShowTacticalBoard(false); // 關閉戰術板
+        
       } catch(e) {
           console.error("戰術紀錄上傳失敗", e);
           alert("儲存失敗，請檢查網路連線。");
       }
       setIsUpdating(false);
   };
-
   
   const TacticalBoardModal = () => {
       const zones = [
@@ -1930,6 +1930,14 @@ listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
           { id: 'Mid-Left', label: '中左' }, { id: 'T-Zone', label: 'T字位' }, { id: 'Mid-Right', label: '中右' },
           { id: 'Back-Left', label: '後左' }, { id: 'Back-Center', label: '後中' }, { id: 'Back-Right', label: '後右' }
       ];
+
+      const handleClose = () => {
+        if (localTactics.length > 0) {
+            if (!confirm(`還有 ${localTactics.length} 球紀錄尚未儲存，確定要關閉並捨棄嗎？`)) return;
+        }
+        setLocalTactics([]);
+        setShowTacticalBoard(false);
+    };
 
       return (
           <div className="fixed inset-0 z-[500] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowTacticalBoard(false)}>
