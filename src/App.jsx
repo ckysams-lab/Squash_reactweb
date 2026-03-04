@@ -2036,7 +2036,7 @@ listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
                       >
                           {activePlayer === 2 && <div className="absolute top-0 right-0 w-1 h-full bg-rose-500"></div>}
                           <label className="text-[9px] font-black text-rose-500 uppercase tracking-widest block mb-0.5 text-right">紅方 (對手)</label>
-                          <input type="text" value={tacticalData.p2} onChange={e => setTacticalData({...tacticalData, p2: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none text-right placeholder:text-slate-300" placeholder="輸入對手"/>;
+                          <input type="text" value={tacticalData.p2} onChange={e => setTacticalData({...tacticalData, p2: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none text-right placeholder:text-slate-300" placeholder="輸入對手"/>
                       </div>
                   </div>
 
