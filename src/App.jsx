@@ -387,7 +387,8 @@ const handleSaveFeaturedBadges = async () => {
   const [showTacticalBoard, setShowTacticalBoard] = useState(false);
   const [tacticalData, setTacticalData] = useState({ p1: '', p2: '' });
   const [activePlayer, setActivePlayer] = useState(1); // 1 代表 p1 回球, 2 代表 p2 回球
-  const [lastRecorded, setLastRecorded] = useState(null); // 顯示剛記錄的球，作視覺回饋
+  const [lastRecorded, setLastRecorded] = useState(null);
+  const [localTactics, setLocalTactics] = useState([]);
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
     announcements: [],
@@ -537,10 +538,24 @@ const handleSaveFeaturedBadges = async () => {
             listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => { 
         setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }));
-// [11.3] 新增戰術數據監聽
-      listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
-        setTacticalShots(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      }));
+// [11.3] 新增戰術數據監聽 (支援打包陣列新版與舊版數據)
+listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
+    const allFlattenedShots = [];
+    snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.shots && Array.isArray(data.shots)) {
+            // 新版結構：把一場比賽的陣列拆解出來給儀表板使用
+            data.shots.forEach((shot, index) => {
+                allFlattenedShots.push({ id: `${d.id}_${index}`, ...shot });
+            });
+        } else {
+            // 舊版結構：相容以前單獨存的舊數據
+            allFlattenedShots.push({ id: d.id, ...data });
+        }
+    });
+    setTacticalShots(allFlattenedShots);
+}));
+
     
       return () => listeners.forEach(unsub => unsub());
 
@@ -1853,8 +1868,7 @@ const handleSaveFeaturedBadges = async () => {
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
-    // --- [11.5] 美化版：極速戰術板 Modal 元件 ---
-  const handleTacticalClick = async (zone) => {
+    const handleTacticalClick = (zone) => {
       if (!tacticalData.p1) {
           alert("請至少輸入一位我方球員的姓名！");
           return;
@@ -1872,20 +1886,44 @@ const handleSaveFeaturedBadges = async () => {
           setActivePlayer(activePlayer === 1 ? 2 : 1);
       }
 
-      // 非同步寫入資料庫
+      // 👉 優化核心：將落點資料推入「本地暫存」，不直接上傳 Firebase
+      setLocalTactics(prev => [...prev, {
+          player: playerName,
+          opponent: opponentName || '未知對手',
+          zone: zone,
+          localTime: Date.now(), // 用本地時間戳維持順序
+          date: new Date().toISOString().split('T')[0]
+      }]);
+  };
+
+    const handleSaveTacticsToFirebase = async () => {
+      if (localTactics.length === 0) {
+          setShowTacticalBoard(false);
+          return;
+      }
+      
+      setIsUpdating(true);
       try {
+          // 👉 將整場比賽數百球的紀錄，打包存成【1 個 Document】
           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots'), {
-              player: playerName,
-              opponent: opponentName || '未知對手',
-              zone: zone,
+              p1: tacticalData.p1,
+              p2: tacticalData.p2,
+              shots: localTactics, // 直接將陣列存入
               timestamp: serverTimestamp(),
               date: new Date().toISOString().split('T')[0]
           });
+          
+          alert(`✅ 成功打包儲存 ${localTactics.length} 筆落點數據！`);
+          setLocalTactics([]);         // 清空暫存
+          setShowTacticalBoard(false); // 關閉戰術板
       } catch(e) {
-          console.error("戰術紀錄失敗", e);
+          console.error("戰術紀錄上傳失敗", e);
+          alert("儲存失敗，請檢查網路連線。");
       }
+      setIsUpdating(false);
   };
 
+  
   const TacticalBoardModal = () => {
       const zones = [
           { id: 'Front-Left', label: '前左' }, { id: 'Front-Center', label: '前中' }, { id: 'Front-Right', label: '前右' },
@@ -1902,7 +1940,24 @@ const handleSaveFeaturedBadges = async () => {
                       <h3 className="text-2xl font-black text-slate-800 flex items-center justify-center gap-2"><Target className="text-blue-600"/> 實戰落點紀錄</h3>
                       <p className="text-xs text-slate-400 mt-1 font-bold">點擊球場區域，系統將自動記錄並切換擊球方</p>
                   </div>
-                  
+
+                {/* 👉 新增：儲存按鈕與暫存狀態顯示 */}
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
+                      <span className="text-sm font-bold text-slate-500">已暫存：<span className="text-blue-600 text-lg">{localTactics.length}</span> 球</span>
+                      <button 
+                          onClick={handleSaveTacticsToFirebase}
+                          disabled={isUpdating || localTactics.length === 0}
+                          className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 transition-all shadow-md shadow-blue-200 disabled:opacity-50"
+                      >
+                          {isUpdating ? <Loader2 size={16} className="animate-spin inline" /> : <Save size={18} className="inline mr-2"/>}
+                          儲存並結束
+                      </button>
+                  </div>
+              </div>
+          </div>
+      );
+  };
+                
                   {/* 球員對戰面板 */}
                   <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-2xl border border-slate-100 shadow-inner">
                       <div 
