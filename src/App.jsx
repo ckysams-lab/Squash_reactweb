@@ -2040,7 +2040,7 @@ listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
                       </div>
                   </div>
 
-                  <div className="text-center mb-4 h-6 flex items-center justify-center">
+                  <div className="text-center mb-4 h-6 flex items-center justify-center">;
                       {lastRecorded ? (
                           <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
                               🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
