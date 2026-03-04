@@ -2019,8 +2019,6 @@ listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
           </div>
       );
   };
-
-                
                   {/* 球員對戰面板 */}
                   <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-2xl border border-slate-100 shadow-inner">
                       <div 
