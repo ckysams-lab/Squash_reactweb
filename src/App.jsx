@@ -2036,11 +2036,13 @@ listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
                       >
                           {activePlayer === 2 && <div className="absolute top-0 right-0 w-1 h-full bg-rose-500"></div>}
                           <label className="text-[9px] font-black text-rose-500 uppercase tracking-widest block mb-0.5 text-right">紅方 (對手)</label>
-                          <input type="text" value={tacticalData.p2} onChange={e => setTacticalData({...tacticalData, p2: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none text-right placeholder:text-slate-300" placeholder="輸入對手"/>
+                          <input type="text" value={tacticalData.p2} onChange={e => setTacticalData({...tacticalData, p2: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none text-right placeholder:text-slate-300" placeholder="輸入對手"/>;
                       </div>
                   </div>
 
-                  <div className='text-center mb-4 h-6 flex items-center justify-center'>
+                  <div 
+                      className="text-center mb-4 h-6 flex items-center justify-center">;
+  
                       {lastRecorded ? (
                           <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
                               🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
