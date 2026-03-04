@@ -387,17 +387,7 @@ const handleSaveFeaturedBadges = async () => {
   const [showTacticalBoard, setShowTacticalBoard] = useState(false);
   const [tacticalData, setTacticalData] = useState({ p1: '', p2: '' });
   const [activePlayer, setActivePlayer] = useState(1); // 1 代表 p1 回球, 2 代表 p2 回球
-  const [lastRecorded, setLastRecorded] = useState(null);
-  let lastRecordedContent = null; // 預設為 null
-  if (lastRecorded) {
-    lastRecordedContent = (
-      <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
-        🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
-      </span>
-    );
-  }
-  // ====================================================================
-  const [localTactics, setLocalTactics] = useState([]);
+  const [lastRecorded, setLastRecorded] = useState(null); // 顯示剛記錄的球，作視覺回饋
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
     announcements: [],
@@ -547,24 +537,10 @@ const handleSaveFeaturedBadges = async () => {
             listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => { 
         setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }));
-// [11.3] 新增戰術數據監聽 (支援打包陣列新版與舊版數據)
-listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
-    const allFlattenedShots = [];
-    snap.docs.forEach(d => {
-        const data = d.data();
-        if (data.shots && Array.isArray(data.shots)) {
-            // 新版結構：把一場比賽的陣列拆解出來給儀表板使用
-            data.shots.forEach((shot, index) => {
-                allFlattenedShots.push({ id: `${d.id}_${index}`, ...shot });
-            });
-        } else {
-            // 舊版結構：相容以前單獨存的舊數據
-            allFlattenedShots.push({ id: d.id, ...data });
-        }
-    });
-    setTacticalShots(allFlattenedShots);
-}));
-
+// [11.3] 新增戰術數據監聽
+      listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
+        setTacticalShots(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }));
     
       return () => listeners.forEach(unsub => unsub());
 
@@ -1877,7 +1853,8 @@ listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
-    const handleTacticalClick = (zone) => {
+    // --- [11.5] 美化版：極速戰術板 Modal 元件 ---
+  const handleTacticalClick = async (zone) => {
       if (!tacticalData.p1) {
           alert("請至少輸入一位我方球員的姓名！");
           return;
@@ -1895,139 +1872,37 @@ listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
           setActivePlayer(activePlayer === 1 ? 2 : 1);
       }
 
-      // 👉 優化核心：將落點資料推入「本地暫存」，不直接上傳 Firebase
-      setLocalTactics(prev => [...prev, {
-          player: playerName,
-          opponent: opponentName || '未知對手',
-          zone: zone,
-          localTime: Date.now(), // 用本地時間戳維持順序
-          date: new Date().toISOString().split('T')[0]
-      }]);
-  };
-
-    const handleSaveTacticsToFirebase = async () => {
-      if (localTactics.length === 0) {
-          setShowTacticalBoard(false);
-          return;
-      }
-      
-      setIsUpdating(true);
+      // 非同步寫入資料庫
       try {
-          // 👉 將整場比賽數百球的紀錄，打包存成【1 個 Document】
           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots'), {
-              p1: tacticalData.p1,
-              p2: tacticalData.p2,
-              shots: localTactics, // 直接將陣列存入
+              player: playerName,
+              opponent: opponentName || '未知對手',
+              zone: zone,
               timestamp: serverTimestamp(),
               date: new Date().toISOString().split('T')[0]
           });
-          
-          alert(`✅ 成功打包儲存 ${localTactics.length} 筆落點數據！`);
-          setLocalTactics([]);         // 清空暫存
-          setShowTacticalBoard(false); // 關閉戰術板
-        
       } catch(e) {
-          console.error("戰術紀錄上傳失敗", e);
-          alert("儲存失敗，請檢查網路連線。");
+          console.error("戰術紀錄失敗", e);
       }
-      setIsUpdating(false);
   };
-  
-    const TacticalBoardModal = () => {
+
+  const TacticalBoardModal = () => {
       const zones = [
           { id: 'Front-Left', label: '前左' }, { id: 'Front-Center', label: '前中' }, { id: 'Front-Right', label: '前右' },
           { id: 'Mid-Left', label: '中左' }, { id: 'T-Zone', label: 'T字位' }, { id: 'Mid-Right', label: '中右' },
           { id: 'Back-Left', label: '後左' }, { id: 'Back-Center', label: '後中' }, { id: 'Back-Right', label: '後右' }
       ];
 
-      // 關閉時防呆機制：提醒有未儲存的資料
-      const handleClose = () => {
-          if (localTactics.length > 0) {
-              if (!window.confirm(`還有 ${localTactics.length} 球紀錄尚未儲存，確定要關閉並捨棄嗎？`)) return;
-          }
-          setLocalTactics([]);
-          setShowTacticalBoard(false);
-      };
-
       return (
-          <div className="fixed inset-0 z-[500] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={handleClose}>
+          <div className="fixed inset-0 z-[500] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowTacticalBoard(false)}>
               <div className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl relative border-4 border-slate-100" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={handleClose} className="absolute top-6 right-6 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all z-50"><X size={20}/></button>
+                  <button onClick={() => setShowTacticalBoard(false)} className="absolute top-6 right-6 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all z-50"><X size={20}/></button>
                   
                   <div className="text-center mb-6 pr-10">
                       <h3 className="text-2xl font-black text-slate-800 flex items-center justify-center gap-2"><Target className="text-blue-600"/> 實戰落點紀錄</h3>
-                      <p className="text-xs text-slate-400 mt-1 font-bold">點擊球場區域暫存紀錄，結束時請點擊儲存</p>
+                      <p className="text-xs text-slate-400 mt-1 font-bold">點擊球場區域，系統將自動記錄並切換擊球方</p>
                   </div>
                   
-                  {/* 球員對戰面板 */}
-                  <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-2xl border border-slate-100 shadow-inner">
-                      <div className={`flex-1 p-3 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden ${activePlayer === 1 ? 'border-blue-500 bg-white shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`} onClick={() => setActivePlayer(1)}>
-                          {activePlayer === 1 && <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>}
-                          <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest block mb-0.5">藍方 (先發)</label>
-                          <input type="text" value={tacticalData.p1} onChange={e => setTacticalData({...tacticalData, p1: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none placeholder:text-slate-300" placeholder="輸入我方"/>
-                      </div>
-                      <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-400 text-xs shadow-inner italic">VS</div>
-                      <div className={`flex-1 p-3 rounded-xl border-2 transition-all cursor-pointer relative overflow-hidden ${activePlayer === 2 ? 'border-rose-500 bg-white shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`} onClick={() => setActivePlayer(2)}>
-                          {activePlayer === 2 && <div className="absolute top-0 right-0 w-1 h-full bg-rose-500"></div>}
-                          <label className="text-[9px] font-black text-rose-500 uppercase tracking-widest block mb-0.5 text-right">紅方 (對手)</label>
-                          <input type="text" value={tacticalData.p2} onChange={e => setTacticalData({...tacticalData, p2: e.target.value})} className="w-full bg-transparent font-black text-lg text-slate-800 outline-none text-right placeholder:text-slate-300" placeholder="輸入對手"/>
-                      </div>
-                  </div>
-
-                  <div className="text-center mb-4 h-6 flex items-center justify-center">
-                      {lastRecorded ? (
-                          <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
-                              🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
-                          </span>
-                      ) : (
-                          <span className={`text-sm font-black px-4 py-1 rounded-full animate-pulse ${activePlayer === 1 ? 'text-blue-600 bg-blue-50' : 'text-rose-600 bg-rose-50'}`}>
-                              等待【{activePlayer === 1 ? (tacticalData.p1 || '藍方') : (tacticalData.p2 || '紅方')}】擊球...
-                          </span>
-                      )}
-                  </div>
-
-                  {/* 擬真壁球場 9 宮格 */}
-                  <div className="relative w-full aspect-[3/4] bg-[#fdf5e6] border-[6px] border-slate-800 rounded-t-sm rounded-b-sm overflow-hidden shadow-inner">
-                      <div className="absolute top-0 left-0 right-0 h-1 bg-red-500/80"></div> 
-                      <div className="absolute top-[55%] left-0 right-0 border-t-[3px] border-red-500/50"></div> 
-                      <div className="absolute top-[55%] bottom-0 left-1/2 -translate-x-1/2 border-l-[3px] border-red-500/50"></div> 
-                      <div className="absolute top-[55%] left-0 w-[30%] aspect-square border-[3px] border-l-0 border-red-500/50"></div> 
-                      <div className="absolute top-[55%] right-0 w-[30%] aspect-square border-[3px] border-r-0 border-red-500/50"></div> 
-                      
-                      <div className="absolute top-2 left-0 right-0 text-center text-[10px] font-black text-red-800/40 tracking-[0.3em] pointer-events-none z-10">FRONT WALL</div>
-
-                      <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
-                          {zones.map(zone => (
-                              <button 
-                                  key={zone.id}
-                                  onClick={() => handleTacticalClick(zone.id)}
-                                  className="relative group border border-slate-400/20 hover:bg-blue-500/20 active:bg-blue-600/40 transition-all flex flex-col items-center justify-center outline-none"
-                              >
-                                  <span className="opacity-0 group-hover:opacity-100 transition-opacity w-10 h-10 bg-black/40 rounded-full flex items-center justify-center text-white shadow-lg backdrop-blur-sm scale-75 group-hover:scale-100">
-                                      <Target size={20}/>
-                                  </span>
-                                  <span className="sr-only">{zone.label}</span>
-                              </button>
-                          ))}
-                      </div>
-                  </div>
-
-                  {/* 👉 新增的底部儲存列 */}
-                  <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
-                      <span className="text-sm font-bold text-slate-500">已暫存：<span className="text-blue-600 text-lg mx-1">{localTactics.length}</span> 球</span>
-                      <button 
-                          onClick={handleSaveTacticsToFirebase}
-                          disabled={isUpdating || localTactics.length === 0}
-                          className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black hover:bg-blue-700 transition-all shadow-md shadow-blue-200 disabled:opacity-50"
-                      >
-                          {isUpdating ? <Loader2 size={16} className="animate-spin inline mr-2" /> : <Save size={16} className="inline mr-2"/>}
-                          儲存並結束
-                      </button>
-                  </div>
-              </div>
-          </div>
-      );
-  };
                   {/* 球員對戰面板 */}
                   <div className="flex items-center gap-2 mb-4 bg-slate-50 p-2 rounded-2xl border border-slate-100 shadow-inner">
                       <div 
@@ -2049,14 +1924,12 @@ listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
                       </div>
                   </div>
 
-                  <div 
-                      className="text-center mb-4 h-6 flex items-center justify-center">
-  
-                      {lastRecorded && (
-                            <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
-                                🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
-                            </span>
-                        )}
+                  <div className="text-center mb-4 h-6 flex items-center justify-center">
+                      {lastRecorded ? (
+                          <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
+                              🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
+                          </span>
+                      ) : (
                           <span className={`text-sm font-black px-4 py-1 rounded-full animate-pulse ${activePlayer === 1 ? 'text-blue-600 bg-blue-50' : 'text-rose-600 bg-rose-50'}`}>
                               等待【{activePlayer === 1 ? (tacticalData.p1 || '藍方') : (tacticalData.p2 || '紅方')}】擊球...
                           </span>
