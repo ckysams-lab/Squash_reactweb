@@ -2840,9 +2840,9 @@ const myDashboardData = useMemo(() => {
           
         {viewingStudent && (
             <PlayerDashboard 
-                student={viewingStudent} 
-                data={playerDashboardData} 
-                onClose={() => setViewingStudent(null)} 
+                student={rankedStudents.find(s => s.id === currentUserInfo?.id) || currentUserInfo} 
+                data={myDashboardData}
+                onClose={null} 
                 onBadgeClick={setViewingBadge} 
                 tacticalShots={tacticalShots}
                 ACHIEVEMENT_DATA={ACHIEVEMENT_DATA}
