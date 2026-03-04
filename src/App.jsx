@@ -2043,11 +2043,11 @@ listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
                   <div 
                       className="text-center mb-4 h-6 flex items-center justify-center">
   
-                      {lastRecorded ? (
-                          <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
-                              🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
-                          </span>
-                      ) : (
+                      {lastRecorded && (
+                            <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
+                                🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
+                            </span>
+                        )}
                           <span className={`text-sm font-black px-4 py-1 rounded-full animate-pulse ${activePlayer === 1 ? 'text-blue-600 bg-blue-50' : 'text-rose-600 bg-rose-50'}`}>
                               等待【{activePlayer === 1 ? (tacticalData.p1 || '藍方') : (tacticalData.p2 || '紅方')}】擊球...
                           </span>
