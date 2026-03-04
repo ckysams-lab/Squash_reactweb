@@ -343,6 +343,7 @@ export default function App() {
   const [tournamentPlayers, setTournamentPlayers] = useState([]);
   const [numGroups, setNumGroups] = useState(1);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
+  const [pendingTacticalShots, setPendingTacticalShots] = useState([]); // 新增：暫存的戰術紀錄
   const [awardsViewMode, setAwardsViewMode] = useState('grid'); 
   const [showcaseEditorOpen, setShowcaseEditorOpen] = useState(false);
   const [selectedFeaturedBadges, setSelectedFeaturedBadges] = useState([]);
@@ -1853,8 +1854,7 @@ const handleSaveFeaturedBadges = async () => {
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
-    // --- [11.5] 美化版：極速戰術板 Modal 元件 ---
-  const handleTacticalClick = async (zone) => {
+    const handleTacticalClick = (zone) => { // 移除 async
       if (!tacticalData.p1) {
           alert("請至少輸入一位我方球員的姓名！");
           return;
@@ -1872,21 +1872,53 @@ const handleSaveFeaturedBadges = async () => {
           setActivePlayer(activePlayer === 1 ? 2 : 1);
       }
 
-      // 非同步寫入資料庫
-      try {
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots'), {
+      // 取代原本的 addDoc：將落點紀錄暫存到陣列中
+      setPendingTacticalShots(prev => [
+          ...prev, 
+          {
               player: playerName,
               opponent: opponentName || '未知對手',
               zone: zone,
-              timestamp: serverTimestamp(),
               date: new Date().toISOString().split('T')[0]
+          }
+      ]);
+  };
+
+    const saveTacticalShots = async () => {
+      if (pendingTacticalShots.length === 0) return;
+      
+      try {
+          const batch = writeBatch(db); // 使用 Firebase 批次寫入
+          const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots');
+          
+          pendingTacticalShots.forEach(shot => {
+              batch.set(doc(colRef), {
+                  ...shot,
+                  timestamp: serverTimestamp()
+              });
           });
+          
+          await batch.commit(); // 一次性發送所有累積的資料
+          alert(`✅ 成功批次儲存 ${pendingTacticalShots.length} 筆戰術紀錄！`);
+          setPendingTacticalShots([]); // 儲存後清空暫存區
       } catch(e) {
-          console.error("戰術紀錄失敗", e);
+          console.error("批次戰術紀錄失敗", e);
+          alert("儲存失敗，請檢查網路連線。");
       }
   };
 
+
   const TacticalBoardModal = () => {
+    const handleClose = () => {
+          if (pendingTacticalShots.length > 0) {
+              if (confirm(`您還有 ${pendingTacticalShots.length} 筆紀錄未儲存，確定要關閉嗎？(未儲存資料將遺失)`)) {
+                  setPendingTacticalShots([]); // 清空暫存
+                  setShowTacticalBoard(false);
+              }
+          } else {
+              setShowTacticalBoard(false);
+          }
+      };
       const zones = [
           { id: 'Front-Left', label: '前左' }, { id: 'Front-Center', label: '前中' }, { id: 'Front-Right', label: '前右' },
           { id: 'Mid-Left', label: '中左' }, { id: 'T-Zone', label: 'T字位' }, { id: 'Mid-Right', label: '中右' },
@@ -1894,9 +1926,9 @@ const handleSaveFeaturedBadges = async () => {
       ];
 
       return (
-          <div className="fixed inset-0 z-[500] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={() => setShowTacticalBoard(false)}>
+          <div className="fixed inset-0 z-[500] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={handleClose}>
               <div className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl relative border-4 border-slate-100" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => setShowTacticalBoard(false)} className="absolute top-6 right-6 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all z-50"><X size={20}/></button>
+                  <button onClick={handleClose} className="absolute top-6 right-6 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all z-50"><X size={20}/></button>
                   
                   <div className="text-center mb-6 pr-10">
                       <h3 className="text-2xl font-black text-slate-800 flex items-center justify-center gap-2"><Target className="text-blue-600"/> 實戰落點紀錄</h3>
@@ -1961,6 +1993,18 @@ const handleSaveFeaturedBadges = async () => {
                                   </span>
                                   {/* 隱藏預設文字，讓畫面更乾淨，保留結構 */}
                                   <span className="sr-only">{zone.label}</span>
+                              <div className="mt-6 flex justify-between items-center bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <span className="text-sm font-bold text-slate-500 px-2">
+                          待儲存紀錄：<span className="text-blue-600 text-lg mx-1">{pendingTacticalShots.length}</span> 筆
+                      </span>
+                      <button 
+                          onClick={saveTacticalShots}
+                          disabled={pendingTacticalShots.length === 0}
+                          className="px-6 py-2 bg-blue-600 text-white rounded-xl font-black shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all"
+                      >
+                          💾 批次儲存
+                      </button>
+                  </div>
                               </button>
                           ))}
                       </div>
