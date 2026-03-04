@@ -106,65 +106,75 @@ const PlayerDashboard = ({
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
-                {myTacticalShots.length > 0 && (
-                    <div className="mb-10 animate-in slide-in-from-bottom-6 duration-700">
-                        <div className="bg-white p-8 md:p-10 rounded-[4rem] border border-slate-100 shadow-sm max-w-4xl mx-auto">
-                            <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
-                                <div>
-                                    <h4 className="text-3xl font-black text-slate-800 flex items-center gap-3"><Target className="text-red-500" size={32}/> 攻擊落點熱圖</h4>
-                                    <p className="text-sm font-bold text-slate-400 mt-2">分析 {student.name} 的擊球落點分佈 (基於 {myTacticalShots.length} 筆紀錄)</p>
-                                </div>
+                <div className="mb-10 animate-in slide-in-from-bottom-6 duration-700">
+                    <div className="bg-white p-8 md:p-10 rounded-[4rem] border border-slate-100 shadow-sm max-w-4xl mx-auto h-full flex flex-col">
+                        <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
+                            <div>
+                                <h4 className="text-3xl font-black text-slate-800 flex items-center gap-3"><Target className="text-red-500" size={32}/> 攻擊落點熱圖</h4>
+                                <p className="text-sm font-bold text-slate-400 mt-2">分析 {student.name} 的擊球落點分佈 (基於 {myTacticalShots.length} 筆紀錄)</p>
+                            </div>
+                            {myTacticalShots.length > 0 && (
                                 <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100 text-xs font-bold text-slate-500">
                                     <span>冷區</span>
                                     <div className="w-24 h-3 rounded-full bg-gradient-to-r from-blue-100 via-yellow-200 to-red-500"></div>
                                     <span>熱區</span>
                                 </div>
-                            </div>
-                            
-                            <div className="flex justify-center">
-                                <div className="relative w-full max-w-sm aspect-[3/4] bg-[#fdf5e6] border-[8px] border-slate-800 rounded-t-sm rounded-b-sm shadow-2xl overflow-hidden">
-                                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-red-500/70"></div>
-                                    <div className="absolute top-[55%] left-0 right-0 border-t-[4px] border-red-500/50"></div>
-                                    <div className="absolute top-[55%] bottom-0 left-1/2 -translate-x-1/2 border-l-[4px] border-red-500/50"></div>
-                                    <div className="absolute top-[55%] left-0 w-[30%] aspect-square border-[4px] border-l-0 border-red-500/50"></div>
-                                    <div className="absolute top-[55%] right-0 w-[30%] aspect-square border-[4px] border-r-0 border-red-500/50"></div>
-                                    <div className="absolute top-3 left-0 right-0 text-center text-xs font-black text-red-800/40 tracking-[0.4em] pointer-events-none z-10">FRONT WALL</div>
+                            )}
+                        </div>
+                        
+                        <div className="flex-1 flex flex-col justify-center items-center">
+                            {myTacticalShots.length > 0 ? (
+                                <>
+                                    <div className="relative w-full max-w-sm aspect-[3/4] bg-[#fdf5e6] border-[8px] border-slate-800 rounded-t-sm rounded-b-sm shadow-2xl overflow-hidden">
+                                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-red-500/70"></div>
+                                        <div className="absolute top-[55%] left-0 right-0 border-t-[4px] border-red-500/50"></div>
+                                        <div className="absolute top-[55%] bottom-0 left-1/2 -translate-x-1/2 border-l-[4px] border-red-500/50"></div>
+                                        <div className="absolute top-[55%] left-0 w-[30%] aspect-square border-[4px] border-l-0 border-red-500/50"></div>
+                                        <div className="absolute top-[55%] right-0 w-[30%] aspect-square border-[4px] border-r-0 border-red-500/50"></div>
+                                        <div className="absolute top-3 left-0 right-0 text-center text-xs font-black text-red-800/40 tracking-[0.4em] pointer-events-none z-10">FRONT WALL</div>
 
-                                    <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 z-20">
-                                        {['Front-Left', 'Front-Center', 'Front-Right', 'Mid-Left', 'T-Zone', 'Mid-Right', 'Back-Left', 'Back-Center', 'Back-Right'].map(zone => {
-                                            const count = heatMap[zone] || 0;
-                                            const maxCount = Math.max(...Object.values(heatMap), 1);
-                                            const intensity = count / maxCount;
-                                            const percentage = Math.round((count / myTacticalShots.length) * 100) || 0;
-                                            
-                                            let heatColor = 'transparent';
-                                            if (intensity > 0.7) heatColor = 'rgba(239, 68, 68, 0.85)';
-                                            else if (intensity > 0.4) heatColor = 'rgba(245, 158, 11, 0.7)';
-                                            else if (intensity > 0.1) heatColor = 'rgba(252, 211, 77, 0.5)';
-                                            else if (intensity > 0) heatColor = 'rgba(147, 197, 253, 0.3)';
+                                        <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 z-20">
+                                            {['Front-Left', 'Front-Center', 'Front-Right', 'Mid-Left', 'T-Zone', 'Mid-Right', 'Back-Left', 'Back-Center', 'Back-Right'].map(zone => {
+                                                const count = heatMap[zone] || 0;
+                                                const maxCount = Math.max(...Object.values(heatMap), 1);
+                                                const intensity = count / maxCount;
+                                                const percentage = Math.round((count / myTacticalShots.length) * 100) || 0;
+                                                
+                                                let heatColor = 'transparent';
+                                                if (intensity > 0.7) heatColor = 'rgba(239, 68, 68, 0.85)';
+                                                else if (intensity > 0.4) heatColor = 'rgba(245, 158, 11, 0.7)';
+                                                else if (intensity > 0.1) heatColor = 'rgba(252, 211, 77, 0.5)';
+                                                else if (intensity > 0) heatColor = 'rgba(147, 197, 253, 0.3)';
 
-                                            return (
-                                                <div key={zone} className="relative flex flex-col items-center justify-center border border-slate-800/5 transition-all group">
-                                                    <div className="absolute inset-0 transition-all duration-1000" style={{ backgroundColor: heatColor, filter: 'blur(4px)', transform: 'scale(1.1)' }}></div>
-                                                    {count > 0 && (
-                                                        <div className="relative z-10 flex flex-col items-center justify-center w-12 h-12 md:w-16 md:h-16 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white/50 group-hover:scale-110 transition-transform">
-                                                            <span className={`text-sm md:text-xl font-black ${intensity > 0.7 ? 'text-red-600' : intensity > 0.4 ? 'text-amber-600' : 'text-slate-700'}`}>{percentage}%</span>
-                                                            <span className="text-[8px] md:text-[10px] font-bold text-slate-400 -mt-1">{count} 球</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )
-                                        })}
+                                                return (
+                                                    <div key={zone} className="relative flex flex-col items-center justify-center border border-slate-800/5 transition-all group">
+                                                        <div className="absolute inset-0 transition-all duration-1000" style={{ backgroundColor: heatColor, filter: 'blur(4px)', transform: 'scale(1.1)' }}></div>
+                                                        {count > 0 && (
+                                                            <div className="relative z-10 flex flex-col items-center justify-center w-12 h-12 md:w-16 md:h-16 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white/50 group-hover:scale-110 transition-transform">
+                                                                <span className={`text-sm md:text-xl font-black ${intensity > 0.7 ? 'text-red-600' : intensity > 0.4 ? 'text-amber-600' : 'text-slate-700'}`}>{percentage}%</span>
+                                                                <span className="text-[8px] md:text-[10px] font-bold text-slate-400 -mt-1">{count} 球</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
                                     </div>
+                                    <div className="mt-8 bg-blue-50 p-4 rounded-2xl flex items-center justify-center gap-3 text-sm font-bold text-blue-800 w-full">
+                                        <Info size={18} className="text-blue-500"/>
+                                        教練提示：高水平球員的落點應集中在「後左」與「後右」角落。
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-300 py-10">
+                                    <Target size={64} className="mb-4 opacity-30"/>
+                                    <p className="text-lg font-black text-slate-400">目前尚無 {student.name} 的實戰落點數據</p>
+                                    <p className="text-sm mt-2 font-bold">請前往「聯賽專區」的戰術板進行紀錄</p>
                                 </div>
-                            </div>
-                            <div className="mt-8 bg-blue-50 p-4 rounded-2xl flex items-center justify-center gap-3 text-sm font-bold text-blue-800">
-                               <Info size={18} className="text-blue-500"/>
-                               教練提示：高水平球員的落點應集中在「後左」與「後右」角落。
-                            </div>
+                            )}
                         </div>
                     </div>
-                )}
+                </div>
 
                 <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm flex flex-col">
                     <h4 className="text-2xl font-black mb-2 flex items-center gap-3"><TrendingUp className="text-blue-500"/> 積分走勢圖</h4>
