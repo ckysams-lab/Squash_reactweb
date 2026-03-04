@@ -388,6 +388,15 @@ const handleSaveFeaturedBadges = async () => {
   const [tacticalData, setTacticalData] = useState({ p1: '', p2: '' });
   const [activePlayer, setActivePlayer] = useState(1); // 1 代表 p1 回球, 2 代表 p2 回球
   const [lastRecorded, setLastRecorded] = useState(null);
+  let lastRecordedContent = null; // 預設為 null
+  if (lastRecorded) {
+    lastRecordedContent = (
+      <span className="text-emerald-600 font-black animate-in fade-in zoom-in text-sm bg-emerald-50 px-4 py-1 rounded-full border border-emerald-200">
+        🎯 已記錄：{lastRecorded.player} ➡️ {lastRecorded.zone}
+      </span>
+    );
+  }
+  // ====================================================================
   const [localTactics, setLocalTactics] = useState([]);
   const [systemConfig, setSystemConfig] = useState({ 
     adminPassword: 'admin', 
