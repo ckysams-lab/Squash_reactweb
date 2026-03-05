@@ -1,6 +1,6 @@
-// 這是更新過後的 EditPlayerModal.jsx
+// 這是包含了「出生日期」和「報名班別」的最終版本
 import React, { useState, useEffect } from 'react';
-import { X, UserCog, Upload, Loader2, Trophy as TrophyIcon } from 'lucide-react';
+import { X, UserCog, Upload, Loader2 } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
@@ -93,13 +93,15 @@ const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
                         </div>
                     </div>
                     
-                    {/* 👇👇 在這裡新增了「出生日期」欄位 👇👇 */}
                     <div>
                         <label className="text-sm font-bold text-slate-600">出生日期</label>
                         <input type="date" value={playerData.dob || ''} onChange={e => setPlayerData({...playerData, dob: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold" />
                     </div>
 
-                    {/* 👆👆 「報名班別」欄位已經被我移除了 👆👆 */}
+                    <div>
+                        <label className="text-sm font-bold text-slate-600">報名班別</label>
+                        <input value={playerData.squashClass || ''} onChange={e => setPlayerData({...playerData, squashClass: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold" />
+                    </div>
 
                     <div className="pt-4">
                         <button onClick={handleUpdatePlayer} className="w-full bg-amber-500 text-white px-4 py-3 rounded-xl font-black hover:bg-amber-600 shadow-md transition-all active:scale-95">
