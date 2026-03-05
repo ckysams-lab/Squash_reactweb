@@ -947,44 +947,41 @@ const handleSaveFeaturedBadges = async () => {
     }
   };
 
-    const handleSetupStudentAuth = async (student) => {
-    // 1. 彈出視窗讓教練直接輸入密碼
-    const password = prompt(`請為 ${student.name} 設定登入密碼 (最少 6 位數):`);
-    if (!password || password.length < 6) {
-        alert("密碼無效或太短 (Firebase 規定最少 6 位數)！已取消操作。");
-        return;
-    }
-
-    // 2. 自動組合專屬信箱格式：班別+班號@bcklas.squash (例如 6a01@bcklas.squash)
-    const studentAuthEmail = `${student.class.toLowerCase().trim()}${student.classNo.trim()}@bcklas.squash`;
-
-    setIsUpdating(true);
-    try {
-        // 3. 【核心技巧】建立一個「暫時的」Firebase實例，避免教練被強制登出
-        const tempApp = initializeApp(firebaseConfig, "TempApp");
-        const tempAuth = getAuth(tempApp);
-
-        // 4. 在暫時的實例中建立學生帳號
-        await createUserWithEmailAndPassword(tempAuth, studentAuthEmail, password);
-
-        // 5. 更新 Firestore 中的學生資料，綁定 authEmail 作為紀錄
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
-            authEmail: studentAuthEmail,
-            lastUpdated: serverTimestamp()
+    const handleManualAward = async (student) => {
+    const badgeId = prompt(`請輸入要授予 ${student.name} 的徽章 ID：`);
+    if (badgeId) {
+      try {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'), {
+          studentId: student.id,
+          studentName: student.name,
+          badgeId: badgeId,
+          timestamp: serverTimestamp(),
+          level: 1, // 預設等級 1
         });
-
-        // 6. 刪除暫時的實例，釋放系統資源
-        await deleteApp(tempApp);
-
-        alert(`✅ 成功為 ${student.name} 建立登入帳號！\n\n請通知學生：\n登入班別：${student.class}\n登入學號：${student.classNo}\n登入密碼：${password}`);
-    } catch (error) {
-        console.error("建立學生帳號失敗:", error);
-        if (error.code === 'auth/email-already-in-use') {
-            alert(`建立失敗：這個帳號 (${studentAuthEmail}) 已經被註冊過了！\n如需重設密碼，目前仍需透過 Firebase 後台操作。`);
-        } else {
-            alert(`建立帳號發生錯誤: ${error.message}`);
-        }
+        alert(`成功為 ${student.name} 授予了 ${badgeId} 徽章！`);
+      } catch (e) {
+        console.error("授予徽章失敗: ", e);
+        alert("操作失敗，請檢查 Badge ID 是否正確。");
+      }
     }
+  };
+
+  const handleSetupStudentAuth = async (student) => {
+    const email = prompt(`請為 ${student.name} 設定登入電郵：`);
+    const password = prompt(`請為 ${student.name} 設定登入密碼 (至少6位數)：`);
+
+    if (email && password && password.length >= 6) {
+      try {
+        // 理想情況下，這應由後端處理以確保安全
+        alert(`【模擬操作】\n已為 ${student.name} 準備好帳號資料：\n電郵: ${email}\n請通知後台管理員手動創建。`);
+      } catch (error) {
+        console.error("創建用戶失敗: ", error);
+        alert(`創建用戶失敗: ${error.message}`);
+      }
+    } else {
+      alert("電郵和密碼為必填項，且密碼長度不能少於6位！");
+    }
+  };
     setIsUpdating(false);
   };
 
