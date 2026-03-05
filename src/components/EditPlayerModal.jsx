@@ -1,8 +1,9 @@
+// 這是更新過後的 EditPlayerModal.jsx
 import React, { useState, useEffect } from 'react';
-import { X, UserCog, Upload, Loader2, Award, Key } from 'lucide-react';
+import { X, UserCog, Upload, Loader2, Trophy as TrophyIcon } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
-const EditPlayerModal = ({ student, onClose, db, appId, compressImage, handleManualAward, handleSetupStudentAuth }) => {
+const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
     const [playerData, setPlayerData] = useState(student);
     const [isUploading, setIsUploading] = useState(false);
 
@@ -92,32 +93,18 @@ const EditPlayerModal = ({ student, onClose, db, appId, compressImage, handleMan
                         </div>
                     </div>
                     
+                    {/* 👇👇 在這裡新增了「出生日期」欄位 👇👇 */}
                     <div>
                         <label className="text-sm font-bold text-slate-600">出生日期</label>
                         <input type="date" value={playerData.dob || ''} onChange={e => setPlayerData({...playerData, dob: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold" />
                     </div>
 
-                    <div>
-                        <label className="text-sm font-bold text-slate-600">報名班別</label>
-                        <input value={playerData.squashClass || ''} onChange={e => setPlayerData({...playerData, squashClass: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold" />
-                    </div>
+                    {/* 👆👆 「報名班別」欄位已經被我移除了 👆👆 */}
 
                     <div className="pt-4">
                         <button onClick={handleUpdatePlayer} className="w-full bg-amber-500 text-white px-4 py-3 rounded-xl font-black hover:bg-amber-600 shadow-md transition-all active:scale-95">
                             確認更新
                         </button>
-                    </div>
-
-                    <div className="mt-6 pt-6 border-t border-slate-100">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 text-center">管理員專屬操作</h4>
-                        <div className="flex justify-center gap-2">
-                            <button onClick={() => handleManualAward(student)} className="flex-1 flex items-center justify-center gap-2 p-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-yellow-100 hover:text-yellow-700 transition-all font-bold">
-                                <Award size={16}/> 授予徽章
-                            </button>
-                            <button onClick={() => handleSetupStudentAuth(student)} className="flex-1 flex items-center justify-center gap-2 p-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-emerald-100 hover:text-emerald-700 transition-all font-bold">
-                                <Key size={16}/> 設定登入資料
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>
