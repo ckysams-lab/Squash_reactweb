@@ -4261,10 +4261,12 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
         db={db}
         appId={appId}
         compressImage={compressImage}
+        // 👇👇 把這兩個函數傳遞進去 👇👇
+        handleManualAward={handleManualAward}
+        handleSetupStudentAuth={handleSetupStudentAuth}
     />
 )}
 
-          
         </div>
       </main>
     </div>
