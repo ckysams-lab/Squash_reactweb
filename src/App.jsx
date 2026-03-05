@@ -292,6 +292,7 @@ export default function App() {
   const [schedules, setSchedules] = useState([]); 
   const [liveMatches, setLiveMatches] = useState([]);
   const [showUmpirePanel, setShowUmpirePanel] = useState(false);
+  const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null); // 👉 新增這行：記錄正在轉播的聯賽
   const [galleryItems, setGalleryItems] = useState([]);
   const [driveAlbums, setDriveAlbums] = useState([]); // 儲存來自 Google Drive 的相簿
