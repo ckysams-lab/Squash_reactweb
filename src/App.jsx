@@ -3438,30 +3438,39 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                             })}
                         </div>
                         {/* --- END: 版本 12.9 新增 --- */}
-                        {s.dob ? (<div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>) : (<div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>)}
-                        <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
-                        <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-                           <button onClick={() => handleManualAward(s)} className="text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 p-2 rounded-xl transition-all" title="授予徽章"><Award size={16}/></button>
-                           <button onClick={() => handleUpdateSquashClass(s)} className="text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 p-2 rounded-xl transition-all" title="設定報名班別"><Layers size={16}/></button>
-                           <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={16}/></button>
-                           <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={16}/></button>
-                          <button 
-                              onClick={(e) => { e.stopPropagation(); setEditingStudent(s); }} 
-                              className="p-2 bg-white/80 rounded-full shadow-md backdrop-blur-sm hover:bg-amber-400 hover:text-white"
-                              title="編輯此隊員"
-                          >
-                              <UserCog size={14} />
-                          </button> 
-                          <button 
-                              onClick={(e) => { e.stopPropagation(); if(window.confirm('確定要刪除此隊員嗎?')) deleteItem('students', s.id); }} 
-                              className="p-2 bg-white/80 rounded-full shadow-md backdrop-blur-sm hover:bg-red-500 hover:text-white" 
-                              title="刪除此隊員"
-                          >
-                              <Trash2 size={16} />
-                          </button>
-                        </div>
-                     </div>
-                   ))}
+// 這是「最終清理版」，請用它來替換您找到的整段程式碼
+
+// 我們保留顯示生日和班別的純文字
+{s.dob ? (
+    <div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100">
+        <Cake size={10}/> {s.dob}
+    </div>
+) : (
+    <div className="mt-2 text-[10px] text-slate-300 font-bold">未設定生日</div>
+)}
+
+<div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
+
+{/* 我們只留下新的「編輯」和「刪除」按鈕，並把它們移到右上角，懸停才顯示 */}
+{role === 'admin' && (
+    <div className="absolute top-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <button 
+            onClick={(e) => { e.stopPropagation(); setEditingStudent(s); }} 
+            className="p-2 bg-white rounded-full shadow-lg text-slate-500 hover:bg-amber-400 hover:text-white"
+            title="編輯此隊員"
+        >
+            <UserCog size={16} />
+        </button>
+        <button 
+            onClick={(e) => { e.stopPropagation(); if(window.confirm('確定要刪除此隊員嗎?')) deleteItem('students', s.id); }} 
+            className="p-2 bg-white rounded-full shadow-lg text-slate-500 hover:bg-red-500 hover:text-white"
+            title="刪除此隊員"
+        >
+            <Trash2 size={16} />
+        </button>
+    </div>
+)}
+
                           <button onClick={() => setShowAddPlayerModal(true)} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
                               <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
                               <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
