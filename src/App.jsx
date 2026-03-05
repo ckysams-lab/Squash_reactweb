@@ -7,7 +7,7 @@ import AddPlayerModal from './components/AddPlayerModal';
 import EditPlayerModal from './components/EditPlayerModal';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  LayoutDashboard, Users, ClipboardCheck, DollarSign, Plus, Trash2, 
+  LayoutDashboard, Users, ClipboardCheck, DollarSign, Plus, Trash2, UserCog,
   UserCheck, Calendar as CalendarIcon, ShieldCheck, Menu, X, Loader2,
   Trophy, Megaphone, Upload, LogIn, LogOut, Lock, User, MinusCircle, PlusCircle, 
   Save, FileSpreadsheet, Download, FileText, Info, Link as LinkIcon, Settings2,
@@ -2261,7 +2261,7 @@ const myDashboardData = useMemo(() => {
                     onClick={() => deleteItem('awards', award.id)}
                     className="absolute top-4 right-4 p-2 bg-black/20 backdrop-blur text-white/70 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100 z-30"
                   >
-                    <Trash2 size={16}/>
+                    < size={16}/>
                   </button>
                )}
           </div>
@@ -3398,7 +3398,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                           <td className="px-8 py-8 text-right font-mono text-slate-400">{s.points}</td>
                           <td className="px-8 py-8 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
                           {role === 'admin' && (
-                            <td className="px-8 py-8"><div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}><button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button><button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button><button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" title="校外賽成績錄入"><Globe size={18}/></button><button onClick={()=>deleteItem('students', s.id)} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="永久刪除"><Trash2 size={18}/></button></div></td>
+                            <td className="px-8 py-8"><div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}><button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button><button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button><button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" title="校外賽成績錄入"><Globe size={18}/></button><button onClick={()=>deleteItem('students', s.id)} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="永久刪除">< size={18}/></button></div></td>
                           
                           )}
                         </tr>
