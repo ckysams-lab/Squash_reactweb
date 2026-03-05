@@ -3444,7 +3444,6 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                            <button onClick={() => handleManualAward(s)} className="text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 p-2 rounded-xl transition-all" title="授予徽章"><Award size={16}/></button>
                            <button onClick={() => handleUpdateSquashClass(s)} className="text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 p-2 rounded-xl transition-all" title="設定報名班別"><Layers size={16}/></button>
                            <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={16}/></button>
-                           <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={16}/></button>
                           <button 
                               onClick={(e) => { e.stopPropagation(); setEditingStudent(s); }} 
                               className="p-2 bg-white/80 rounded-full shadow-md backdrop-blur-sm hover:bg-amber-400 hover:text-white"
