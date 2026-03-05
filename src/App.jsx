@@ -4,6 +4,7 @@ import UmpirePanelModal from './components/UmpirePanelModal';
 import PlayerCardModal from './components/PlayerCardModal';
 import BadgeInfoModal from './components/BadgeInfoModal';
 import AddPlayerModal from './components/AddPlayerModal';
+import EditPlayerModal from './components/EditPlayerModal';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   LayoutDashboard, Users, ClipboardCheck, DollarSign, Plus, Trash2, 
@@ -4229,7 +4230,18 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                   compressImage={compressImage}
     />
 )}
+          {/* 我們將 editingStudent 傳給新的 EditPlayerModal，並把 compressImage 函數也傳進去 */}
+{editingStudent && (
+    <EditPlayerModal 
+        student={editingStudent}
+        onClose={() => setEditingStudent(null)} 
+        db={db}
+        appId={appId}
+        compressImage={compressImage}
+    />
+)}
 
+          
         </div>
       </main>
     </div>
