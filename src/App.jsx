@@ -14,7 +14,7 @@ import {
   FileBarChart, FileSpreadsheet, FileText, Filter, Folder, Globe, Heart, History, Hourglass, Image as ImageIcon, Info,
   Key, LayoutDashboard, Layers, Link as LinkIcon, ListChecks, Loader2, Lock, LogIn, LogOut, Mail, MapPin, Medal,
   Megaphone, Menu, MinusCircle, Pencil, Percent, PlayCircle, Plus, PlusCircle, Printer, Rocket, Save, Search, Settings2,
-  Shield as ShieldIcon, ShieldCheck, Sparkles, Star, Sun, Swords, Target, Trash2, TrendingUp, Trophy, Trophy as TrophyIcon,
+  Shield as ShieldIcon, ShieldCheck, Sparkles, Star, Sun, Swords, Target, Trash2, TrendingUp, Trophy,
   Upload, User, UserCheck, UserCog, UserPlus, Users, Video, X, Zap
 } from 'lucide-react';
 
