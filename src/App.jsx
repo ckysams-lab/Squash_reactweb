@@ -2,6 +2,7 @@ import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
 import UmpirePanelModal from './components/UmpirePanelModal';
 import PlayerCardModal from './components/PlayerCardModal';
+import BadgeInfoModal from './components/BadgeInfoModal';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   LayoutDashboard, Users, ClipboardCheck, DollarSign, Plus, Trash2, 
@@ -2262,32 +2263,6 @@ const myDashboardData = useMemo(() => {
           </div>
       );
   };
-  const BadgeInfoModal = ({ badgeInfo, onClose }) => {
-      if (!badgeInfo) return null;
-      const badgeData = ACHIEVEMENT_DATA[badgeInfo.badgeId];
-      if (!badgeData) return null;
-      const levelData = badgeData.levels?.[badgeInfo.level] || badgeData.levels?.[1] || { name: badgeData.baseName, desc: '詳細描述待補充' };
-      
-      return (
-          <div className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in-50 duration-300" onClick={onClose}>
-              <div className="bg-white rounded-[3rem] w-full max-w-md p-10 shadow-2xl relative animate-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={onClose} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-800 transition-colors"><X size={24} /></button>
-                  <div className="flex flex-col items-center text-center">
-                      <div className="w-28 h-28 bg-slate-50 rounded-3xl flex items-center justify-center text-blue-600 shadow-inner border mb-6">
-                          {React.cloneElement(badgeData.icon, { size: 64 })}
-                      </div>
-                      <h3 className="text-3xl font-black text-slate-800 mb-2">{levelData.name}</h3>
-                      <div className="px-4 py-1.5 rounded-full text-xs font-bold border-2 text-blue-600 bg-blue-100 border-blue-200">
-                          {badgeData.rarity}
-                      </div>
-                      <p className="text-slate-500 mt-8 text-lg leading-relaxed font-bold">
-                          {levelData.desc}
-                      </p>
-                  </div>
-              </div>
-          </div>
-      );
-  };
 
 const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
     if (!student || !data) return null;
@@ -3096,9 +3071,12 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
 
                     {/* 在此渲染彈窗 */}
           {viewingBadge && (
-             <BadgeInfoModal badgeInfo={viewingBadge} onClose={() => setViewingBadge(null)} />
-          )}
-
+    <BadgeInfoModal 
+        badge={viewingBadge} 
+        onClose={() => setViewingBadge(null)} 
+        ACHIEVEMENT_DATA={ACHIEVEMENT_DATA}
+      />
+  )}
           {/* --- 全新：授予勳章選擇視窗 --- */}
           {showAwardModal && studentToAward && (
               <div className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setShowAwardModal(false)}>
