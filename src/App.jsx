@@ -6,16 +6,17 @@ import BadgeInfoModal from './components/BadgeInfoModal';
 import AddPlayerModal from './components/AddPlayerModal';
 import EditPlayerModal from './components/EditPlayerModal';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  Activity, ArrowLeft, Award, BookMarked, BookOpen, Bookmark, Cake, Calendar as CalendarIcon, 
-  Camera, CheckCircle2, ChevronDown, ChevronRight, ClipboardCheck, Clock, Coffee, Columns, 
-  Crown, DollarSign, Download, ExternalLink, Eye, FileBarChart, FileSpreadsheet, FileText, 
-  Filter, Folder, Globe, Heart, History, Hourglass, Image as ImageIcon, Info, Key, 
-  LayoutDashboard, Layers, Link as LinkIcon, ListChecks, Loader2, Lock, LogIn, LogOut, Mail, 
-  MapPin, Medal, Megaphone, Menu, MinusCircle, Pencil, Percent, PlayCircle, Plus, PlusCircle, 
-  Printer, Rocket, Save, Search, Settings2, Shield as ShieldIcon, Sparkles, Star, Sun, Swords, 
-  Target, Trash2, TrendingUp, Trophy, Upload, User, UserCheck, UserCog, UserPlus, Users, Video, X, Zap 
+// 這是包含了所有新、舊圖示的「最終完整版」
+import {
+  Activity, ArrowLeft, Award, BookMarked, BookOpen, Bookmark, Cake, Calendar as CalendarIcon, Camera, CheckCircle2,
+  ChevronDown, ChevronRight, ClipboardCheck, Clock, Coffee, Columns, Crown, DollarSign, Download, ExternalLink, Eye,
+  FileBarChart, FileSpreadsheet, FileText, Filter, Folder, Globe, Heart, History, Hourglass, Image as ImageIcon, Info,
+  Key, LayoutDashboard, Layers, Link as LinkIcon, ListChecks, Loader2, Lock, LogIn, LogOut, Mail, MapPin, Medal,
+  Megaphone, Menu, MinusCircle, Pencil, Percent, PlayCircle, Plus, PlusCircle, Printer, Rocket, Save, Search, Settings2,
+  Shield, ShieldCheck, Sparkles, Star, Sun, Swords, Target, Trash2, TrendingUp, Trophy, Upload, User, UserCheck,
+  UserCog, UserPlus, Users, Video, X, Zap
 } from 'lucide-react';
+
 
 import { 
   getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
