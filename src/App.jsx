@@ -7,17 +7,16 @@ import AddPlayerModal from './components/AddPlayerModal';
 import EditPlayerModal from './components/EditPlayerModal';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  LayoutDashboard, Users, ClipboardCheck, DollarSign, Plus, Trash2, UserCog,
-  UserCheck, Calendar as CalendarIcon, ShieldCheck, Menu, X, Loader2,
-  Trophy, Megaphone, Upload, LogIn, LogOut, Lock, User, MinusCircle, PlusCircle, 
-  Save, FileSpreadsheet, Download, FileText, Info, Link as LinkIcon, Settings2,
-  ChevronRight, Search, Filter, History, Clock, MapPin, Layers, Award,
-  Trophy as TrophyIcon, Star, Target, TrendingUp, ChevronDown, CheckCircle2,
-  FileBarChart, Crown, ListChecks, Image as ImageIcon, Video, PlayCircle, Camera,
-  Hourglass, Medal, Folder, ArrowLeft, Bookmark, BookOpen, Swords, Globe, Cake, ExternalLink, Key, Mail,
-  Zap, Shield as ShieldfIcon, Sun, Sparkles, Heart, Rocket, Coffee,
-  Pencil, Percent, UserPlus, Printer, Eye, Columns, BookMarked, Activity
+  Activity, ArrowLeft, Award, BookMarked, BookOpen, Bookmark, Cake, Calendar as CalendarIcon, 
+  Camera, CheckCircle2, ChevronDown, ChevronRight, ClipboardCheck, Clock, Coffee, Columns, 
+  Crown, DollarSign, Download, ExternalLink, Eye, FileBarChart, FileSpreadsheet, FileText, 
+  Filter, Folder, Globe, Heart, History, Hourglass, Image as ImageIcon, Info, Key, 
+  LayoutDashboard, Layers, Link as LinkIcon, ListChecks, Loader2, Lock, LogIn, LogOut, Mail, 
+  MapPin, Medal, Megaphone, Menu, MinusCircle, Pencil, Percent, PlayCircle, Plus, PlusCircle, 
+  Printer, Rocket, Save, Search, Settings2, Shield as ShieldIcon, Sparkles, Star, Sun, Swords, 
+  Target, Trash2, TrendingUp, Trophy, Upload, User, UserCheck, UserCog, UserPlus, Users, Video, X, Zap 
 } from 'lucide-react';
+
 import { 
   getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
   addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where,
