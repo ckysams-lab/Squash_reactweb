@@ -7,15 +7,17 @@ import AddPlayerModal from './components/AddPlayerModal';
 import EditPlayerModal from './components/EditPlayerModal';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 // 這是包含了所有新、舊圖示的「最終完整版」
+// 這是比對和修正了所有命名與別名問題後的「完美版」
 import {
   Activity, ArrowLeft, Award, BookMarked, BookOpen, Bookmark, Cake, Calendar as CalendarIcon, Camera, CheckCircle2,
   ChevronDown, ChevronRight, ClipboardCheck, Clock, Coffee, Columns, Crown, DollarSign, Download, ExternalLink, Eye,
   FileBarChart, FileSpreadsheet, FileText, Filter, Folder, Globe, Heart, History, Hourglass, Image as ImageIcon, Info,
   Key, LayoutDashboard, Layers, Link as LinkIcon, ListChecks, Loader2, Lock, LogIn, LogOut, Mail, MapPin, Medal,
   Megaphone, Menu, MinusCircle, Pencil, Percent, PlayCircle, Plus, PlusCircle, Printer, Rocket, Save, Search, Settings2,
-  Shield, ShieldCheck, Sparkles, Star, Sun, Swords, Target, Trash2, TrendingUp, Trophy, Upload, User, UserCheck,
-  UserCog, UserPlus, Users, Video, X, Zap
+  Shield as ShieldIcon, ShieldCheck, Sparkles, Star, Sun, Swords, Target, Trash2, TrendingUp, Trophy as TrophyIcon,
+  Upload, User, UserCheck, UserCog, UserPlus, Users, Video, X, Zap
 } from 'lucide-react';
+
 
 
 import { 
