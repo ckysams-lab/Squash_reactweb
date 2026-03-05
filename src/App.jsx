@@ -3443,7 +3443,10 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
 
                      </div>
                    ))}
-                   <button onClick={()=>{const name = prompt('隊員姓名');const cls = prompt('班別 (如: 6A)');if(name && cls) addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'students'), { name, class: cls.toUpperCase(), classNo: '00', badge: '無', points: 100, squashClass: '', createdAt: serverTimestamp() });}} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group"><Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/><span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span></button>
+                          <button onClick={() => setShowAddPlayerModal(true)} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
+                              <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
+                              <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
+                          </button>
                 </div>
              </div>
           )}
@@ -4216,7 +4219,15 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                  <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">Copyright © 2026 正覺壁球. All Rights Reserved.</div>
              </div>
           )}
-          
+          {showAddPlayerModal && (
+              <AddPlayerModal 
+                  onClose={() => setShowAddPlayerModal(false)} 
+                  db={db}
+                  appId={appId}
+                  compressImage={compressImage}
+    />
+)}
+
         </div>
       </main>
     </div>
