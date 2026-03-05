@@ -2260,7 +2260,7 @@ const myDashboardData = useMemo(() => {
                     onClick={() => deleteItem('awards', award.id)}
                     className="absolute top-4 right-4 p-2 bg-black/20 backdrop-blur text-white/70 hover:text-red-500 hover:bg-white rounded-full transition-all opacity-0 group-hover:opacity-100 z-30"
                   >
-                    < size={16}/>
+                    <Usercog size={16}/>
                   </button>
                )}
           </div>
