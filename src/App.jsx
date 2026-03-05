@@ -3399,6 +3399,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                           <td className="px-8 py-8 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
                           {role === 'admin' && (
                             <td className="px-8 py-8"><div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}><button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all" title="+10分"><Plus size={18}/></button><button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all" title="-10分"><MinusCircle size={18}/></button><button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all" title="校外賽成績錄入"><Globe size={18}/></button><button onClick={()=>deleteItem('students', s.id)} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all" title="永久刪除"><Trash2 size={18}/></button></div></td>
+                          
                           )}
                         </tr>
                       ))}
@@ -3442,9 +3443,21 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                            <button onClick={() => handleUpdateSquashClass(s)} className="text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 p-2 rounded-xl transition-all" title="設定報名班別"><Layers size={16}/></button>
                            <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 p-2 rounded-xl transition-all" title="設定登入資料"><Key size={16}/></button>
                            <button onClick={() => handleUpdateDOB(s)} className="text-slate-300 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-all" title="設定出生日期"><Cake size={16}/></button>
-                           <button onClick={()=>deleteItem('students', s.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all" title="刪除隊員"><Trash2 size={16}/></button>
+                          <button 
+                              onClick={(e) => { e.stopPropagation(); setEditingStudent(s); }} 
+                              className="p-2 bg-white/80 rounded-full shadow-md backdrop-blur-sm hover:bg-amber-400 hover:text-white"
+                              title="編輯此隊員"
+                          >
+                              <UserCog size={14} />
+                          </button> 
+                          <button 
+                              onClick={(e) => { e.stopPropagation(); if(window.confirm('確定要刪除此隊員嗎?')) deleteItem('students', s.id); }} 
+                              className="p-2 bg-white/80 rounded-full shadow-md backdrop-blur-sm hover:bg-red-500 hover:text-white" 
+                              title="刪除此隊員"
+                          >
+                              <Trash2 size={16} />
+                          </button>
                         </div>
-
                      </div>
                    ))}
                           <button onClick={() => setShowAddPlayerModal(true)} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
