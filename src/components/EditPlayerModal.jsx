@@ -1,3 +1,4 @@
+// 這是更新過後的 EditPlayerModal.jsx
 import React, { useState, useEffect } from 'react';
 import { X, UserCog, Upload, Loader2, Trophy as TrophyIcon } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -7,7 +8,6 @@ const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
     const [isUploading, setIsUploading] = useState(false);
 
     useEffect(() => {
-        // 當外部傳入的 student 物件改變時，同步更新表單內的資料
         setPlayerData(student);
     }, [student]);
 
@@ -41,7 +41,7 @@ const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
                 lastUpdated: serverTimestamp()
             });
             alert('✅ 成功更新隊員資料！');
-            onClose(); // 關閉視窗
+            onClose();
         } catch (e) {
             console.error("更新隊員失敗: ", e);
             alert('更新失敗，請檢查網絡連線。');
@@ -55,7 +55,6 @@ const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
                 <h3 className="text-2xl font-black mb-6 text-slate-800 flex items-center gap-3"><UserCog className="text-amber-500"/> 編輯隊員資料</h3>
                 
                 <div className="space-y-4">
-                    {/* 表單內容與 AddPlayerModal 非常相似，但 value 綁定的是 playerData */}
                     <div className="flex items-center gap-4">
                         <div className="w-24 h-24 bg-slate-100 rounded-2xl flex items-center justify-center border-2 border-dashed overflow-hidden">
                             {playerData.photo_url ? (
@@ -83,21 +82,24 @@ const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
                         <input value={playerData.name} onChange={e => setPlayerData({...playerData, name: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold" />
                     </div>
                     
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="col-span-1 md:col-span-2">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
                             <label className="text-sm font-bold text-slate-600">班別</label>
                             <input value={playerData.class} onChange={e => setPlayerData({...playerData, class: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold uppercase" />
                         </div>
-                        <div className="col-span-1 md:col-span-2">
+                        <div>
                             <label className="text-sm font-bold text-slate-600">班號</label>
                             <input type="number" value={playerData.classNo} onChange={e => setPlayerData({...playerData, classNo: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold" />
                         </div>
                     </div>
                     
+                    {/* 👇👇 在這裡新增了「出生日期」欄位 👇👇 */}
                     <div>
-                        <label className="text-sm font-bold text-slate-600">報名班別</label>
-                        <input value={playerData.squashClass} onChange={e => setPlayerData({...playerData, squashClass: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold" />
+                        <label className="text-sm font-bold text-slate-600">出生日期</label>
+                        <input type="date" value={playerData.dob || ''} onChange={e => setPlayerData({...playerData, dob: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold" />
                     </div>
+
+                    {/* 👆👆 「報名班別」欄位已經被我移除了 👆👆 */}
 
                     <div className="pt-4">
                         <button onClick={handleUpdatePlayer} className="w-full bg-amber-500 text-white px-4 py-3 rounded-xl font-black hover:bg-amber-600 shadow-md transition-all active:scale-95">
