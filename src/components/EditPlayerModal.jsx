@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, UserCog, Upload, Loader2 } from 'lucide-react';
+import { X, UserCog, Upload, Loader2, Trophy as TrophyIcon } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
