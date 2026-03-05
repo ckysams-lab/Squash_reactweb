@@ -1,9 +1,8 @@
-// 這是包含了「出生日期」和「報名班別」的最終版本
 import React, { useState, useEffect } from 'react';
-import { X, UserCog, Upload, Loader2 } from 'lucide-react';
+import { X, UserCog, Upload, Loader2, Award, Key } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
-const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
+const EditPlayerModal = ({ student, onClose, db, appId, compressImage, handleManualAward, handleSetupStudentAuth }) => {
     const [playerData, setPlayerData] = useState(student);
     const [isUploading, setIsUploading] = useState(false);
 
@@ -107,6 +106,18 @@ const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
                         <button onClick={handleUpdatePlayer} className="w-full bg-amber-500 text-white px-4 py-3 rounded-xl font-black hover:bg-amber-600 shadow-md transition-all active:scale-95">
                             確認更新
                         </button>
+                    </div>
+
+                    <div className="mt-6 pt-6 border-t border-slate-100">
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 text-center">管理員專屬操作</h4>
+                        <div className="flex justify-center gap-2">
+                            <button onClick={() => handleManualAward(student)} className="flex-1 flex items-center justify-center gap-2 p-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-yellow-100 hover:text-yellow-700 transition-all font-bold">
+                                <Award size={16}/> 授予徽章
+                            </button>
+                            <button onClick={() => handleSetupStudentAuth(student)} className="flex-1 flex items-center justify-center gap-2 p-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-emerald-100 hover:text-emerald-700 transition-all font-bold">
+                                <Key size={16}/> 設定登入資料
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
