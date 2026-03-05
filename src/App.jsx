@@ -3,6 +3,7 @@ import TacticalBoardModal from './components/TacticalBoardModal';
 import UmpirePanelModal from './components/UmpirePanelModal';
 import PlayerCardModal from './components/PlayerCardModal';
 import BadgeInfoModal from './components/BadgeInfoModal';
+import AddPlayerModal from './components/AddPlayerModal';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   LayoutDashboard, Users, ClipboardCheck, DollarSign, Plus, Trash2, 
