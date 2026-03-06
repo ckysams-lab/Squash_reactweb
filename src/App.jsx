@@ -751,13 +751,13 @@ const handleSaveFeaturedBadges = async () => {
     if (!player1Id || !tournamentName || !date || isWin === null) {
       alert('請填寫所有必填欄位：賽事、日期、我方隊員及本場結果。');
       return;
-    }
+    };
 
     const player = students.find(s => s.id === player1Id);
     if (!player) {
       alert('找不到指定的學生資料！');
       return;
-    }
+    };
 
     setIsUpdating(true);
     try {
