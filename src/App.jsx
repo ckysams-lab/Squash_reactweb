@@ -745,39 +745,6 @@ const handleSaveFeaturedBadges = async () => {
     }
     setIsUpdating(false);
   };
-  const file = e.target.files[0];
-  if (!file) return;
-  setIsUpdating(true);
-  try {
-    const compressedUrl = await compressImage(file, 0.8); // 使用現有的壓縮函式
-    setNewAwardData(prev => ({ ...prev, photoUrl: compressedUrl }));
-    setAwardPhotoPreview(URL.createObjectURL(file)); // 建立本地預覽
-  } catch (err) {
-    console.error("Award photo upload failed:", err);
-    alert("照片上傳或壓縮失敗。");
-  }
-  setIsUpdating(false);
-};
-      const { title, studentName, date, rank } = newAwardData;
-      if (!title || !studentName || !date || !rank) {
-        alert("請填寫所有必填欄位：獎項名稱、名次、獲獎學生和日期。");
-        return;
-      }
-      setIsUpdating(true);
-      try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'awards'), {
-          ...newAwardData,
-          timestamp: serverTimestamp()
-        });
-        alert('🏆 獎項新增成功！');
-        setShowAddAwardModal(false); // 關閉 Modal
-      } catch (e) {
-        console.error("Failed to save award:", e);
-        alert('新增失敗，請檢查網絡連線。');
-      }
-      setIsUpdating(false);
-    };
-    // ===== END: 版本 12.4 =====
   
   const handleSaveExternalMatch = async () => {
     const { player1Id, tournamentName, date, isWin, externalMatchScore, opponentSchool, opponentPlayerName } = newExternalMatch;
