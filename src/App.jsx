@@ -821,7 +821,7 @@ const handleSaveFeaturedBadges = async () => {
         player2Id: null, 
         player2Name: opponentPlayerName || 'N/A', 
         winnerId: isWin ? player1Id : null,
-        status: ,
+        status: 'completed',
         timestamp: serverTimestamp(),
       };
       
