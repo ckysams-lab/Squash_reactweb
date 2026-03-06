@@ -1933,21 +1933,6 @@ const myDashboardData = useMemo(() => {
       />
     );
   };
-
-  // 重置表單數據
-  setNewAwardData({
-    title: '',
-    studentName: '',
-    date: new Date().toISOString().split('T')[0],
-    rank: '',
-    description: '',
-    photoUrl: null,
-  });
-  setAwardPhotoPreview(null);
-  // 打開 Modal
-  setShowAddAwardModal(true);
-};
-
   const handleMonthlyStarFieldChange = (gender, field, value) => {
     setMonthlyStarEditData(prev => ({
         ...prev,
