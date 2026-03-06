@@ -5,6 +5,7 @@ import PlayerCardModal from './components/PlayerCardModal';
 import BadgeInfoModal from './components/BadgeInfoModal';
 import AddPlayerModal from './components/AddPlayerModal';
 import EditPlayerModal from './components/EditPlayerModal';
+import PosterGenerator from './components/PosterGenerator';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 // 這是包含了所有新、舊圖示的「最終完整版」
 // 這是比對和修正了所有命名與別名問題後的「完美版」
@@ -139,67 +140,6 @@ const getAcademicYear = (dateString) => {
     }
 };
 
-const PosterTemplate = React.forwardRef(({ data, schoolLogo }, ref) => {
-    if (!data) return null;
-    return (
-        <div ref={ref} className="bg-white p-8" style={{ width: '827px', height: '1170px', fontFamily: 'sans-serif', position: 'relative' }}>
-            <div className="flex justify-between items-center border-b-4 border-black pb-4">
-                {schoolLogo ? <img src={schoolLogo} alt="School Logo" className="h-24 object-contain" crossOrigin="anonymous"/> : <div className="w-24 h-24 bg-slate-200"></div>}
-                <div className="text-center">
-                    <h1 style={{ fontFamily: 'serif', fontSize: '48px', fontWeight: 'bold' }}>BCKLAS 壁球隊 每月之星</h1>
-                    <p style={{ fontSize: '28px', fontWeight: '600' }}>{data.month.replace('-', ' 年 ')} 月</p>
-                </div>
-                <div className="w-24 h-24 flex items-center justify-center text-slate-400"><TrophyIcon size={80}/></div>
-            </div>
-            <div className="flex mt-8 gap-8">
-                <div className="w-1/2">
-                    <h2 className="text-2xl font-bold text-blue-700 mb-4 text-center">PLAYER OF THE MONTH (MALE)</h2>
-                    <div className="w-full bg-slate-200" style={{ height: '500px' }}>
-                        {data.maleWinner.fullBodyPhotoUrl && <img src={data.maleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top" crossOrigin="anonymous"/>}
-                    </div>
-                    <h3 className="text-4xl font-bold mt-4">{data.maleWinner.studentName} <span className="text-2xl text-slate-500">({data.maleWinner.studentClass})</span></h3>
-                    <div className="mt-6 space-y-4">
-                        <div>
-                            <h4 className="text-xl font-bold border-b-2 border-blue-600 inline-block pb-1 mb-2">獲選原因</h4>
-                            <p className="text-lg">{data.maleWinner.reason}</p>
-                        </div>
-                        <div>
-                            <h4 className="text-xl font-bold border-b-2 border-blue-600 inline-block pb-1 mb-2">本年度目標</h4>
-                            <p className="text-lg italic">"{data.maleWinner.goals}"</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="w-1/2">
-                    <h2 className="text-2xl font-bold text-pink-600 mb-4 text-center">PLAYER OF THE MONTH (FEMALE)</h2>
-                    <div className="w-full bg-slate-200" style={{ height: '500px' }}>
-                         {data.femaleWinner.fullBodyPhotoUrl && <img src={data.femaleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top" crossOrigin="anonymous"/>}
-                    </div>
-                    <h3 className="text-4xl font-bold mt-4">{data.femaleWinner.studentName} <span className="text-2xl text-slate-500">({data.femaleWinner.studentClass})</span></h3>
-                     <div className="mt-6 space-y-4">
-                        <div>
-                            <h4 className="text-xl font-bold border-b-2 border-pink-500 inline-block pb-1 mb-2">獲選原因</h4>
-                            <p className="text-lg">{data.femaleWinner.reason}</p>
-                        </div>
-                        <div>
-                            <h4 className="text-xl font-bold border-b-2 border-pink-500 inline-block pb-1 mb-2">本年度目標</h4>
-                            <p className="text-lg italic">"{data.femaleWinner.goals}"</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div className="absolute bottom-8 left-8 right-8 flex justify-between items-end">
-                <p className="text-lg font-semibold italic">汗水鑄就榮耀，目標定義未來</p>
-                <div className="text-center">
-                    <QRCode value={window.location.href} size={80} />
-                    <p className="text-xs font-bold mt-1">線上回顧歷屆每月之星</p>
-                </div>
-            </div>
-        </div>
-    )
-  });
-PosterTemplate.displayName = 'PosterTemplate';
-
-// ==========================================
 // 📺 2. 學生/家長端：公開即時大螢幕顯示板 (支援勝負特效)
 // ==========================================
 const LiveScoreboardDisplay = ({ liveMatches, TrophyIcon }) => {
@@ -282,7 +222,6 @@ const LiveScoreboardDisplay = ({ liveMatches, TrophyIcon }) => {
         </div>
     );
 };
-
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -882,7 +821,7 @@ const handleSaveFeaturedBadges = async () => {
         player2Id: null, 
         player2Name: opponentPlayerName || 'N/A', 
         winnerId: isWin ? player1Id : null,
-        status: 'completed',
+        status: ,
         timestamp: serverTimestamp(),
       };
       
@@ -2676,7 +2615,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
       
       {/* Hidden Poster for Rendering */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100}}>
-          <PosterTemplate ref={posterRef} data={posterData} />
+          <PosterGenerator ref={posterRef} data={posterData} schoolLogo={posterData?.schoolLogo} />
       </div>
 
       <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" multiple onChange={handleGalleryImageUpload} />
