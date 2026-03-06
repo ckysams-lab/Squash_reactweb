@@ -6,6 +6,7 @@ import BadgeInfoModal from './components/BadgeInfoModal';
 import AddPlayerModal from './components/AddPlayerModal';
 import EditPlayerModal from './components/EditPlayerModal';
 import PosterGenerator from './components/PosterGenerator';
+import AddAwardModal from './components/AddAwardModal';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 // 這是包含了所有新、舊圖示的「最終完整版」
 // 這是比對和修正了所有命名與別名問題後的「完美版」
@@ -382,18 +383,7 @@ const handleSaveFeaturedBadges = async () => {
   const posterRef = useRef(null);
   const [isGeneratingPoster, setIsGeneratingPoster] = useState(false);
   const [posterData, setPosterData] = useState(null);
-
-    const [showAddAwardModal, setShowAddAwardModal] = useState(false);
-  const [newAwardData, setNewAwardData] = useState({
-    title: '',
-    studentName: '',
-    date: new Date().toISOString().split('T')[0],
-    rank: '',
-    description: '',
-    photoUrl: null, // 將用來儲存 Base64 圖片
-  });
-  const [awardPhotoPreview, setAwardPhotoPreview] = useState(null);
-  
+  const [showAddAwardModal, setShowAddAwardModal] = useState(false);
   const [newExternalMatch, setNewExternalMatch] = useState({
     tournamentName: '',
     date: new Date().toISOString().split('T')[0],
@@ -755,8 +745,6 @@ const handleSaveFeaturedBadges = async () => {
     }
     setIsUpdating(false);
   };
-
-  const handleAwardPhotoUpload = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   setIsUpdating(true);
@@ -770,8 +758,6 @@ const handleSaveFeaturedBadges = async () => {
   }
   setIsUpdating(false);
 };
-    // ===== START: 版本 12.4 - 儲存新獎項數據 =====
-    const handleSaveAward = async () => {
       const { title, studentName, date, rank } = newAwardData;
       if (!title || !studentName || !date || !rank) {
         alert("請填寫所有必填欄位：獎項名稱、名次、獲獎學生和日期。");
@@ -1981,7 +1967,6 @@ const myDashboardData = useMemo(() => {
     );
   };
 
-  const handleAddAward = () => {
   // 重置表單數據
   setNewAwardData({
     title: '',
@@ -2627,6 +2612,15 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
    />
 )}
 
+{showAddAwardModal && (
+    <AddAwardModal 
+        onClose={() => setShowAddAwardModal(false)}
+        db={db}
+        appId={appId}
+        compressImage={compressImage}
+    />
+)}
+       
       {showTournamentModal && (
         <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowTournamentModal(false)}>
             <div className="bg-white rounded-[3rem] w-full max-w-2xl p-10 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
@@ -2927,75 +2921,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                   BADGE_DATA={BADGE_DATA}
                   ACHIEVEMENT_DATA={ACHIEVEMENT_DATA}
               /> 
-          )}
-
-          {showAddAwardModal && (
-                  <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowAddAwardModal(false)}>
-                      <div className="bg-white rounded-[3rem] w-full max-w-2xl p-10 shadow-2xl relative animate-in fade-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => setShowAddAwardModal(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-800 transition-colors"><X size={24} /></button>
-                          <h3 className="text-3xl font-black text-slate-800 mb-8">新增輝煌成就</h3>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                            {/* 圖片上傳區 */}
-                            <div className="md:col-span-1">
-                              <label className="text-sm font-bold text-slate-500 mb-2 block">得獎照片</label>
-                              <div 
-                                className="w-full aspect-[4/3] bg-slate-50 rounded-2xl border-2 border-dashed flex items-center justify-center text-slate-400 hover:border-blue-500 hover:text-blue-500 transition-all cursor-pointer"
-                                onClick={() => document.getElementById('awardPhotoInput').click()}
-                              >
-                                {awardPhotoPreview ? (
-                                  <img src={awardPhotoPreview} alt="Award Preview" className="w-full h-full object-cover rounded-2xl" />
-                                ) : (
-                                  <div className="text-center">
-                                    <ImageIcon size={40} />
-                                    <p className="text-xs font-bold mt-2">點擊上傳照片</p>
-                                  </div>
-                                )}
-                              </div>
-                              <input 
-                                id="awardPhotoInput"
-                                type="file" 
-                                className="hidden" 
-                                accept="image/*" 
-                                onChange={handleAwardPhotoUpload}
-                              />
-                            </div>
-          
-                            {/* 表單輸入區 */}
-                            <div className="md:col-span-1 space-y-4">
-                              <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">獎項名稱</label>
-                                <input type="text" placeholder="例如：全港學界壁球賽" value={newAwardData.title} onChange={e => setNewAwardData({...newAwardData, title: e.target.value})} className="w-full bg-slate-50 p-3 rounded-xl outline-none border-2 focus:border-blue-500" />
-                              </div>
-                              <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">名次</label>
-                                <input type="text" placeholder="例如：冠軍" value={newAwardData.rank} onChange={e => setNewAwardData({...newAwardData, rank: e.target.value})} className="w-full bg-slate-50 p-3 rounded-xl outline-none border-2 focus:border-blue-500" />
-                              </div>
-                              <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">獲獎學生</label>
-                                <input type="text" placeholder="輸入學生姓名" value={newAwardData.studentName} onChange={e => setNewAwardData({...newAwardData, studentName: e.target.value})} className="w-full bg-slate-50 p-3 rounded-xl outline-none border-2 focus:border-blue-500" />
-                              </div>
-                            </div>
-          
-                            <div className="md:col-span-2">
-                                <label className="text-xs font-bold text-slate-500 block mb-1">獲獎日期</label>
-                                <input type="date" value={newAwardData.date} onChange={e => setNewAwardData({...newAwardData, date: e.target.value})} className="w-full bg-slate-50 p-3 rounded-xl outline-none border-2 focus:border-blue-500" />
-                            </div>
-                             <div className="md:col-span-2">
-                                <label className="text-xs font-bold text-slate-500 block mb-1">備註 (可選)</label>
-                                <textarea placeholder="可輸入比賽地點、主辦單位等資訊" value={newAwardData.description} onChange={e => setNewAwardData({...newAwardData, description: e.target.value})} className="w-full bg-slate-50 p-3 rounded-xl outline-none border-2 focus:border-blue-500 h-20"></textarea>
-                            </div>
-                          </div>
-          
-                          <div className="mt-8 flex justify-end">
-                              <button onClick={handleSaveAward} disabled={isUpdating} className="flex items-center gap-3 px-8 py-4 bg-yellow-500 text-white rounded-2xl shadow-xl shadow-yellow-100 hover:bg-yellow-600 transition-all font-black disabled:opacity-50">
-                                  {isUpdating ? <Loader2 className="animate-spin" /> : <Save />} 儲存獎項
-                              </button>
-                          </div>
-                      </div>
-                  </div>
-                )}
-          
+          )}  
           {selectedSchedule && (
             <div className="fixed inset-0 z-[250] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelectedSchedule(null)}>
               <div className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl animate-in fade-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
@@ -3811,7 +3737,9 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                        <button onClick={() => setAwardsViewMode('timeline')} className={`flex items-center gap-2 px-4 py-2 rounded-[1.2rem] text-sm font-bold transition-all ${awardsViewMode === 'timeline' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><History size={16}/> 時間軸</button>
                      </div>
                      {role === 'admin' && (
-                        <button onClick={handleAddAward} className="bg-yellow-500 text-white p-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black"><PlusCircle size={18}/> <span className="hidden sm:inline">新增獎項</span></button>
+                       <button onClick={() => setShowAddAwardModal(true)} className="bg-yellow-500 text-white p-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-yellow-600 shadow-xl shadow-yellow-100 transition-all font-black">
+                            <PlusCircle size={18}/> <span className="hidden sm:inline">新增獎項</span>
+                        </button>
                      )}
                    </div>
                 </div>
