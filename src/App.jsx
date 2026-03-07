@@ -2844,7 +2844,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                           <label className="text-sm font-bold text-slate-500 mb-2 block">選擇學員</label>
                           <select value={newAssessment.studentId} onChange={e => setNewAssessment({...newAssessment, studentId: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none">
                             <option value="" disabled>-- 請選擇一位隊員 --</option>
-                            {students.sort((a,b) => a.name.localeCompare(b.name, 'zh-Hant')).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
+                            {students.sort((a,b) => (a.name || '').localeCompare(b.name || '', 'zh-Hant')).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
                           </select>
                         </div>
                         <div>
