@@ -13,6 +13,7 @@ import MonthlyStarsPage from './pages/MonthlyStarsPage';
 import DashboardPage from './pages/DashboardPage';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 
+import {
   Activity, ArrowLeft, Award, BookMarked, BookOpen, Bookmark, Cake, Calendar as CalendarIcon, Camera, CheckCircle2,
   ChevronDown, ChevronRight, ClipboardCheck, Clock, Coffee, Columns, Crown, DollarSign, Download, ExternalLink, Eye,
   FileBarChart, FileSpreadsheet, FileText, Filter, Folder, Globe, Heart, History, Hourglass, Image as ImageIcon, Info,
