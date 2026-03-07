@@ -1726,7 +1726,7 @@ const playerDashboardData = useMemo(() => {
     const completedMatches = studentMatches.filter(m => m.status === 'completed');
     const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
     const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
-    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => b.date.localeCompare(a.date));
+    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
     const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
     const totalPlayed = completedMatches.length;
@@ -1755,8 +1755,8 @@ const playerDashboardData = useMemo(() => {
         ];
     }
 
-    const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-
+    const recentMatches = studentMatches.sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
+  
     return {
         winRate, wins, totalPlayed,
         attendanceRate, attendedSessions, totalScheduledSessions,
@@ -1781,7 +1781,7 @@ const myDashboardData = useMemo(() => {
     const completedMatches = studentMatches.filter(m => m.status === 'completed');
     const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
     const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
-    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => b.date.localeCompare(a.date));
+    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
     const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
     const totalPlayed = completedMatches.length;
@@ -1810,7 +1810,7 @@ const myDashboardData = useMemo(() => {
         ];
     }
 
-   const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+   const recentMatches = studentMatches.sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
 
     return {
         winRate, wins, totalPlayed,
