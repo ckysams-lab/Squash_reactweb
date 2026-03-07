@@ -1,3 +1,4 @@
+/* eslint-env serviceworker */
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
 import UmpirePanelModal from './components/UmpirePanelModal';
@@ -27,7 +28,7 @@ import {
 } from 'lucide-react';
 
 import { 
-  getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
+  getFirestore, collection, doc, setDoc, onSnapshot, 
   addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where,
   enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED
 } from 'firebase/firestore';
