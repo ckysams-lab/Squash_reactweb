@@ -26,6 +26,8 @@ import {
   Upload, User, UserCheck, UserCog, UserPlus, Users, Video, X, Zap
 } from 'lucide-react';
 
+
+
 import { 
   getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
   addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where,
@@ -919,6 +921,7 @@ const handleSaveFeaturedBadges = async () => {
     }
   };
 
+    
   const handleLogout = async () => { 
     try {
       await signOut(auth);
@@ -1726,7 +1729,7 @@ const playerDashboardData = useMemo(() => {
     const completedMatches = studentMatches.filter(m => m.status === 'completed');
     const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
     const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
-    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => b.date.localeCompare(a.date));
 
     const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
     const totalPlayed = completedMatches.length;
@@ -1755,8 +1758,8 @@ const playerDashboardData = useMemo(() => {
         ];
     }
 
-    const recentMatches = studentMatches.sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
-  
+    const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+
     return {
         winRate, wins, totalPlayed,
         attendanceRate, attendedSessions, totalScheduledSessions,
@@ -1781,7 +1784,7 @@ const myDashboardData = useMemo(() => {
     const completedMatches = studentMatches.filter(m => m.status === 'completed');
     const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
     const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
-    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => b.date.localeCompare(a.date));
 
     const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
     const totalPlayed = completedMatches.length;
@@ -1810,7 +1813,7 @@ const myDashboardData = useMemo(() => {
         ];
     }
 
-   const recentMatches = studentMatches.sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
+   const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
 
     return {
         winRate, wins, totalPlayed,
@@ -2844,7 +2847,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
                           <label className="text-sm font-bold text-slate-500 mb-2 block">選擇學員</label>
                           <select value={newAssessment.studentId} onChange={e => setNewAssessment({...newAssessment, studentId: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none">
                             <option value="" disabled>-- 請選擇一位隊員 --</option>
-                            {students.sort((a,b) => (a.name || '').localeCompare(b.name || '', 'zh-Hant')).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
+                            {students.sort((a,b) => a.name.localeCompare(b.name, 'zh-Hant')).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
                           </select>
                         </div>
                         <div>
@@ -3606,7 +3609,9 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
         appId={appId}
         compressImage={compressImage}
     />
-)}  
+)}
+
+          
         </div>
       </main>
     </div>
