@@ -26,8 +26,6 @@ import {
   Upload, User, UserCheck, UserCog, UserPlus, Users, Video, X, Zap
 } from 'lucide-react';
 
-
-
 import { 
   getFirestore, collection, doc, setDoc, getDoc, onSnapshot, 
   addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where,
@@ -921,7 +919,6 @@ const handleSaveFeaturedBadges = async () => {
     }
   };
 
-    
   const handleLogout = async () => { 
     try {
       await signOut(auth);
@@ -3609,9 +3606,7 @@ const PlayerDashboard = ({ student, data, onClose, onBadgeClick }) => {
         appId={appId}
         compressImage={compressImage}
     />
-)}
-
-          
+)}  
         </div>
       </main>
     </div>
