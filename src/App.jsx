@@ -1759,7 +1759,11 @@ const playerDashboardData = useMemo(() => {
         ];
     }
 
-    const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+    const recentMatches = studentMatches.sort((a, b) => {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    return dateB.localeCompare(dateA);
+}).slice(0, 5);
 
     return {
         winRate, wins, totalPlayed,
@@ -1814,7 +1818,11 @@ const myDashboardData = useMemo(() => {
         ];
     }
 
-   const recentMatches = studentMatches.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+   const recentMatches = studentMatches.sort((a, b) => {
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    return dateB.localeCompare(dateA);
+}).slice(0, 5);
 
     return {
         winRate, wins, totalPlayed,
