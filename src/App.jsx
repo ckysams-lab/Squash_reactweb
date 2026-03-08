@@ -14,6 +14,7 @@ import DashboardPage from './pages/DashboardPage';
 import LeaguePage from './pages/LeaguePage';
 import RosterPage from './pages/RosterPage';
 import CalendarPage from './pages/CalendarPage';
+import AwardsPage from './pages/AwardsPage';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 
 import {
