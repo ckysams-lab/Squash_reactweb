@@ -1607,6 +1607,8 @@ const handleSaveFeaturedBadges = async () => {
           standings[groupKey][playerId] = {
               id: playerId,
               name: student.name,
+              class: player.class,  
+              classNo: player.classNo,
               played: 0,
               wins: 0,
               losses: 0,
