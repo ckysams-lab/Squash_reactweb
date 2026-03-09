@@ -18,7 +18,7 @@ import AwardsPage from './pages/AwardsPage';
 import GalleryPage from './pages/GalleryPage';
 import AttendancePage from './pages/AttendancePage';
 import AssessmentsPage from './pages/AssessmentsPage';
-import CompetitionsPage from './pages/SettingsPage';
+import SettingsPage from './pages/SettingsPage';
 import CompetitionsPage from './pages/CompetitionsPage';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 
