@@ -2658,7 +2658,6 @@ const myDashboardData = useMemo(() => {
         tournamentStandings={tournamentStandings}
         handleCheerMatch={handleCheerMatch}
         handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore}
-        tournamentStandings={tournamentStandings}
         handleEditLeagueMatch={handleEditLeagueMatch}
         deleteItem={deleteItem}
         schoolLogo={systemConfig.schoolLogo}
