@@ -1,6 +1,7 @@
-// src/pages/LeaguePage.jsx
-import React from 'react';
-import { Target, Activity, Plus, Swords, Zap, PlayCircle, FileText, Pencil, Trash2 } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Target, Activity, Plus, Swords, Zap, PlayCircle, FileText, Pencil, Trash2, Download, Loader2 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
 
 export default function LeaguePage({
     role,
@@ -20,8 +21,38 @@ export default function LeaguePage({
     handleCheerMatch,
     handleUpdateLeagueMatchScore,
     handleEditLeagueMatch,
-    deleteItem
+    deleteItem,
+    schoolLogo // 接收從 App.jsx 傳來的 schoolLogo
 }) {
+
+    const posterRef = useRef();
+    const [isRenderingPoster, setIsRenderingPoster] = useState(false);
+
+    const handleDownloadPoster = () => {
+        if (Object.keys(tournamentStandings).length === 0) {
+            alert("目前沒有可生成的積分榜數據。");
+            return;
+        }
+        setIsRenderingPoster(true);
+
+        setTimeout(() => {
+            html2canvas(posterRef.current, {
+                scale: 2,
+                useCORS: true,
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `league_standings_${selectedTournament}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                setIsRenderingPoster(false);
+            }).catch(err => {
+                console.error("海報生成失敗:", err);
+                alert("海報生成失敗，請檢查主控台錯誤。");
+                setIsRenderingPoster(false);
+            });
+        }, 500);
+    };
+
     return (
         <div className="space-y-10 animate-in fade-in duration-500 font-bold">
             <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
@@ -53,8 +84,17 @@ export default function LeaguePage({
                         >
                             {tournamentList.length === 0 ? <option value="">暫無賽事</option> : tournamentList.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
+                        
                         {role === 'admin' && (
                             <div className="flex gap-2">
+                                <button 
+                                    onClick={handleDownloadPoster} 
+                                    disabled={isRenderingPoster || Object.keys(groupedMatches).length === 0}
+                                    className="p-4 bg-white border border-slate-200 text-blue-600 rounded-2xl hover:bg-blue-50 transition-all shadow-sm disabled:opacity-50" 
+                                    title="下載積分榜海報"
+                                >
+                                    {isRenderingPoster ? <Loader2 className="animate-spin" size={20} /> : <Download size={20}/>}
+                                </button>
                                 <button onClick={() => setShowTournamentModal(true)} className="p-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all" title="建立新賽事">
                                     <Plus size={20}/>
                                 </button>
@@ -212,6 +252,19 @@ export default function LeaguePage({
                     ))
                 )}
             </div>
+
+            {/* Hidden Poster for Rendering */}
+            {isRenderingPoster && (
+                <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100 }}>
+                    <LeagueStandingsPoster 
+                        ref={posterRef}
+                        tournamentName={selectedTournament}
+                        standings={Object.values(tournamentStandings).flat().sort((a,b) => b.leaguePoints - a.leaguePoints)}
+                        upcomingMatches={leagueMatches}
+                        schoolLogo={schoolLogo}
+                    />
+                </div>
+            )}
         </div>
     );
 }
