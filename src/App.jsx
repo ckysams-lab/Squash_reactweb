@@ -1585,11 +1585,17 @@ const handleSaveFeaturedBadges = async () => {
         setIsUpdating(false);
     };
 
-  console.log("Debug - Students Data:", students);
-  console.log("Debug - Filtered Matches Data:", filteredMatches);
-
-  
-    // [版本 13.0] 最終重置版：徹底修復 'player is not defined' 錯誤，並包含所有數字轉換和安全檢查
+  if (filteredMatches && filteredMatches.length > 0 && students && students.length > 0) {
+    console.log("--- COPY FROM HERE ---");
+    console.log(JSON.stringify({
+      description: "Raw data for debugging league standings",
+      students_count: students.length,
+      matches_count: filteredMatches.length,
+      students: students,
+      filteredMatches: filteredMatches
+    }, null, 2));
+    console.log("--- COPY UNTIL HERE ---");
+    }
     // [版本 14.0] 最終架構重寫：採用全新的 '即時建立' 邏輯，根除分組計算錯誤
   const tournamentStandings = useMemo(() => {
     // 基礎安全檢查
