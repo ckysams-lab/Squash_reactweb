@@ -1584,12 +1584,10 @@ const handleSaveFeaturedBadges = async () => {
         setIsUpdating(false);
     };
 
-    // [版本 12.3] 修正了 'player is not defined' 的錯誤
-   // [版本 12.6] 修正了因數據結構在計算中被錯誤改變而導致的邏輯錯誤
+   // [版本 12.7] 最終修正：強制將分數轉為數字進行比較，並增加所有計算的安全性檢查
   const tournamentStandings = useMemo(() => {
     if (!filteredMatches || filteredMatches.length === 0) return {};
     
-    // 臨時計算用的物件，結構為 { group: { playerId: data } }
     const standingsData = {};
 
     // 步驟 1: 初始化所有參賽者的資料結構
@@ -1604,14 +1602,12 @@ const handleSaveFeaturedBadges = async () => {
         if(student) {
           const matchWithGroup = filteredMatches.find(m => m.player1Id === playerId || m.player2Id === playerId);
           const groupKey = matchWithGroup?.groupName || '所有比賽';
-          if (!standingsData[groupKey]) {
-            standingsData[groupKey] = {};
-          }
+          if (!standingsData[groupKey]) standingsData[groupKey] = {};
+          
           standingsData[groupKey][playerId] = {
               id: playerId, name: student.name, class: student.class, classNo: student.classNo,
               played: 0, wins: 0, losses: 0,
-              pointsFor: 0, pointsAgainst: 0, pointsDiff: 0,
-              leaguePoints: 0
+              pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0
           };
         }
     });
@@ -1621,8 +1617,9 @@ const handleSaveFeaturedBadges = async () => {
         const { player1Id, player2Id, groupName } = match;
         const groupKey = groupName || '所有比賽';
 
-        const p1Score = match.player1Score || 0;
-        const p2Score = match.player2Score || 0;
+        // --- 核心修正 #1：使用 parseInt 強制將分數轉為數字 ---
+        const p1Score = parseInt(match.player1Score, 10) || 0;
+        const p2Score = parseInt(match.player2Score, 10) || 0;
 
         const player1Standing = standingsData[groupKey]?.[player1Id];
         const player2Standing = player2Id ? standingsData[groupKey]?.[player2Id] : null;
@@ -1637,26 +1634,26 @@ const handleSaveFeaturedBadges = async () => {
             player2Standing.played += 1;
             player2Standing.pointsFor += p2Score;
             if (player1Standing) player2Standing.pointsAgainst += p1Score;
+        }
 
+        // --- 核心修正 #2：為所有勝負計算增加安全檢查 ---
+        if (player1Id && player1Standing && player2Id && player2Standing) {
             if (p1Score > p2Score) {
-                if (player1Standing) {
-                    player1Standing.wins += 1;
-                    player1Standing.leaguePoints += 3;
-                }
+                player1Standing.wins += 1;
+                player1Standing.leaguePoints += 3;
                 player2Standing.losses += 1;
             } else if (p2Score > p1Score) {
                 player2Standing.wins += 1;
                 player2Standing.leaguePoints += 3;
-                if (player1Standing) player1Standing.losses += 1;
-            } else {
-                if (player1Standing) player1Standing.leaguePoints += 1;
+                player1Standing.losses += 1;
+            } else { // 平手
+                player1Standing.leaguePoints += 1;
                 player2Standing.leaguePoints += 1;
             }
         }
     });
 
-    // --- 核心修正 ---
-    // 步驟 3: 建立一個全新的、用於輸出的物件，將計算結果轉換為排序後的陣列
+    // 步驟 3: 建立最終排序後的結果
     const finalSortedResult = {};
     Object.keys(standingsData).forEach(groupKey => {
         const groupStandings = standingsData[groupKey];
@@ -1673,6 +1670,7 @@ const handleSaveFeaturedBadges = async () => {
 
     return finalSortedResult;
   }, [filteredMatches, students]);
+
 
   const myUpcomingMatches = useMemo(() => {
     if (role !== 'student' || !currentUserInfo) return [];
