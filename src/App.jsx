@@ -24,6 +24,7 @@ import FinancialPage from './pages/FinancialPage';
 import PlayerDashboard from './components/PlayerDashboard';
 import MyDashboardPage from './pages/MyDashboardPage';
 import ExternalMatchesPage from './pages/ExternalMatchesPage';
+import SchoolLogo from './components/SchoolLogo';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 
 import {
@@ -1866,29 +1867,6 @@ const myDashboardData = useMemo(() => {
         achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
 }, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, students]);
-
-  const SchoolLogo = ({ size = 48, className = "" }) => {
-    const [error, setError] = useState(false);
-    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
-    if (error) {
-      return <ShieldCheck className={`${className}`} size={size} />;
-    }
-    return (
-      <img 
-        src={logoUrl} 
-        alt="BCKLAS Logo" 
-        className={`object-contain ${className}`}
-        style={{ width: size * 2, height: size * 2 }}
-        loading="eager"
-        crossOrigin="anonymous" 
-        onError={(e) => {
-          console.error("Logo load failed", e);
-          setError(true);
-        }}
-      />
-    );
-  };
   const handleMonthlyStarFieldChange = (gender, field, value) => {
     setMonthlyStarEditData(prev => ({
         ...prev,
