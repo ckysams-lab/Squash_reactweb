@@ -1619,27 +1619,42 @@ const handleSaveFeaturedBadges = async () => {
         }
     });
 
-    filteredMatches.filter(m => m.status === 'completed' && m.matchType !== 'external').forEach(match => {
-        const groupKey = match.groupName || '所有比賽';
-        const p1Stats = standings[groupKey]?.[match.player1Id];
-        const p2Stats = standings[groupKey]?.[match.player2Id];
+    filteredMatches.forEach(match => {
+        const { player1Id, player2Id, player1Score, player2Score, groupName } = match;
+        const groupKey = groupName || '所有比賽';
 
-        if (p1Stats && p2Stats) {
-            p1Stats.played += 1;
-            p2Stats.played += 1;
-            p1Stats.pointsFor += match.score1 || 0;
-            p1Stats.pointsAgainst += match.score2 || 0;
-            p2Stats.pointsFor += match.score2 || 0;
-            p2Stats.pointsAgainst += match.score1 || 0;
+        // --- 核心修正 ---
+        // 從 standings 物件中安全地獲取兩位球員的資料，而不是使用不存在的 'player' 變數
+        const player1Standing = standings[groupKey]?.[player1Id];
+        const player2Standing = player2Id ? standings[groupKey]?.[player2Id] : null;
 
-            if (match.winnerId === match.player1Id) {
-                p1Stats.wins += 1;
-                p1Stats.leaguePoints += 3;
-                p2Stats.losses += 1;
-            } else if (match.winnerId === match.player2Id) {
-                p2Stats.wins += 1;
-                p2Stats.leaguePoints += 3;
-                p1Stats.losses += 1;
+        // 只有當球員資料存在時才進行更新
+        if (player1Standing) {
+            player1Standing.played += 1;
+            player1Standing.pointsFor += player1Score;
+            if (player2Id && player2Standing) {
+                player1Standing.pointsAgainst += player2Score;
+            }
+        }
+
+        if (player2Id && player2Standing) {
+            player2Standing.played += 1;
+            player2Standing.pointsFor += player2Score;
+            player2Standing.pointsAgainst += player1Score;
+
+            // 判斷勝負並更新積分
+            if (player1Score > player2Score) {
+                player1Standing.wins += 1;
+                player1Standing.leaguePoints += 3; // 勝者得 3 分
+                player2Standing.losses += 1;
+            } else if (player2Score > player1Score) {
+                player2Standing.wins += 1;
+                player2Standing.leaguePoints += 3; // 勝者得 3 分
+                player1Standing.losses += 1;
+            } else {
+                // 平手各得 1 分
+                player1Standing.leaguePoints += 1;
+                player2Standing.leaguePoints += 1;
             }
         }
     });
