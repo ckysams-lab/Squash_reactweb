@@ -1584,11 +1584,13 @@ const handleSaveFeaturedBadges = async () => {
         setIsUpdating(false);
     };
 
+    // [版本 12.3] 修正了 'player is not defined' 的錯誤
   const tournamentStandings = useMemo(() => {
     if (filteredMatches.length === 0) return {};
     
     const standings = {};
 
+    // 步驟 1: 根據比賽紀錄，初始化所有參賽球員的資料結構
     const playerIdsInTournament = new Set();
     filteredMatches.forEach(match => {
         playerIdsInTournament.add(match.player1Id);
@@ -1606,8 +1608,8 @@ const handleSaveFeaturedBadges = async () => {
           standings[groupKey][playerId] = {
               id: playerId,
               name: student.name,
-              class: player.class,
-              classNo: player.classNo,
+              class: student.class,
+              classNo: student.classNo,
               played: 0,
               wins: 0,
               losses: 0,
@@ -1619,16 +1621,15 @@ const handleSaveFeaturedBadges = async () => {
         }
     });
 
+    // 步驟 2: 遍歷比賽，計算勝負、得分與聯賽積分
     filteredMatches.forEach(match => {
         const { player1Id, player2Id, player1Score, player2Score, groupName } = match;
         const groupKey = groupName || '所有比賽';
 
-        // --- 核心修正 ---
-        // 從 standings 物件中安全地獲取兩位球員的資料，而不是使用不存在的 'player' 變數
+        // --- 修正點 #1：從 standings 安全地取得球員資料 ---
         const player1Standing = standings[groupKey]?.[player1Id];
         const player2Standing = player2Id ? standings[groupKey]?.[player2Id] : null;
 
-        // 只有當球員資料存在時才進行更新
         if (player1Standing) {
             player1Standing.played += 1;
             player1Standing.pointsFor += player1Score;
@@ -1642,36 +1643,43 @@ const handleSaveFeaturedBadges = async () => {
             player2Standing.pointsFor += player2Score;
             player2Standing.pointsAgainst += player1Score;
 
-            // 判斷勝負並更新積分
             if (player1Score > player2Score) {
                 player1Standing.wins += 1;
-                player1Standing.leaguePoints += 3; // 勝者得 3 分
+                player1Standing.leaguePoints += 3;
                 player2Standing.losses += 1;
             } else if (player2Score > player1Score) {
                 player2Standing.wins += 1;
-                player2Standing.leaguePoints += 3; // 勝者得 3 分
+                player2Standing.leaguePoints += 3;
                 player1Standing.losses += 1;
             } else {
-                // 平手各得 1 分
                 player1Standing.leaguePoints += 1;
                 player2Standing.leaguePoints += 1;
             }
         }
     });
 
-    for (const group in standings) {
-        standings[group] = Object.values(standings[group]).map(stat => ({
-            ...stat,
-            pointsDiff: stat.pointsFor - stat.pointsAgainst
-        })).sort((a, b) => {
-            if (b.leaguePoints !== a.leaguePoints) return b.leaguePoints - a.leaguePoints;
-            if (b.pointsDiff !== a.pointsDiff) return b.pointsDiff - a.pointsDiff;
+    // 步驟 3: 計算淨勝分 (pointsDiff) 和最終排序
+    Object.keys(standings).forEach(groupKey => {
+        const groupStandings = standings[groupKey];
+        const sortedPlayers = Object.values(groupStandings).map(p => {
+             // --- 修正點 #2：在這裡使用 'p'，而不是不存在的 'player' ---
+            p.pointsDiff = p.pointsFor - p.pointsAgainst;
+            return p;
+        }).sort((a, b) => {
+            if (b.leaguePoints !== a.leaguePoints) {
+                return b.leaguePoints - a.leaguePoints;
+            }
+            if (b.pointsDiff !== a.pointsDiff) {
+                return b.pointsDiff - a.pointsDiff;
+            }
             return b.pointsFor - a.pointsFor;
         });
-    }
+        standings[groupKey] = sortedPlayers;
+    });
 
     return standings;
   }, [filteredMatches, students]);
+
 
   const myUpcomingMatches = useMemo(() => {
     if (role !== 'student' || !currentUserInfo) return [];
