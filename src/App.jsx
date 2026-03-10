@@ -1589,14 +1589,19 @@ const handleSaveFeaturedBadges = async () => {
   console.log("Debug - Filtered Matches Data:", filteredMatches);
 
   
+    // [版本 13.0] 最終重置版：徹底修復 'player is not defined' 錯誤，並包含所有數字轉換和安全檢查
   const tournamentStandings = useMemo(() => {
-    if (filteredMatches.length === 0) return {};
+    // 安全檢查：如果沒有比賽或沒有學生數據，返回空物件
+    if (!filteredMatches || filteredMatches.length === 0 || !students || students.length === 0) {
+      return {};
+    }
     
-    const standings = {};
+    const standingsData = {};
 
+    // 步驟 1: 初始化所有參賽者的資料結構
     const playerIdsInTournament = new Set();
     filteredMatches.forEach(match => {
-        playerIdsInTournament.add(match.player1Id);
+        if (match.player1Id) playerIdsInTournament.add(match.player1Id);
         if (match.player2Id) playerIdsInTournament.add(match.player2Id);
     });
 
@@ -1605,62 +1610,70 @@ const handleSaveFeaturedBadges = async () => {
         if(student) {
           const matchWithGroup = filteredMatches.find(m => m.player1Id === playerId || m.player2Id === playerId);
           const groupKey = matchWithGroup?.groupName || '所有比賽';
-          if (!standings[groupKey]) {
-            standings[groupKey] = {};
-          }
-          standings[groupKey][playerId] = {
-              id: playerId,
-              name: student.name,
-              class: player.class,       // <--- ✅ 關鍵的這一行，存在且正確
-              classNo: player.classNo,
-              played: 0,
-              wins: 0,
-              losses: 0,
-              pointsFor: 0,
-              pointsAgainst: 0,
-              pointsDiff: 0,
-              leaguePoints: 0
+          if (!standingsData[groupKey]) standingsData[groupKey] = {};
+          
+          standingsData[groupKey][playerId] = {
+              id: playerId, name: student.name, class: student.class, classNo: student.classNo,
+              played: 0, wins: 0, losses: 0,
+              pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0
           };
         }
     });
 
-    filteredMatches.filter(m => m.status === 'completed' && m.matchType !== 'external').forEach(match => {
-        const groupKey = match.groupName || '所有比賽';
-        const p1Stats = standings[groupKey]?.[match.player1Id];
-        const p2Stats = standings[groupKey]?.[match.player2Id];
+    // 步驟 2: 遍歷比賽，累積數據
+    filteredMatches.forEach(match => {
+        const { player1Id, player2Id, groupName } = match;
+        const groupKey = groupName || '所有比賽';
 
-        if (p1Stats && p2Stats) {
-            p1Stats.played += 1;
-            p2Stats.played += 1;
-            p1Stats.pointsFor += match.score1 || 0;
-            p1Stats.pointsAgainst += match.score2 || 0;
-            p2Stats.pointsFor += match.score2 || 0;
-            p2Stats.pointsAgainst += match.score1 || 0;
+        const p1Score = parseInt(match.player1Score, 10) || 0;
+        const p2Score = parseInt(match.player2Score, 10) || 0;
 
-            if (match.winnerId === match.player1Id) {
-                p1Stats.wins += 1;
-                p1Stats.leaguePoints += 3;
-                p2Stats.losses += 1;
-            } else if (match.winnerId === match.player2Id) {
-                p2Stats.wins += 1;
-                p2Stats.leaguePoints += 3;
-                p1Stats.losses += 1;
+        const player1Standing = standingsData[groupKey]?.[player1Id];
+        const player2Standing = player2Id ? standingsData[groupKey]?.[player2Id] : null;
+
+        // --- 雙重安全檢查 ---
+        if (!player1Standing) return; // 如果找不到球員1資料，跳過這場比賽
+
+        player1Standing.played += 1;
+        player1Standing.pointsFor += p1Score;
+
+        if (player2Id && player2Standing) {
+            player1Standing.pointsAgainst += p2Score;
+            player2Standing.played += 1;
+            player2Standing.pointsFor += p2Score;
+            player2Standing.pointsAgainst += p1Score;
+            
+            if (p1Score > p2Score) {
+                player1Standing.wins += 1;
+                player1Standing.leaguePoints += 3;
+                player2Standing.losses += 1;
+            } else if (p2Score > p1Score) {
+                player2Standing.wins += 1;
+                player2Standing.leaguePoints += 3;
+                player1Standing.losses += 1;
+            } else { 
+                player1Standing.leaguePoints += 1;
+                player2Standing.leaguePoints += 1;
             }
         }
     });
 
-    for (const group in standings) {
-        standings[group] = Object.values(standings[group]).map(stat => ({
-            ...stat,
-            pointsDiff: stat.pointsFor - stat.pointsAgainst
-        })).sort((a, b) => {
+    // 步驟 3: 建立最終排序後的結果
+    const finalSortedResult = {};
+    Object.keys(standingsData).forEach(groupKey => {
+        const groupStandings = standingsData[groupKey];
+        const sortedPlayers = Object.values(groupStandings).map(player => { // 這裡使用 'player' 是正確的
+            player.pointsDiff = player.pointsFor - player.pointsAgainst;
+            return player;
+        }).sort((a, b) => {
             if (b.leaguePoints !== a.leaguePoints) return b.leaguePoints - a.leaguePoints;
             if (b.pointsDiff !== a.pointsDiff) return b.pointsDiff - a.pointsDiff;
             return b.pointsFor - a.pointsFor;
         });
-    }
+        finalSortedResult[groupKey] = sortedPlayers;
+    });
 
-    return standings;
+    return finalSortedResult;
   }, [filteredMatches, students]);
 
   const myUpcomingMatches = useMemo(() => {
