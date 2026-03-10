@@ -1,23 +1,21 @@
-// src/components/SchoolLogo.jsx
-
 import React from 'react';
 
-// 這是一個獨立、可重複使用的 Logo 元件
-const SchoolLogo = ({ schoolLogo, schoolName }) => {
-  // 如果沒有提供 schoolLogo 的 URL，則不渲染任何東西
+const SchoolLogo = ({ schoolLogo, schoolName, className }) => {
   if (!schoolLogo) {
     return null;
   }
 
   return (
-    <div className="absolute top-8 left-10 z-50">
+    // 我們加上一個可以從外部傳入的 className
+    <div className={`flex items-center ${className || ''}`}>
       <img 
         src={schoolLogo} 
         alt={`${schoolName} Logo`} 
-        className="h-20"
+        className="h-auto w-auto max-h-full" // 讓圖片自適應高度
       />
     </div>
   );
 };
 
 export default SchoolLogo;
+
