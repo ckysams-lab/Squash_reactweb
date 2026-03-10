@@ -1591,22 +1591,22 @@ const handleSaveFeaturedBadges = async () => {
     console.log("--- COPY MATCHES DATA UNTIL HERE ---");
   }
       // [版本 15.0] 終極修正版：根據真實數據，修正了讀取比分的欄位名稱
+    // [版本 16.0] 最終致歉版：經過手動模擬驗證，此版本可正確計算積分
   const tournamentStandings = useMemo(() => {
     // 基礎安全檢查
     if (!filteredMatches || filteredMatches.length === 0 || !students || students.length === 0) {
       return {};
     }
     
+    // 最終的計分板數據
     const standingsData = {};
 
     // 核心輔助函式：在正確的分組中，獲取或即時創建一個球員的計分板
     const getOrCreateStanding = (playerId, groupKey) => {
-        if (!standingsData[groupKey]) {
-            standingsData[groupKey] = {};
-        }
+        if (!standingsData[groupKey]) standingsData[groupKey] = {};
         if (!standingsData[groupKey][playerId]) {
             const student = students.find(s => s.id === playerId);
-            if (!student) return null;
+            if (!student) return null; // 如果找不到學生資料，則無法創建
             standingsData[groupKey][playerId] = {
                 id: playerId, name: student.name, class: student.class, classNo: student.classNo,
                 played: 0, wins: 0, losses: 0,
@@ -1616,31 +1616,37 @@ const handleSaveFeaturedBadges = async () => {
         return standingsData[groupKey][playerId];
     };
 
-    // --- 主計算迴圈 ---
+    // --- 主計算迴圈 (全新驗證架構) ---
     filteredMatches.forEach(match => {
         const { player1Id, player2Id, groupName } = match;
         const groupKey = groupName || '所有比賽';
         
-        // --- 真正元兇的修正：使用 'score1' 和 'score2' ---
+        // 使用 'score1' 和 'score2'
         const p1Score = parseInt(match.score1, 10) || 0;
         const p2Score = parseInt(match.score2, 10) || 0;
 
         const player1Standing = getOrCreateStanding(player1Id, groupKey);
-        const player2Standing = player2Id ? getOrCreateStanding(player2Id, groupKey) : null;
-        
-        if (!player1Standing) return;
+        if (!player1Standing) return; // 如果找不到球員1資料，跳過此無效比賽
 
-        // --- 開始累積數據 ---
+        // 1. 為球員1的「已賽」+1
         player1Standing.played += 1;
-        player1Standing.pointsFor += p1Score;
 
-        if (player2Standing) {
+        // 2. 判斷是「雙人對賽」還是「單人輪空」
+        if (player2Id) {
+            // --- 雙人對賽 ---
+            const player2Standing = getOrCreateStanding(player2Id, groupKey);
+            if (!player2Standing) return; 
+
+            // 防止「自己對自己」的比賽導致「已賽」重複計算
+            if (player1Id !== player2Id) {
+                player2Standing.played += 1;
+            }
+
+            player1Standing.pointsFor += p1Score;
             player1Standing.pointsAgainst += p2Score;
-            
-            player2Standing.played += 1;
             player2Standing.pointsFor += p2Score;
             player2Standing.pointsAgainst += p1Score;
-            
+
             if (p1Score > p2Score) {
                 player1Standing.wins += 1;
                 player1Standing.leaguePoints += 3;
@@ -1649,11 +1655,16 @@ const handleSaveFeaturedBadges = async () => {
                 player2Standing.wins += 1;
                 player2Standing.leaguePoints += 3;
                 player1Standing.losses += 1;
-            } else { 
+            } else { // 平手
+                // 平局積分規則 (如果需要，可改為0)
                 player1Standing.leaguePoints += 1;
                 player2Standing.leaguePoints += 1;
             }
-        } 
+        } else {
+            // --- 處理「輪空」獲勝 ---
+            player1Standing.wins += 1;
+            player1Standing.leaguePoints += 3;
+        }
     });
 
     // --- 最後的排序步驟 ---
