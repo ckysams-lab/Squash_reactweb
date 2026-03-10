@@ -1596,26 +1596,23 @@ const handleSaveFeaturedBadges = async () => {
     }, null, 2));
     console.log("--- COPY UNTIL HERE ---");
     }
-    // [版本 14.0] 最終架構重寫：採用全新的 '即時建立' 邏輯，根除分組計算錯誤
+      // [版本 15.0] 終極修正版：根據真實數據，修正了讀取比分的欄位名稱
   const tournamentStandings = useMemo(() => {
     // 基礎安全檢查
     if (!filteredMatches || filteredMatches.length === 0 || !students || students.length === 0) {
       return {};
     }
     
-    // 最終的計分板數據
     const standingsData = {};
 
     // 核心輔助函式：在正確的分組中，獲取或即時創建一個球員的計分板
     const getOrCreateStanding = (playerId, groupKey) => {
-        // 如果分組不存在，創建它
         if (!standingsData[groupKey]) {
             standingsData[groupKey] = {};
         }
-        // 如果球員在該分組的計分板不存在，創建它
         if (!standingsData[groupKey][playerId]) {
             const student = students.find(s => s.id === playerId);
-            if (!student) return null; // 如果找不到學生資料，則無法創建
+            if (!student) return null;
             standingsData[groupKey][playerId] = {
                 id: playerId, name: student.name, class: student.class, classNo: student.classNo,
                 played: 0, wins: 0, losses: 0,
@@ -1629,22 +1626,20 @@ const handleSaveFeaturedBadges = async () => {
     filteredMatches.forEach(match => {
         const { player1Id, player2Id, groupName } = match;
         const groupKey = groupName || '所有比賽';
+        
+        // --- 真正元兇的修正：使用 'score1' 和 'score2' ---
+        const p1Score = parseInt(match.score1, 10) || 0;
+        const p2Score = parseInt(match.score2, 10) || 0;
 
-        const p1Score = parseInt(match.player1Score, 10) || 0;
-        const p2Score = parseInt(match.player2Score, 10) || 0;
-
-        // 在正確的分組中，為這場比賽的球員獲取計分板
         const player1Standing = getOrCreateStanding(player1Id, groupKey);
         const player2Standing = player2Id ? getOrCreateStanding(player2Id, groupKey) : null;
         
-        // 如果因故找不到球員資料，則跳過這場比賽，確保程式穩定
         if (!player1Standing) return;
 
         // --- 開始累積數據 ---
         player1Standing.played += 1;
         player1Standing.pointsFor += p1Score;
 
-        // 如果是雙人比賽
         if (player2Standing) {
             player1Standing.pointsAgainst += p2Score;
             
@@ -1665,14 +1660,9 @@ const handleSaveFeaturedBadges = async () => {
                 player2Standing.leaguePoints += 1;
             }
         } 
-        // 如果是單人比賽 (例如輪空獲勝)
-        else {
-            player1Standing.wins += 1;
-            player1Standing.leaguePoints += 3;
-        }
     });
 
-    // --- 最後的排序步驟 (這部分邏輯是正確的) ---
+    // --- 最後的排序步驟 ---
     const finalSortedResult = {};
     Object.keys(standingsData).forEach(groupKey => {
         const groupStandings = standingsData[groupKey];
@@ -1689,7 +1679,6 @@ const handleSaveFeaturedBadges = async () => {
 
     return finalSortedResult;
   }, [filteredMatches, students]);
-
 
   const myUpcomingMatches = useMemo(() => {
     if (role !== 'student' || !currentUserInfo) return [];
