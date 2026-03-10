@@ -1585,17 +1585,11 @@ const handleSaveFeaturedBadges = async () => {
         setIsUpdating(false);
     };
 
-  if (filteredMatches && filteredMatches.length > 0 && students && students.length > 0) {
-    console.log("--- COPY FROM HERE ---");
-    console.log(JSON.stringify({
-      description: "Raw data for debugging league standings",
-      students_count: students.length,
-      matches_count: filteredMatches.length,
-      students: students,
-      filteredMatches: filteredMatches
-    }, null, 2));
-    console.log("--- COPY UNTIL HERE ---");
-    }
+  if (filteredMatches && filteredMatches.length > 0) {
+    console.log("--- COPY MATCHES DATA FROM HERE ---");
+    console.log(JSON.stringify(filteredMatches, null, 2));
+    console.log("--- COPY MATCHES DATA UNTIL HERE ---");
+  }
       // [版本 15.0] 終極修正版：根據真實數據，修正了讀取比分的欄位名稱
   const tournamentStandings = useMemo(() => {
     // 基礎安全檢查
