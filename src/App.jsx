@@ -561,7 +561,6 @@ const handleSaveFeaturedBadges = async () => {
             studentId: student.id,
             name: student.name,
             class: student.class,
-            classNo: student.classNo,
             trainingClass: scheduleToUse.trainingClass,
             date: scheduleToUse.date,
             location: scheduleToUse.location,
