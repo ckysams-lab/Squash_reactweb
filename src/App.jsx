@@ -1585,7 +1585,94 @@ const handleSaveFeaturedBadges = async () => {
     };
 
     // [版本 12.3] 修正了 'player is not defined' 的錯誤
-  const tournamentStandings = useMemo(()
+  const tournamentStandings = useMemo(() => {
+    if (filteredMatches.length === 0) return {};
+    
+    const standings = {};
+
+    // 步驟 1: 根據比賽紀錄，初始化所有參賽球員的資料結構
+    const playerIdsInTournament = new Set();
+    filteredMatches.forEach(match => {
+        playerIdsInTournament.add(match.player1Id);
+        if (match.player2Id) playerIdsInTournament.add(match.player2Id);
+    });
+
+    playerIdsInTournament.forEach(playerId => {
+        const student = students.find(s => s.id === playerId);
+        if(student) {
+          const matchWithGroup = filteredMatches.find(m => m.player1Id === playerId || m.player2Id === playerId);
+          const groupKey = matchWithGroup?.groupName || '所有比賽';
+          if (!standings[groupKey]) {
+            standings[groupKey] = {};
+          }
+          standings[groupKey][playerId] = {
+              id: playerId, name: student.name, class: student.class, classNo: student.classNo,
+              played: 0, wins: 0, losses: 0,
+              pointsFor: 0, pointsAgainst: 0, pointsDiff: 0,
+              leaguePoints: 0
+          };
+        }
+    });
+
+    // 步驟 2: 遍歷比賽，計算勝負、得分與聯賽積分
+    filteredMatches.forEach(match => {
+        const { player1Id, player2Id, groupName } = match;
+        const groupKey = groupName || '所有比賽';
+
+        const p1Score = match.player1Score || 0;
+        const p2Score = match.player2Score || 0;
+
+        const player1Standing = standings[groupKey]?.[player1Id];
+        const player2Standing = player2Id ? standings[groupKey]?.[player2Id] : null;
+
+        if (player1Standing) {
+            player1Standing.played += 1;
+            player1Standing.pointsFor += p1Score;
+            if (player2Standing) {
+                player1Standing.pointsAgainst += p2Score;
+            }
+        }
+
+        if (player2Id && player2Standing) {
+            player2Standing.played += 1;
+            player2Standing.pointsFor += p2Score;
+            player2Standing.pointsAgainst += p1Score;
+
+            if (p1Score > p2Score) {
+                if (player1Standing) {
+                    player1Standing.wins += 1;
+                    player1Standing.leaguePoints += 3;
+                }
+                player2Standing.losses += 1;
+            } else if (p2Score > p1Score) {
+                player2Standing.wins += 1;
+                player2Standing.leaguePoints += 3;
+                if (player1Standing) {
+                    player1Standing.losses += 1;
+                }
+            } else { // 平手
+                if (player1Standing) player1Standing.leaguePoints += 1;
+                player2Standing.leaguePoints += 1;
+            }
+        }
+    });
+
+    // 步驟 3: 計算淨勝分並排序
+    Object.keys(standings).forEach(groupKey => {
+        const groupStandings = standings[groupKey];
+        const sortedPlayers = Object.values(groupStandings).map(p => {
+            p.pointsDiff = p.pointsFor - p.pointsAgainst;
+            return p;
+        }).sort((a, b) => {
+            if (b.leaguePoints !== a.leaguePoints) return b.leaguePoints - a.leaguePoints;
+            if (b.pointsDiff !== a.pointsDiff) return b.pointsDiff - a.pointsDiff;
+            return b.pointsFor - a.pointsFor;
+        });
+        standings[groupKey] = sortedPlayers;
+    });
+
+    return standings;
+  }, [filteredMatches, students]);
 
 
   const myUpcomingMatches = useMemo(() => {
