@@ -24,7 +24,6 @@ import FinancialPage from './pages/FinancialPage';
 import PlayerDashboard from './components/PlayerDashboard';
 import MyDashboardPage from './pages/MyDashboardPage';
 import ExternalMatchesPage from './pages/ExternalMatchesPage';
-import SchoolLogo from './components/SchoolLogo';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 
 import {
@@ -1586,18 +1585,10 @@ const handleSaveFeaturedBadges = async () => {
         setIsUpdating(false);
     };
 
-  if (filteredMatches && filteredMatches.length > 0) {
-    console.log("--- COPY MATCHES DATA FROM HERE ---");
-    console.log(JSON.stringify(filteredMatches, null, 2));
-    console.log("--- COPY MATCHES DATA UNTIL HERE ---");
-  }
    const trulyFilteredMatches = useMemo(() => {
     if (!selectedTournament) return [];
     return leagueMatches.filter(match => match.tournamentName === selectedTournament);
   }, [leagueMatches, selectedTournament]);
-    // [版本 16.0] 最終致歉版：經過手動模擬驗證，此版本可正確計算積分
-    // [版本 17.0 - Part 2: The Final Engine]
-  // 這個最終版的引擎，將只使用上面創建的、純淨的 'trulyFilteredMatches' 進行計算
   const tournamentStandings = useMemo(() => {
     // 安全檢查：使用純淨的數據源
     if (!trulyFilteredMatches || trulyFilteredMatches.length === 0 || !students || students.length === 0) {
@@ -1867,6 +1858,29 @@ const myDashboardData = useMemo(() => {
         achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
 }, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, students]);
+
+  const SchoolLogo = ({ size = 48, className = "" }) => {
+    const [error, setError] = useState(false);
+    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
+    if (error) {
+      return <ShieldCheck className={`${className}`} size={size} />;
+    }
+    return (
+      <img 
+        src={logoUrl} 
+        alt="BCKLAS Logo" 
+        className={`object-contain ${className}`}
+        style={{ width: size * 2, height: size * 2 }}
+        loading="eager"
+        crossOrigin="anonymous" 
+        onError={(e) => {
+          console.error("Logo load failed", e);
+          setError(true);
+        }}
+      />
+    );
+  };
   const handleMonthlyStarFieldChange = (gender, field, value) => {
     setMonthlyStarEditData(prev => ({
         ...prev,
