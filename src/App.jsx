@@ -1585,6 +1585,10 @@ const handleSaveFeaturedBadges = async () => {
         setIsUpdating(false);
     };
 
+  console.log("Debug - Students Data:", students);
+  console.log("Debug - Filtered Matches Data:", filteredMatches);
+
+  
   const tournamentStandings = useMemo(() => {
     if (filteredMatches.length === 0) return {};
     
@@ -1607,6 +1611,8 @@ const handleSaveFeaturedBadges = async () => {
           standings[groupKey][playerId] = {
               id: playerId,
               name: student.name,
+              class: player.class,       // <--- ✅ 關鍵的這一行，存在且正確
+              classNo: player.classNo,
               played: 0,
               wins: 0,
               losses: 0,
