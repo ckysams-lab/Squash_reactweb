@@ -1,89 +1,94 @@
 // src/hooks/useFirebaseData.js
 import { useState, useEffect } from 'react';
-import { db, auth } from '../firebase'; 
+import { db, auth } from '../firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
 export const useFirebaseData = () => {
+    // 1. 宣告所有狀態
     const [students, setStudents] = useState([]);
     const [competitions, setCompetitions] = useState([]);
     const [monthlyStars, setMonthlyStars] = useState([]);
     const [leagueMatches, setLeagueMatches] = useState([]);
+    
+    // --- 新增的狀態 ---
+    const [attendanceLogs, setAttendanceLogs] = useState([]);
+    const [schedules, setSchedules] = useState([]);
+    const [downloadFiles, setDownloadFiles] = useState([]);
+    const [galleryItems, setGalleryItems] = useState([]);
+    const [awards, setAwards] = useState([]);
+    const [achievements, setAchievements] = useState([]);
+    const [externalTournaments, setExternalTournaments] = useState([]);
+    const [assessments, setAssessments] = useState([]);
+    const [tacticalShots, setTacticalShots] = useState([]);
 
     useEffect(() => {
-        let unsubscribeStudents;
-        let unsubscribeCompetitions;
-        let unsubscribeStars;
-        let unsubscribeLeagueMatches;
+        // 宣告所有退訂函數
+        let unsubscribes = [];
 
-        // 🚨 這是最關鍵的修正：定義正確的 appId 和基礎路徑 🚨
         const appId = 'bcklas-squash-core-v1';
-        
-        // 輔助函數：用來產生正確的長路徑
-        const getCollectionPath = (collectionName) => {
-            return collection(db, 'artifacts', appId, 'public', 'data', collectionName);
-        };
+        const getCollectionPath = (collectionName) => collection(db, 'artifacts', appId, 'public', 'data', collectionName);
 
         const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
             if (currentUser) {
-                console.log("✅ Hook Auth confirmed, starting fetch with correct path...");
+                console.log("✅ Hook: Auth confirmed, starting FULL data fetch...");
 
-                // 1. 使用修正後的方法抓取 Students
-                unsubscribeStudents = onSnapshot(getCollectionPath('students'), (snapshot) => {
-                    const studentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log("🔥 Hook fetched Students count:", studentsData.length);
-                    setStudents(studentsData);
-                }, (error) => console.error("Error fetching students: ", error));
+                // 建立一個小工具來簡化監聽器的綁定
+                const bindListener = (collectionRef, setFunction, name) => {
+                    const unsub = onSnapshot(collectionRef, 
+                        (snap) => {
+                            setFunction(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                        },
+                        (error) => console.error(`Error fetching ${name}:`, error)
+                    );
+                    unsubscribes.push(unsub);
+                };
 
-                // 2. 抓取 Competitions (注意：您之前命名為 competitions，請確認您的資料庫確實是這個名字)
-                const matchesQuery = query(getCollectionPath('competitions'), orderBy('date', 'desc'));
-                unsubscribeCompetitions = onSnapshot(matchesQuery, (snapshot) => {
-                    const matchesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log("🔥 Hook fetched Competitions count:", matchesData.length);
-                    setCompetitions(matchesData);
-                }, (error) => console.error("Error fetching competitions: ", error));
+                // --- 綁定所有監聽器 ---
+                
+                // 原有的 4 個
+                bindListener(getCollectionPath('students'), setStudents, 'students');
+                bindListener(query(getCollectionPath('competitions'), orderBy('date', 'desc')), setCompetitions, 'competitions');
+                bindListener(getCollectionPath('monthly_stars'), setMonthlyStars, 'monthlyStars');
+                bindListener(getCollectionPath('league_matches'), setLeagueMatches, 'leagueMatches');
 
-                // 3. 抓取 Monthly Stars
-                const unsubscribeStars = onSnapshot(getCollectionPath('monthly_stars'), (snapshot) => {
-                    const starsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log("🔥 Hook fetched Monthly Stars count:", starsData.length);
-                    setMonthlyStars(starsData);
-                }, (error) => console.error("Error fetching monthly stars: ", error));
-
-                // 4. 抓取 League Matches
-                const unsubscribeLeagueMatches = onSnapshot(getCollectionPath('league_matches'), (snapshot) => {
-                    const leagueData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log("🔥 Hook fetched League Matches count:", leagueData.length);
-                    setLeagueMatches(leagueData);
-                }, (error) => console.error("Error fetching league matches: ", error));
+                // 新增的 9 個
+                bindListener(getCollectionPath('attendance_logs'), setAttendanceLogs, 'attendanceLogs');
+                bindListener(getCollectionPath('schedules'), setSchedules, 'schedules');
+                bindListener(getCollectionPath('downloadFiles'), setDownloadFiles, 'downloadFiles');
+                bindListener(getCollectionPath('gallery'), setGalleryItems, 'galleryItems');
+                
+                // 注意：帶有排序的查詢
+                bindListener(query(getCollectionPath('awards'), orderBy("date", "desc")), setAwards, 'awards');
+                bindListener(query(getCollectionPath('achievements'), orderBy("timestamp", "desc")), setAchievements, 'achievements');
+                bindListener(query(getCollectionPath('external_tournaments'), orderBy("name", "asc")), setExternalTournaments, 'externalTournaments');
+                bindListener(query(getCollectionPath('assessments'), orderBy("date", "desc")), setAssessments, 'assessments');
+                
+                bindListener(getCollectionPath('tactical_shots'), setTacticalShots, 'tacticalShots');
 
             } else {
-                console.log("❌ Hook Auth logged out, clearing data.");
-                setStudents([]);
-                setCompetitions([]);
-                setMonthlyStars([]);
-                setLeagueMatches([]);
+                console.log("❌ Hook: Auth logged out, clearing ALL data.");
+                // 清空狀態
+                setStudents([]); setCompetitions([]); setMonthlyStars([]); setLeagueMatches([]);
+                setAttendanceLogs([]); setSchedules([]); setDownloadFiles([]); setGalleryItems([]);
+                setAwards([]); setAchievements([]); setExternalTournaments([]); setAssessments([]); setTacticalShots([]);
                 
-                if(unsubscribeStudents) unsubscribeStudents();
-                if(unsubscribeCompetitions) unsubscribeCompetitions();
-                if(unsubscribeStars) unsubscribeStars();
-                if(unsubscribeLeagueMatches) unsubscribeLeagueMatches();
+                // 執行並清空所有退訂函數
+                unsubscribes.forEach(unsub => unsub());
+                unsubscribes = [];
             }
         });
 
         return () => {
             unsubscribeAuth();
-            if(unsubscribeStudents) unsubscribeStudents();
-            if(unsubscribeCompetitions) unsubscribeCompetitions();
-            if(unsubscribeStars) unsubscribeStars();
-            if(unsubscribeLeagueMatches) unsubscribeLeagueMatches();
+            unsubscribes.forEach(unsub => unsub());
         };
     }, []);
 
+    // 2. 將所有資料打包回傳
     return {
-        students,
-        competitions,
-        monthlyStars,
-        leagueMatches,
+        students, competitions, monthlyStars, leagueMatches,
+        attendanceLogs, schedules, downloadFiles, galleryItems,
+        awards, achievements, externalTournaments, assessments, tacticalShots
     };
 };
