@@ -23,6 +23,7 @@ import CompetitionsPage from './pages/CompetitionsPage';
 import FinancialPage from './pages/FinancialPage';
 import PlayerDashboard from './components/PlayerDashboard';
 import MyDashboardPage from './pages/MyDashboardPage';
+import CreatePostModal from './components/CreatePostModal';
 import ExternalMatchesPage from './pages/ExternalMatchesPage';
 import SocialFeedPage from './pages/SocialFeedPage';
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
@@ -2568,6 +2569,15 @@ const myDashboardData = useMemo(() => {
                   compressImage={compressImage}
     />
 )}
+          {/* 新增貼文彈跳視窗 */}
+      {showCreatePostModal && (
+          <CreatePostModal 
+              onClose={() => setShowCreatePostModal(false)}
+              currentUserInfo={currentUserInfo}
+              role={role}
+              appId={appId} // 傳入 appId 以便寫入正確的路徑
+          />
+      )}
           {/* 我們將 editingStudent 傳給新的 EditPlayerModal，並把 compressImage 函數也傳進去 */}
 {editingStudent && (
     <EditPlayerModal 
