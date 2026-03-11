@@ -1,68 +1,74 @@
 // src/hooks/useFirebaseData.js
 import { useState, useEffect } from 'react';
-import { db } from '../firebase';
+import { db, auth } from '../firebase'; // 👈 確保引入了 auth
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth'; // 👈 引入這個
 
-// 1. 新增一個 user 參數
-export const useFirebaseData = (user) => { 
+export const useFirebaseData = () => { // 👈 移除 user 參數
     const [students, setStudents] = useState([]);
     const [competitions, setCompetitions] = useState([]);
     const [monthlyStars, setMonthlyStars] = useState([]);
     const [leagueMatches, setLeagueMatches] = useState([]);
 
     useEffect(() => {
-        // 2. 核心邏輯：如果 user 是 null (未登入)，就什麼都不做，直接返回！
-        if (!user) {
-            // 可選：當登出時，清空現有的資料
-            setStudents([]);
-            setCompetitions([]);
-            setMonthlyStars([]);
-            setLeagueMatches([]);
-            return; 
-        }
+        // 宣告退訂函數的變數
+        let unsubscribeStudents;
+        let unsubscribeCompetitions;
+        let unsubscribeStars;
+        let unsubscribeLeagueMatches;
 
-        // 如果 user 存在，才開始掛載監聽器
-        console.log("User detected, starting to fetch data...");
+        // 核心改變：Hook 自己監聽 Auth 狀態，這是最可靠的！
+        const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+            if (currentUser) {
+                console.log("✅ Hook Auth confirmed, starting fetch...");
 
-        const unsubscribeStudents = onSnapshot(collection(db, 'students'), (snapshot) => {
-            const studentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setStudents(studentsData);
-        }, (error) => {
-            console.log("🔥 Hook fetched Students count:", studentsData.length); // 👈 加入這行
-            setStudents(studentsData);
-            console.error("Error fetching students: ", error);
+                // 只有在 Auth 絕對確認後，才掛載資料監聽器
+                unsubscribeStudents = onSnapshot(collection(db, 'students'), (snapshot) => {
+                    const studentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    console.log("🔥 Hook fetched Students count:", studentsData.length);
+                    setStudents(studentsData);
+                }, (error) => console.error("Error fetching students: ", error));
+
+                const matchesQuery = query(collection(db, 'matches'), orderBy('date', 'desc'));
+                unsubscribeCompetitions = onSnapshot(matchesQuery, (snapshot) => {
+                    const matchesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setCompetitions(matchesData);
+                }, (error) => console.error("Error fetching competitions: ", error));
+
+                unsubscribeStars = onSnapshot(collection(db, 'monthly_stars'), (snapshot) => {
+                    const starsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setMonthlyStars(starsData);
+                }, (error) => console.error("Error fetching monthly stars: ", error));
+
+                unsubscribeLeagueMatches = onSnapshot(collection(db, 'league_matches'), (snapshot) => {
+                    const leagueData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setLeagueMatches(leagueData);
+                }, (error) => console.error("Error fetching league matches: ", error));
+
+            } else {
+                // 登出時，清空資料並取消監聽
+                console.log("❌ Hook Auth logged out, clearing data.");
+                setStudents([]);
+                setCompetitions([]);
+                setMonthlyStars([]);
+                setLeagueMatches([]);
+                
+                if(unsubscribeStudents) unsubscribeStudents();
+                if(unsubscribeCompetitions) unsubscribeCompetitions();
+                if(unsubscribeStars) unsubscribeStars();
+                if(unsubscribeLeagueMatches) unsubscribeLeagueMatches();
+            }
         });
 
-        const matchesQuery = query(collection(db, 'matches'), orderBy('date', 'desc'));
-        const unsubscribeCompetitions = onSnapshot(matchesQuery, (snapshot) => {
-            const matchesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setCompetitions(matchesData);
-        }, (error) => {
-             console.error("Error fetching competitions: ", error);
-        });
-
-        const unsubscribeStars = onSnapshot(collection(db, 'monthly_stars'), (snapshot) => {
-            const starsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setMonthlyStars(starsData);
-        }, (error) => {
-             console.error("Error fetching monthly stars: ", error);
-        });
-
-        const unsubscribeLeagueMatches = onSnapshot(collection(db, 'league_matches'), (snapshot) => {
-            const leagueData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setLeagueMatches(leagueData);
-        }, (error) => {
-             console.error("Error fetching league matches: ", error);
-        });
-
-        // 3. 清理函數
+        // Hook 卸載時的清理工作
         return () => {
-            unsubscribeStudents();
-            unsubscribeCompetitions();
-            unsubscribeStars();
-            unsubscribeLeagueMatches();
+            unsubscribeAuth(); // 取消 Auth 監聽
+            if(unsubscribeStudents) unsubscribeStudents();
+            if(unsubscribeCompetitions) unsubscribeCompetitions();
+            if(unsubscribeStars) unsubscribeStars();
+            if(unsubscribeLeagueMatches) unsubscribeLeagueMatches();
         };
-    }, [user]); // 4. 關鍵！把 user 加入依賴陣列。當 user 狀態改變時（登入或登出），這個 useEffect 會重新執行。
+    }, []); // 👈 依賴陣列為空，因為我們靠內部監聽 Auth 變化
 
     return {
         students,
