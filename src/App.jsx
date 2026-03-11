@@ -24,6 +24,7 @@ import FinancialPage from './pages/FinancialPage';
 import PlayerDashboard from './components/PlayerDashboard';
 import MyDashboardPage from './pages/MyDashboardPage';
 import ExternalMatchesPage from './pages/ExternalMatchesPage';
+import SocialFeedPage from './pages/SocialFeedPage';
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
 import { useFirebaseData } from './hooks/useFirebaseData';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -35,7 +36,7 @@ import {
   Key, LayoutDashboard, Layers, Link as LinkIcon, ListChecks, Loader2, Lock, LogIn, LogOut, Mail, MapPin, Medal,
   Megaphone, Menu, MinusCircle, Pencil, Percent, PlayCircle, Plus, PlusCircle, Printer, Rocket, Save, Search, Settings2,
   Shield as ShieldIcon, ShieldCheck, Sparkles, Star, Sun, Swords, Target, Trash2, TrendingUp, Trophy, Trophy as TrophyIcon,
-  Upload, User, UserCheck, UserCog, UserPlus, Users, Video, X, Zap
+  Upload, User, UserCheck, UserCog, UserPlus, Users, Video, X, Zap, MessageSquare
 } from 'lucide-react';
 
 import { 
