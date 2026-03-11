@@ -10,6 +10,7 @@ export const useFirebaseData = () => {
     const [competitions, setCompetitions] = useState([]);
     const [monthlyStars, setMonthlyStars] = useState([]);
     const [leagueMatches, setLeagueMatches] = useState([]);
+    const [feedPosts, setFeedPosts] = useState([]);
     
     // --- 新增的狀態 ---
     const [attendanceLogs, setAttendanceLogs] = useState([]);
@@ -63,8 +64,8 @@ export const useFirebaseData = () => {
                 bindListener(query(getCollectionPath('achievements'), orderBy("timestamp", "desc")), setAchievements, 'achievements');
                 bindListener(query(getCollectionPath('external_tournaments'), orderBy("name", "asc")), setExternalTournaments, 'externalTournaments');
                 bindListener(query(getCollectionPath('assessments'), orderBy("date", "desc")), setAssessments, 'assessments');
-                
                 bindListener(getCollectionPath('tactical_shots'), setTacticalShots, 'tacticalShots');
+                bindListener(query(getCollectionPath('feed_posts'), orderBy("timestamp", "desc")), setFeedPosts, 'feedPosts');
 
             } else {
                 console.log("❌ Hook: Auth logged out, clearing ALL data.");
