@@ -1,5 +1,7 @@
+// src/pages/SettingsPage.jsx (Version 1.1)
+
 import React from 'react';
-import { ImageIcon, Trash2, Upload, Plus, History, Save } from 'lucide-react';
+import { ImageIcon, Trash2, Upload, Plus, History, Save, Trophy, Users } from 'lucide-react'; // 👈 引入新的 Icon
 import { collection, addDoc, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function SettingsPage({
@@ -13,10 +15,15 @@ export default function SettingsPage({
     handleSeasonReset,
     setIsUpdating,
     db,
-    appId
+    appId,
+
+    // 👇 接收從 App.jsx 傳來的新 props
+    handleCSVImportTrophies,
+    handleCSVImportAlumni
+
 }) {
     
-    // 處理新增單一賽事名稱
+    // ... (現有的 handleAddSingleTournament 和 handleSaveSystemConfig 函式保持不變)
     const handleAddSingleTournament = async () => {
         const name = prompt('請輸入單一賽事名稱:'); 
         if (name) {
@@ -31,8 +38,6 @@ export default function SettingsPage({
             }
         }
     };
-
-    // 處理系統設定存檔
     const handleSaveSystemConfig = async () => {
         setIsUpdating(true); 
         try {
@@ -48,8 +53,9 @@ export default function SettingsPage({
     return (
         <div className="max-w-4xl mx-auto space-y-10 animate-in zoom-in-95 duration-500 font-bold">
             
-            {/* 系統偏好設定區塊 */}
+            {/* 系統偏好設定區塊 (保持不變) */}
             <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                {/* ... 此處內容完全不變 ... */}
                 <h3 className="text-3xl font-black mb-10 text-center">系統偏好設定</h3>
                 <div className="space-y-8">
                     
@@ -126,8 +132,9 @@ export default function SettingsPage({
                 </div>
             </div>
 
-            {/* 校外賽事名稱管理 */}
+            {/* 校外賽事名稱管理 (保持不變) */}
             <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                {/* ... 此處內容完全不變 ... */}
                 <h3 className="text-2xl font-black mb-4">校外賽事名稱管理</h3>
                 <p className="text-slate-400 mb-8">您可以在此批量匯入官方的賽事名稱，以便在「校外賽管理」頁面中快速選取。</p>
                 <div className="flex flex-col sm:flex-row gap-4 items-center">
@@ -159,8 +166,37 @@ export default function SettingsPage({
                 </div>
             </div>
 
-            {/* 進階設定：重置與存檔 */}
+            {/* --- START: Version 1.0 (榮譽殿堂) - 新增匯入區塊 --- */}
             <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                <h3 className="text-2xl font-black mb-4">榮譽殿堂資料管理</h3>
+                <p className="text-slate-400 mb-8">請在此處，分別上傳你已準備好的 `trophies.csv` 和 `alumni.csv` 檔案，為「榮譽殿堂」注入靈魂。</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* 匯入團隊獎項 */}
+                    <label className="bg-amber-500 text-white p-8 rounded-[2rem] cursor-pointer hover:bg-amber-600 shadow-2xl shadow-amber-100 flex flex-col items-center justify-center gap-3 transition-all active:scale-[0.98]">
+                        <div className="flex items-center gap-3">
+                            <Trophy size={24}/>
+                            <span className="text-lg font-black">匯入團隊獎項</span>
+                        </div>
+                        <p className="text-xs font-bold text-white/80">(trophies.csv)</p>
+                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportTrophies}/>
+                    </label>
+
+                    {/* 匯入傳奇校友 */}
+                    <label className="bg-indigo-500 text-white p-8 rounded-[2rem] cursor-pointer hover:bg-indigo-600 shadow-2xl shadow-indigo-100 flex flex-col items-center justify-center gap-3 transition-all active:scale-[0.98]">
+                        <div className="flex items-center gap-3">
+                            <Users size={24}/>
+                            <span className="text-lg font-black">匯入傳奇校友</span>
+                        </div>
+                        <p className="text-xs font-bold text-white/80">(alumni.csv)</p>
+                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportAlumni}/>
+                    </label>
+                </div>
+            </div>
+            {/* --- END: Version 1.0 (榮譽殿堂) --- */}
+
+            {/* 進階設定 (保持不變) */}
+            <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                {/* ... 此處內容完全不變 ... */}
                 <div className="p-6 bg-orange-50 rounded-[2.5rem] border border-orange-100 mb-6">
                     <h4 className="text-orange-600 font-black mb-2 flex items-center gap-2"><History/> 新賽季重置</h4>
                     <p className="text-xs text-slate-400 mb-4">將所有學員積分重置為該章別的起步底分 (金:200, 銀:100...)。</p>
@@ -176,7 +212,7 @@ export default function SettingsPage({
                 </button>
             </div>
             
-            {/* 版權宣告 */}
+            {/* 版權宣告 (保持不變) */}
             <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">
                 Copyright © 2026 正覺壁球. All Rights Reserved.
             </div>
