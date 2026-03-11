@@ -145,7 +145,7 @@ const LiveScoreboardDisplay = ({ liveMatches, TrophyIcon }) => {
 };
 
 export default function App() {
-  const { students, competitions, monthlyStars, leagueMatches } = useFirebaseData();
+  const { students, competitions, monthlyStars, leagueMatches } = useFirebaseData(user);
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
