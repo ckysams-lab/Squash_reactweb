@@ -146,22 +146,21 @@ const LiveScoreboardDisplay = ({ liveMatches, TrophyIcon }) => {
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const { students, competitions, monthlyStars, leagueMatches } = useFirebaseData(user);
-  console.log("🚀 App.jsx received Data:", { 
-      studentsCount: students?.length, 
-      leagueMatchesCount: leagueMatches?.length 
-  });
+  // 在 App.jsx 頂部附近
+const { 
+  students, competitions, monthlyStars, leagueMatches,
+  attendanceLogs, schedules, downloadFiles, galleryItems, // 👈 新增這些
+  awards, achievements, externalTournaments, assessments, tacticalShots // 👈 新增這些
+} = useFirebaseData();
+
   const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('');
-  const [attendanceLogs, setAttendanceLogs] = useState([]); 
-  const [schedules, setSchedules] = useState([]); 
   const [liveMatches, setLiveMatches] = useState([]);
   const [showUmpirePanel, setShowUmpirePanel] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null); // 👉 新增這行：記錄正在轉播的聯賽
-  const [galleryItems, setGalleryItems] = useState([]);
   const [driveAlbums, setDriveAlbums] = useState([]); // 儲存來自 Google Drive 的相簿
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
     const syncGoogleDriveGallery = async () => {
@@ -186,10 +185,6 @@ export default function App() {
       setIsSyncingDrive(false);
   };
 
-  const [awards, setAwards] = useState([]); 
-  const [achievements, setAchievements] = useState([]); 
-  const [externalTournaments, setExternalTournaments] = useState([]);
-  const [assessments, setAssessments] = useState([]); // <- 新增
   const [newAssessment, setNewAssessment] = useState({  // <- 新增
     studentId: '',
     date: new Date().toISOString().split('T')[0],
@@ -205,7 +200,6 @@ export default function App() {
     notes: ''
   });
 
-  const [downloadFiles, setDownloadFiles] = useState([]);
   const [pendingAttendance, setPendingAttendance] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null); 
   const [showPlayerCard, setShowPlayerCard] = useState(null);
@@ -252,7 +246,6 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(false);
 };
 
-  const [tacticalShots, setTacticalShots] = useState([]);
   const [showTacticalBoard, setShowTacticalBoard] = useState(false);
   const [systemConfig, setSystemConfig] = useState({ 
     announcements: [],
@@ -364,21 +357,6 @@ const handleSaveFeaturedBadges = async () => {
         if (docSnap.exists()) setFinanceConfig(prev => ({...prev, ...docSnap.data()}));
         else setDoc(financeConfigRef, financeConfig);
       }, (e) => console.error("Finance err", e)));
-      
-      listeners.push(onSnapshot(collections.attendance_logs, (snap) => setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-      listeners.push(onSnapshot(collections.schedules, (snap) => setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-      listeners.push(onSnapshot(collections.downloadFiles, (snap) => setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-      listeners.push(onSnapshot(collections.gallery, (snap) => setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-      listeners.push(onSnapshot(query(collections.awards, orderBy("date", "desc")), (snap) => setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-      listeners.push(onSnapshot(query(collections.achievements, orderBy("timestamp", "desc")), (snap) => setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() }))))); 
-      listeners.push(onSnapshot(query(collections.external_tournaments, orderBy("name", "asc")), (snap) => setExternalTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-      listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => { 
-        setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      }));
-// [11.3] 新增戰術數據監聽
-      listeners.push(onSnapshot(collections.tactical_shots, (snap) => {
-        setTacticalShots(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      }));
     
       return () => listeners.forEach(unsub => unsub());
 
