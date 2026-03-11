@@ -43,16 +43,6 @@ import {
   addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where,
   enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED
 } from 'firebase/firestore';
-import { initializeApp, deleteApp } from 'firebase/app'; // 記得要有 deleteApp
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  signOut,
-  onAuthStateChanged,
-  createUserWithEmailAndPassword // 新增這個用來創建帳號
-} from 'firebase/auth';
-
-import { getMessaging, getToken } from 'firebase/messaging'; // 👉 新增這行
 import html2canvas from 'html2canvas';
 import QRCode from 'qrcode.react';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
@@ -62,32 +52,10 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
 } from 'recharts';
+import { db, auth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from './firebase';
 
 // --- 版本控制 ---
 const CURRENT_VERSION = "12.0";
-
-// --- Firebase 初始化 ---
-let firebaseConfig;
-let app = null;
-let auth = null;
-let db = null;
-
-try {
-  const envConfig = import.meta.env?.VITE_FIREBASE_CONFIG;
-  if (envConfig) {
-    firebaseConfig = JSON.parse(envConfig);
-  } 
-  else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-    firebaseConfig = JSON.parse(__firebase_config);
-  } 
-  else {
-    throw new Error("Firebase config not found. Please set VITE_FIREBASE_CONFIG in your .env.local file or define __firebase_config globally.");
-  }
-
-  if (firebaseConfig) {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
 
     // --- 新增：啟動 Firebase 離線優先快取 (Offline Persistence) ---
     try {
