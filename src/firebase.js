@@ -51,3 +51,19 @@ export {
   onAuthStateChanged, 
   createUserWithEmailAndPassword 
 };
+
+if (db) {
+    try {
+        enableIndexedDbPersistence(db, {
+            cacheSizeBytes: CACHE_SIZE_UNLIMITED
+        }).catch((err) => {
+            if (err.code === 'failed-precondition') {
+                console.warn("離線快取啟動失敗：可能開啟了多個系統分頁。");
+            } else if (err.code === 'unimplemented') {
+                console.warn("當前瀏覽器不支援離線快取功能。");
+            }
+        });
+    } catch (e) {
+        console.warn("IndexedDB 可能已在運作中", e);
+    }
+}
