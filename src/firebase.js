@@ -1,5 +1,5 @@
 // src/firebase.js
-import { initializeApp, deleteApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -7,51 +7,34 @@ import {
   onAuthStateChanged,
   createUserWithEmailAndPassword 
 } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore'; // 確保有 import getFirestore
-import { getMessaging, getToken } from 'firebase/messaging';
+import { getFirestore, enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED } from 'firebase/firestore';
 
-// --- Firebase 初始化 ---
+// 1. 取得並解析設定
 let firebaseConfig;
-let app = null;
-let auth = null;
-let db = null;
-let messaging = null; // 為了 getMessaging 預留
-
 try {
   const envConfig = import.meta.env?.VITE_FIREBASE_CONFIG;
-
   if (envConfig) {
     firebaseConfig = JSON.parse(envConfig);
-  } 
-  else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+  } else if (typeof __firebase_config !== 'undefined' && __firebase_config) {
     firebaseConfig = JSON.parse(__firebase_config);
-  } 
-  else {
-    throw new Error("Firebase config not found. Please set VITE_FIREBASE_CONFIG in your .env.local file or define __firebase_config globally.");
-  }
-
-  if (firebaseConfig) {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    // 如果有用到 messaging，可以在這裡初始化
-    // messaging = getMessaging(app);
+  } else {
+    throw new Error("Firebase config not found.");
   }
 } catch (error) {
-  console.error("Firebase 初始化失敗:", error);
+  console.error("Firebase config parsing failed:", error);
+  // 如果設定檔解析失敗，提供一個假的設定以防應用程式直接崩潰 (僅限開發環境)
+  firebaseConfig = {}; 
 }
 
-// 關鍵步驟：將初始化好的實例 export 出去，讓別的檔案可以使用！
-export { app, auth, db, messaging }; 
+// 2. 安全地初始化 App
+// 使用 getApps().length 檢查是否已經初始化過，避免重複初始化錯誤 (特別是在熱更新 HMR 時)
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// 如果有需要，也可以把 auth 相關的函數 export 出去，方便使用
-export { 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged, 
-  createUserWithEmailAndPassword 
-};
+// 3. 直接宣告並匯出實例 (這可以解決 Cannot access before initialization 的問題)
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
+// 4. 啟動離線快取 (在 db 確定建立之後)
 if (db) {
     try {
         enableIndexedDbPersistence(db, {
@@ -67,3 +50,11 @@ if (db) {
         console.warn("IndexedDB 可能已在運作中", e);
     }
 }
+
+// 5. 匯出 auth 相關輔助函式 (可選，如果您習慣從 firebase.js 匯入它們)
+export { 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged, 
+  createUserWithEmailAndPassword 
+};
