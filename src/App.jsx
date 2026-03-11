@@ -200,6 +200,47 @@ const {
   };
 
  //處理按讚/收回讚的邏輯
+  const handleLikePost = async (postId) => {
+      // 確保使用者有登入
+      if (!user) {
+          alert("請先登入才能按讚喔！");
+          return;
+      }
+
+      // 取得當前使用者的 ID，如果是 admin 就用 'admin'，否則用 currentUserInfo.id
+      const userId = role === 'admin' ? 'admin' : currentUserInfo?.id;
+      
+      if (!userId) return;
+
+      try {
+          // 找到這篇貼文目前的資料
+          const post = feedPosts.find(p => p.id === postId);
+          if (!post) return;
+
+          // 判斷使用者是否已經按過讚了
+          const isLiked = post.likes && post.likes.includes(userId);
+
+          // 準備指向 Firestore 中該篇貼文的參考路徑
+          const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'feed_posts', postId);
+
+          // 根據是否已按讚，執行加入或移除的操作
+          if (isLiked) {
+              // 收回讚：從 likes 陣列中移除 userId
+              await updateDoc(postRef, {
+                  likes: arrayRemove(userId)
+              });
+          } else {
+              // 給讚：將 userId 加入 likes 陣列
+              await updateDoc(postRef, {
+                  likes: arrayUnion(userId)
+              });
+          }
+      } catch (error) {
+          console.error("按讚失敗:", error);
+          // 可以在這裡加入一個小小的錯誤提示，如果需要的話
+      }
+  };
+
   const handleAddComment = async (postId, commentText) => {
       if (!user) {
           alert("請先登入才能留言喔！");
@@ -235,7 +276,6 @@ const {
           alert("留言失敗，請稍後再試。");
       }
   };
-  
   const [newAssessment, setNewAssessment] = useState({  // <- 新增
     studentId: '',
     date: new Date().toISOString().split('T')[0],
