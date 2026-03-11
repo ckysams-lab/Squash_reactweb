@@ -335,17 +335,13 @@ const handleSaveFeaturedBadges = async () => {
       const listeners = [];
       // 版本 11.4: 修正因遺漏 `assessments` 集合定義而導致的 Firestore 初始化錯誤
       const collections = {
-        students: collection(db, 'artifacts', appId, 'public', 'data', 'students'),
         attendance_logs: collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'),
-        competitions: collection(db, 'artifacts', appId, 'public', 'data', 'competitions'),
         schedules: collection(db, 'artifacts', appId, 'public', 'data', 'schedules'),
         downloadFiles: collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'),
         gallery: collection(db, 'artifacts', appId, 'public', 'data', 'gallery'),
         awards: collection(db, 'artifacts', appId, 'public', 'data', 'awards'),
         achievements: collection(db, 'artifacts', appId, 'public', 'data', 'achievements'),
-        league_matches: collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'),
         external_tournaments: collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'),
-        monthly_stars: collection(db, 'artifacts', appId, 'public', 'data', 'monthly_stars'),
         assessments: collection(db, 'artifacts', appId, 'public', 'data', 'assessments'), 
         tactical_shots: collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots')
       };
