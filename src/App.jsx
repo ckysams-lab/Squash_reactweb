@@ -170,6 +170,7 @@ const {
   const [liveMatches, setLiveMatches] = useState([]);
   const [showUmpirePanel, setShowUmpirePanel] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
+  const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null); // 👉 新增這行：記錄正在轉播的聯賽
   const [driveAlbums, setDriveAlbums] = useState([]); // 儲存來自 Google Drive 的相簿
@@ -1976,6 +1977,7 @@ const myDashboardData = useMemo(() => {
                         <NavButton tabName="monthlyStars" icon={<Star size={20} />}>每月之星</NavButton>
                         <NavButton tabName="rankings" icon={<Trophy size={20} />}>積分排行</NavButton>
                         <NavButton tabName="league" icon={<Swords size={20} />}>聯賽專區</NavButton>
+                        <NavButton tabName="socialFeed" icon={<MessageSquare size={20} />}>球隊動態</NavButton>
                         <NavButton tabName="gallery" icon={<ImageIcon size={20} />}>精彩花絮</NavButton>
                         <NavButton tabName="awards" icon={<Award size={20} />}>獎項成就</NavButton>
                         <NavButton tabName="schedules" icon={<CalendarIcon size={20} />}>訓練日程</NavButton>
@@ -2336,7 +2338,16 @@ const myDashboardData = useMemo(() => {
         deleteItem={deleteItem}
         setShowAddPlayerModal={setShowAddPlayerModal}
     />
-)}
+)}      {/* 球隊動態牆 */}
+      {!viewingStudent && activeTab === 'socialFeed' && (
+          <SocialFeedPage 
+              role={role}
+              currentUserInfo={currentUserInfo}
+              feedPosts={feedPosts}
+              setShowCreatePostModal={() => alert("發文功能開發中！")} // 暫時用 alert 代替
+              handleLikePost={(id) => console.log("按讚 ID:", id)} // 暫時印出 ID
+          />
+      )}
 
           {/* MONTHLY STARS ADMIN */}
           {!viewingStudent && activeTab === 'monthlyStarsAdmin' && role === 'admin' && (
