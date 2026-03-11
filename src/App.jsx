@@ -1290,6 +1290,96 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(false);
     e.target.value = null;
   };
+
+// --- START: Version 1.0 (榮譽殿堂) - CSV Importer Logic ---
+
+// 處理 trophies.csv (團隊獎項) 的匯入
+const handleCSVImportTrophies = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setIsUpdating(true); // 開始更新狀態，顯示處理中
+  try {
+    // 讀取 CSV 檔案內容
+    const text = await readCSVFile(file, importEncoding);
+    // 將文本分割成行，並過濾掉空行和標題行
+    const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
+    
+    const batch = writeBatch(db); // 建立一個批次寫入操作
+    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'trophies'); // 指定要寫入的資料庫集合
+    let count = 0;
+
+    rows.forEach(row => {
+      const cols = row.split(',');
+      // 基礎驗證，確保所有欄位都存在
+      if (cols.length >= 4) {
+        const [year, tournamentName, award, roster] = cols.map(s => s?.trim().replace(/^"|"$/g, ''));
+        if (year && tournamentName && award) {
+          const newDocRef = doc(colRef); // 建立一個新的文件參照
+          batch.set(newDocRef, {
+            year: Number(year) || 0,
+            tournamentName: tournamentName,
+            award: award,
+            // 將隊員名單字串，轉換為陣列格式儲存，方便未來使用
+            roster: roster ? roster.split(',').map(name => name.trim()) : [], 
+            createdAt: serverTimestamp()
+          });
+          count++;
+        }
+      }
+    });
+
+    await batch.commit(); // 執行所有批次寫入操作
+    alert(`✅ 成功匯入 ${count} 筆團隊獎項紀錄！`);
+  } catch (err) {
+    console.error("Trophy import failed:", err);
+    alert('獎項紀錄匯入失敗，請嚴格檢查 CSV 格式是否符合模板。');
+  }
+  setIsUpdating(false); // 結束更新狀態
+  if (e.target) e.target.value = null; // 清空檔案選擇，以便可以重複上傳同一個檔案
+};
+
+// 處理 alumni.csv (傳奇校友) 的匯入
+const handleCSVImportAlumni = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setIsUpdating(true);
+  try {
+    const text = await readCSVFile(file, importEncoding);
+    const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
+    
+    const batch = writeBatch(db);
+    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'alumni');
+    let count = 0;
+
+    rows.forEach(row => {
+      const cols = row.split(',');
+      if (cols.length >= 3) {
+        const [name, graduationYear, achievement] = cols.map(s => s?.trim().replace(/^"|"$/g, ''));
+        if (name && graduationYear) {
+          const newDocRef = doc(colRef);
+          batch.set(newDocRef, {
+            name: name,
+            graduationYear: Number(graduationYear) || 0,
+            achievement: achievement,
+            createdAt: serverTimestamp()
+          });
+          count++;
+        }
+      }
+    });
+
+    await batch.commit();
+    alert(`✅ 成功匯入 ${count} 筆傳奇校友紀錄！`);
+  } catch (err) {
+    console.error("Alumni import failed:", err);
+    alert('傳奇校友匯入失敗，請嚴格檢查 CSV 格式是否符合模板。');
+  }
+  setIsUpdating(false);
+  if (e.target) e.target.value = null;
+};
+
+// --- END: Version 1.0 (榮譽殿堂) ---
+
   
   const todaySchedule = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -2675,6 +2765,8 @@ const myDashboardData = useMemo(() => {
                   setIsUpdating={setIsUpdating}
                   db={db}
                   appId={appId}
+                  handleCSVImportTrophies={handleCSVImportTrophies}
+                  handleCSVImportAlumni={handleCSVImportAlumni}
               />
           )}
           {showAddPlayerModal && (
