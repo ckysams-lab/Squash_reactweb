@@ -28,6 +28,8 @@ export const useFirebaseData = (user) => {
             const studentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setStudents(studentsData);
         }, (error) => {
+            console.log("🔥 Hook fetched Students count:", studentsData.length); // 👈 加入這行
+            setStudents(studentsData);
             console.error("Error fetching students: ", error);
         });
 
