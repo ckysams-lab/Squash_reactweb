@@ -200,44 +200,39 @@ const {
   };
 
  //處理按讚/收回讚的邏輯
-  const handleLikePost = async (postId) => {
-      // 確保使用者有登入
+  const handleAddComment = async (postId, commentText) => {
       if (!user) {
-          alert("請先登入才能按讚喔！");
+          alert("請先登入才能留言喔！");
           return;
       }
+      if (!commentText.trim()) return;
 
-      // 取得當前使用者的 ID，如果是 admin 就用 'admin'，否則用 currentUserInfo.id
       const userId = role === 'admin' ? 'admin' : currentUserInfo?.id;
-      
-      if (!userId) return;
+      const authorName = role === 'admin' ? '系統管理員 (教練)' : currentUserInfo?.name;
+      const authorPhotoUrl = currentUserInfo?.photoUrl || null;
 
       try {
-          // 找到這篇貼文目前的資料
-          const post = feedPosts.find(p => p.id === postId);
-          if (!post) return;
-
-          // 判斷使用者是否已經按過讚了
-          const isLiked = post.likes && post.likes.includes(userId);
-
-          // 準備指向 Firestore 中該篇貼文的參考路徑
           const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'feed_posts', postId);
+          
+          // 建立留言物件
+          const newComment = {
+              id: Date.now().toString(), // 給留言一個簡單的唯一 ID
+              userId: userId,
+              authorName: authorName,
+              authorRole: role,
+              authorPhotoUrl: authorPhotoUrl,
+              text: commentText.trim(),
+              createdAt: new Date().toISOString() // 使用 ISO 字串儲存時間
+          };
 
-          // 根據是否已按讚，執行加入或移除的操作
-          if (isLiked) {
-              // 收回讚：從 likes 陣列中移除 userId
-              await updateDoc(postRef, {
-                  likes: arrayRemove(userId)
-              });
-          } else {
-              // 給讚：將 userId 加入 likes 陣列
-              await updateDoc(postRef, {
-                  likes: arrayUnion(userId)
-              });
-          }
+          // 將新留言加入到該貼文的 comments 陣列中
+          await updateDoc(postRef, {
+              comments: arrayUnion(newComment)
+          });
+          
       } catch (error) {
-          console.error("按讚失敗:", error);
-          // 可以在這裡加入一個小小的錯誤提示，如果需要的話
+          console.error("留言失敗:", error);
+          alert("留言失敗，請稍後再試。");
       }
   };
   
@@ -2390,8 +2385,8 @@ const myDashboardData = useMemo(() => {
                   currentUserInfo={currentUserInfo}
                   feedPosts={feedPosts}
                   setShowCreatePostModal={setShowCreatePostModal}
-                  // 🔽 修改這裡！把真正的 handleLikePost 傳下去 🔽
                   handleLikePost={handleLikePost} 
+                  handleAddComment={handleAddComment}
               />
           )}
 
