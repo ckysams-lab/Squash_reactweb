@@ -1,83 +1,85 @@
 // src/hooks/useFirebaseData.js
 import { useState, useEffect } from 'react';
-import { db, auth } from '../firebase'; // 確保這裡正確匯入了 auth 和 db
+import { db, auth } from '../firebase'; 
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
 export const useFirebaseData = () => {
-    // 宣告狀態：預設都是空陣列
     const [students, setStudents] = useState([]);
     const [competitions, setCompetitions] = useState([]);
     const [monthlyStars, setMonthlyStars] = useState([]);
     const [leagueMatches, setLeagueMatches] = useState([]);
 
     useEffect(() => {
-        // 宣告退訂函數的變數，用於清理記憶體
         let unsubscribeStudents;
         let unsubscribeCompetitions;
         let unsubscribeStars;
         let unsubscribeLeagueMatches;
 
-        // 監聽登入狀態：只有在確認登入後才開始抓資料
+        // 🚨 這是最關鍵的修正：定義正確的 appId 和基礎路徑 🚨
+        const appId = 'bcklas-squash-core-v1';
+        
+        // 輔助函數：用來產生正確的長路徑
+        const getCollectionPath = (collectionName) => {
+            return collection(db, 'artifacts', appId, 'public', 'data', collectionName);
+        };
+
         const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
             if (currentUser) {
-                console.log("✅ Hook: 使用者已登入，開始抓取資料...");
+                console.log("✅ Hook Auth confirmed, starting fetch with correct path...");
 
-                // 1. 抓取學生資料
-                unsubscribeStudents = onSnapshot(collection(db, 'students'), (snapshot) => {
+                // 1. 使用修正後的方法抓取 Students
+                unsubscribeStudents = onSnapshot(getCollectionPath('students'), (snapshot) => {
                     const studentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log("🔥 Hook: 成功抓取 Students，數量:", studentsData.length);
+                    console.log("🔥 Hook fetched Students count:", studentsData.length);
                     setStudents(studentsData);
-                }, (error) => console.error("❌ 抓取 students 失敗: ", error));
+                }, (error) => console.error("Error fetching students: ", error));
 
-                // 2. 抓取比賽紀錄 (注意：這裡假設您的集合名稱是 matches，如果是 competitions 請自行更改)
-                const matchesQuery = query(collection(db, 'competitions'), orderBy('date', 'desc')); // 改為 competitions 以符合您原本的命名
+                // 2. 抓取 Competitions (注意：您之前命名為 competitions，請確認您的資料庫確實是這個名字)
+                const matchesQuery = query(getCollectionPath('competitions'), orderBy('date', 'desc'));
                 unsubscribeCompetitions = onSnapshot(matchesQuery, (snapshot) => {
                     const matchesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log("🔥 Hook: 成功抓取 Competitions，數量:", matchesData.length);
+                    console.log("🔥 Hook fetched Competitions count:", matchesData.length);
                     setCompetitions(matchesData);
-                }, (error) => console.error("❌ 抓取 competitions 失敗: ", error));
+                }, (error) => console.error("Error fetching competitions: ", error));
 
-                // 3. 抓取每月之星
-                const unsubscribeStars = onSnapshot(collection(db, 'monthly_stars'), (snapshot) => {
+                // 3. 抓取 Monthly Stars
+                const unsubscribeStars = onSnapshot(getCollectionPath('monthly_stars'), (snapshot) => {
                     const starsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log("🔥 Hook: 成功抓取 Monthly Stars，數量:", starsData.length);
+                    console.log("🔥 Hook fetched Monthly Stars count:", starsData.length);
                     setMonthlyStars(starsData);
-                }, (error) => console.error("❌ 抓取 monthly_stars 失敗: ", error));
+                }, (error) => console.error("Error fetching monthly stars: ", error));
 
-                // 4. 抓取內部聯賽
-                unsubscribeLeagueMatches = onSnapshot(collection(db, 'league_matches'), (snapshot) => {
+                // 4. 抓取 League Matches
+                const unsubscribeLeagueMatches = onSnapshot(getCollectionPath('league_matches'), (snapshot) => {
                     const leagueData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log("🔥 Hook: 成功抓取 League Matches，數量:", leagueData.length);
+                    console.log("🔥 Hook fetched League Matches count:", leagueData.length);
                     setLeagueMatches(leagueData);
-                }, (error) => console.error("❌ 抓取 league_matches 失敗: ", error));
+                }, (error) => console.error("Error fetching league matches: ", error));
 
             } else {
-                // 如果未登入或登出，清空所有資料並取消監聽
-                console.log("❌ Hook: 未登入，清空資料。");
+                console.log("❌ Hook Auth logged out, clearing data.");
                 setStudents([]);
                 setCompetitions([]);
                 setMonthlyStars([]);
                 setLeagueMatches([]);
                 
-                if (unsubscribeStudents) unsubscribeStudents();
-                if (unsubscribeCompetitions) unsubscribeCompetitions();
-                if (unsubscribeStars) unsubscribeStars();
-                if (unsubscribeLeagueMatches) unsubscribeLeagueMatches();
+                if(unsubscribeStudents) unsubscribeStudents();
+                if(unsubscribeCompetitions) unsubscribeCompetitions();
+                if(unsubscribeStars) unsubscribeStars();
+                if(unsubscribeLeagueMatches) unsubscribeLeagueMatches();
             }
         });
 
-        // 當這個 Hook 被卸載時執行的清理工作
         return () => {
-            unsubscribeAuth(); // 停止監聽登入狀態
-            if (unsubscribeStudents) unsubscribeStudents();
-            if (unsubscribeCompetitions) unsubscribeCompetitions();
-            if (unsubscribeStars) unsubscribeStars();
-            if (unsubscribeLeagueMatches) unsubscribeLeagueMatches();
+            unsubscribeAuth();
+            if(unsubscribeStudents) unsubscribeStudents();
+            if(unsubscribeCompetitions) unsubscribeCompetitions();
+            if(unsubscribeStars) unsubscribeStars();
+            if(unsubscribeLeagueMatches) unsubscribeLeagueMatches();
         };
-    }, []); // 依賴陣列為空，表示這個設定只在組件掛載時執行一次
+    }, []);
 
-    // 將所有資料打包回傳給 App.jsx
     return {
         students,
         competitions,
