@@ -25,6 +25,7 @@ import PlayerDashboard from './components/PlayerDashboard';
 import MyDashboardPage from './pages/MyDashboardPage';
 import ExternalMatchesPage from './pages/ExternalMatchesPage';
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
+import { useFirebaseData } from './hooks/useFirebaseData';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 
 import {
@@ -206,13 +207,12 @@ const LiveScoreboardDisplay = ({ liveMatches, TrophyIcon }) => {
 };
 
 export default function App() {
+  const { students, competitions, monthlyStars, leagueMatches } = useFirebaseData();
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
   const [activeTab, setActiveTab] = useState('');
-  const [students, setStudents] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]); 
-  const [competitions, setCompetitions] = useState([]);
   const [schedules, setSchedules] = useState([]); 
   const [liveMatches, setLiveMatches] = useState([]);
   const [showUmpirePanel, setShowUmpirePanel] = useState(false);
@@ -246,7 +246,6 @@ export default function App() {
 
   const [awards, setAwards] = useState([]); 
   const [achievements, setAchievements] = useState([]); 
-  const [leagueMatches, setLeagueMatches] = useState([]);
   const [externalTournaments, setExternalTournaments] = useState([]);
   const [assessments, setAssessments] = useState([]); // <- 新增
   const [newAssessment, setNewAssessment] = useState({  // <- 新增
@@ -341,7 +340,6 @@ const handleSaveFeaturedBadges = async () => {
     totalStudents: 50, feePerStudent: 250
   });
 
-  const [monthlyStars, setMonthlyStars] = useState([]);
   const [selectedMonthForAdmin, setSelectedMonthForAdmin] = useState(new Date().toISOString().slice(0, 7));
   const [monthlyStarEditData, setMonthlyStarEditData] = useState({
       month: new Date().toISOString().slice(0, 7),
@@ -429,18 +427,14 @@ const handleSaveFeaturedBadges = async () => {
         else setDoc(financeConfigRef, financeConfig);
       }, (e) => console.error("Finance err", e)));
       
-      listeners.push(onSnapshot(collections.students, (snap) => setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(collections.attendance_logs, (snap) => setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-      listeners.push(onSnapshot(collections.competitions, (snap) => setCompetitions(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(collections.schedules, (snap) => setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(collections.downloadFiles, (snap) => setDownloadFiles(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(collections.gallery, (snap) => setGalleryItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(query(collections.awards, orderBy("date", "desc")), (snap) => setAwards(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(query(collections.achievements, orderBy("timestamp", "desc")), (snap) => setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() }))))); 
-      listeners.push(onSnapshot(query(collections.league_matches, orderBy("date", "desc")), (snap) => setLeagueMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
       listeners.push(onSnapshot(query(collections.external_tournaments, orderBy("name", "asc")), (snap) => setExternalTournaments(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-      listeners.push(onSnapshot(query(collections.monthly_stars, orderBy("month", "desc")), (snap) => setMonthlyStars(snap.docs.map(d => ({ id: d.id, ...d.data() })))));
-            listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => { 
+      listeners.push(onSnapshot(query(collections.assessments, orderBy("date", "desc")), (snap) => { 
         setAssessments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }));
 // [11.3] 新增戰術數據監聽
