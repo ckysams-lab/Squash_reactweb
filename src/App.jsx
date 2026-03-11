@@ -177,27 +177,63 @@ const {
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null); // 👉 新增這行：記錄正在轉播的聯賽
   const [driveAlbums, setDriveAlbums] = useState([]); // 儲存來自 Google Drive 的相簿
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
-    const syncGoogleDriveGallery = async () => {
-      setIsSyncingDrive(true);
-      try {
-          // 👇 把這裡的網址，換成您剛剛在第二階段拿到的 Web App URL 👇
-          const gasUrl = "https://script.google.com/macros/s/AKfycby_ynudWf8U11QIpm5SdVJgFvFoOM4yVZzw_b-VrT5f6t2BnVavzYjdDBUMP3JIg91zfw/exec"; 
-          
-          const response = await fetch(gasUrl);
-          const result = await response.json();
-          
-          if (result.status === 'success') {
-              setDriveAlbums(result.data);
-              alert("✅ 成功從 Google Drive 同步相簿！");
-          } else {
-              alert("同步失敗：" + result.message);
-          }
-      } catch (error) {
-          console.error("Drive sync error:", error);
-          alert("網路錯誤，無法連接 Google Drive");
-      }
-      setIsSyncingDrive(false);
-  };
+  const syncGoogleDriveGallery = async () => {
+    setIsSyncingDrive(true);
+    try {
+        // 👇 這個 Google Apps Script 的網址保持不變 👇
+        const gasUrl = "https://script.google.com/macros/s/AKfycby_ynudWf8U11QIpm5SdVJgFvFoOM4yVZzw_b-VrT5f6t2BnVavzYjdDBUMP3JIg91zfw/exec"; 
+        
+        const response = await fetch(gasUrl);
+        const result = await response.json();
+        
+        if (result.status === 'success' && Array.isArray(result.data)) {
+            // --- Version 1.2: 將 Drive 資料寫入 Firestore ---
+            const batch = writeBatch(db);
+            const galleryColRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery');
+            let itemsToSyncCount = 0;
+
+            // 檢查已存在的 Drive 圖片 URL，避免重複寫入
+            const existingDriveImageUrls = new Set(galleryItems.filter(item => item.isDrive).map(item => item.url));
+
+            result.data.forEach(album => {
+                if (album.photos && Array.isArray(album.photos)) {
+                    album.photos.forEach(photo => {
+                        // 如果這張照片的 URL 尚未存在於資料庫，才進行寫入
+                        if (!existingDriveImageUrls.has(photo.url)) {
+                            const newDocRef = doc(galleryColRef); // 建立一個新的文件參照
+                            batch.set(newDocRef, {
+                                type: 'image',
+                                url: photo.url,
+                                title: album.album, // 使用 Google Drive 的相簿名稱作為標題
+                                description: photo.name || `來自 ${album.album}`, // 使用照片檔名作為描述
+                                isDrive: true, // 標記此項目來自 Google Drive
+                                timestamp: serverTimestamp()
+                            });
+                            itemsToSyncCount++;
+                        }
+                    });
+                }
+            });
+
+            if (itemsToSyncCount > 0) {
+                await batch.commit();
+                alert(`✅ 成功從 Google Drive 同步並永久儲存了 ${itemsToSyncCount} 個新項目！`);
+            } else {
+                alert("ℹ️ Google Drive 中沒有找到新的照片可以同步。所有項目都已是最新狀態。");
+            }
+            // --- End of Version 1.2 ---
+            
+            // 我們不再需要 setDriveAlbums(result.data) 這一行，因為頁面會自動從 Firestore 更新
+            
+        } else {
+            alert("同步失敗：" + (result.message || '無法解析來自 Google Drive 的資料。'));
+        }
+    } catch (error) {
+        console.error("Drive sync error:", error);
+        alert("網路錯誤，無法連接 Google Drive。");
+    }
+    setIsSyncingDrive(false);
+};
 
  //處理按讚/收回讚的邏輯
   const handleLikePost = async (postId) => {
