@@ -57,36 +57,6 @@ import { db, auth, signInWithEmailAndPassword, signOut, onAuthStateChanged, crea
 // --- 版本控制 ---
 const CURRENT_VERSION = "12.0";
 
-    // --- 新增：啟動 Firebase 離線優先快取 (Offline Persistence) ---
-    try {
-        enableIndexedDbPersistence(db, {
-            cacheSizeBytes: CACHE_SIZE_UNLIMITED
-        }).catch((err) => {
-            if (err.code === 'failed-precondition') {
-                console.warn("離線快取啟動失敗：可能開啟了多個系統分頁。");
-            } else if (err.code === 'unimplemented') {
-                console.warn("當前瀏覽器不支援離線快取功能。");
-            }
-        });
-    } catch (e) {
-        console.warn("IndexedDB 可能已在運作中", e);
-    }
-    // -----------------------------------------------------------
-  } else {
-    throw new Error("firebaseConfig object is empty or invalid after parsing.");
-  }
-
-} catch (e) {
-  console.error("Firebase Initialization Failed:", e.message);
-  if (import.meta.env.DEV) {
-    document.body.innerHTML = `<div style="padding: 2rem; font-family: sans-serif; background-color: #FFFBEB; color: #92400E; height: 100vh;"><h1 style="font-size: 1.5rem; font-weight: bold;">Firebase 初始化失敗</h1><p>系統找不到 Firebase 的設定檔。請檢查以下步驟：</p><ol style="list-style-type: decimal; padding-left: 2rem;"><li>確認專案根目錄下有名為 <code>.env.local</code> 的檔案。</li><li>確認 <code>.env.local</code> 檔案中已設定 <code>VITE_FIREBASE_CONFIG</code> 變數。</li><li>在修改 <code>.env.local</code> 檔案後，您可能需要<strong>重新啟動開發伺服器</strong>。</li></ol><p>錯誤詳情: ${e.message}</p></div>`;
-  }
-  else {
-     document.body.innerText = "Application failed to load. Please contact the administrator.";
-  }
-}
-
-
 // Calendar Localizer
 const localizer = momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1'; 
