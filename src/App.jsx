@@ -148,10 +148,21 @@ export default function App() {
   const [user, setUser] = useState(null);
   // 在 App.jsx 頂部附近
 const { 
-  students, competitions, monthlyStars, leagueMatches,
-  attendanceLogs, schedules, downloadFiles, galleryItems, // 👈 新增這些
-  awards, achievements, externalTournaments, assessments, tacticalShots // 👈 新增這些
-} = useFirebaseData();
+    students, 
+    competitions, 
+    monthlyStars, 
+    leagueMatches,
+    attendanceLogs, 
+    schedules, 
+    downloadFiles, 
+    galleryItems,
+    awards, 
+    achievements, 
+    externalTournaments, 
+    assessments, 
+    tacticalShots,
+    feedPosts
+  } = useFirebaseData();
 
   const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
