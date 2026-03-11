@@ -1,4 +1,5 @@
-// 這是更新過後的 EditPlayerModal.jsx
+// src/pages/EditPlayerModal.jsx (Version 1.1)
+
 import React, { useState, useEffect } from 'react';
 import { X, UserCog, Upload, Loader2, Trophy as TrophyIcon } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -14,7 +15,6 @@ const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
     const handleFileChange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
         setIsUploading(true);
         try {
             const compressedBase64 = await compressImage(file, 0.8);
@@ -76,7 +76,6 @@ const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
                             </button>
                         </div>
                     </div>
-
                     <div>
                         <label className="text-sm font-bold text-slate-600">姓名</label>
                         <input value={playerData.name} onChange={e => setPlayerData({...playerData, name: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold" />
@@ -93,14 +92,30 @@ const EditPlayerModal = ({ student, onClose, db, appId, compressImage }) => {
                         </div>
                     </div>
                     
-                    {/* 👇👇 在這裡新增了「出生日期」欄位 👇👇 */}
                     <div>
                         <label className="text-sm font-bold text-slate-600">出生日期</label>
                         <input type="date" value={playerData.dob || ''} onChange={e => setPlayerData({...playerData, dob: e.target.value})} className="w-full p-2 mt-1 rounded-lg border outline-none font-bold" />
                     </div>
 
-                    {/* 👆👆 「報名班別」欄位已經被我移除了 👆👆 */}
-
+                    {/* 👇👇 Version 1.1: 新增「章別」更新功能 👇👇 */}
+                    <div>
+                        <label className="text-sm font-bold text-slate-600 flex items-center gap-2">
+                            <TrophyIcon size={14} /> 章別
+                        </label>
+                        <select
+                            value={playerData.badge || ''}
+                            onChange={e => setPlayerData({...playerData, badge: e.target.value})}
+                            className="w-full p-2 mt-1 rounded-lg border outline-none font-bold"
+                        >
+                            <option value="">無</option>
+                            <option value="銅章">銅章</option>
+                            <option value="銀章">銀章</option>
+                            <option value="金章">金章</option>
+                            <option value="白金章">白金章</option>
+                        </select>
+                    </div>
+                    {/* 👆👆 Version 1.1 End 👆👆 */}
+                    
                     <div className="pt-4">
                         <button onClick={handleUpdatePlayer} className="w-full bg-amber-500 text-white px-4 py-3 rounded-xl font-black hover:bg-amber-600 shadow-md transition-all active:scale-95">
                             確認更新
