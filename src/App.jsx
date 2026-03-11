@@ -2344,7 +2344,7 @@ const myDashboardData = useMemo(() => {
               role={role}
               currentUserInfo={currentUserInfo}
               feedPosts={feedPosts}
-              setShowCreatePostModal={() => alert("發文功能開發中！")} // 暫時用 alert 代替
+              setShowCreatePostModal={setShowCreatePostModal} 
               handleLikePost={(id) => console.log("按讚 ID:", id)} // 暫時印出 ID
           />
       )}
