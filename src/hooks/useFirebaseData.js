@@ -90,6 +90,7 @@ export const useFirebaseData = () => {
     return {
         students, competitions, monthlyStars, leagueMatches,
         attendanceLogs, schedules, downloadFiles, galleryItems,
-        awards, achievements, externalTournaments, assessments, tacticalShots
+        awards, achievements, externalTournaments, assessments, tacticalShots,
+        feedPosts    
     };
 };
