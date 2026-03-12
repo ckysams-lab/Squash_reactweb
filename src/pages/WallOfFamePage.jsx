@@ -8,7 +8,7 @@ import { X, Users, Award as AwardIcon, Star } from 'lucide-react';
 // 獎盃 3D 模型組件
 function TrophyModel({ position, trophy, onClick }) {
   const [hovered, setHovered] = useState(false);
-  const { nodes, materials } = useGLTF('https://api.pmnd.rs/models/trophy.glb');
+  const { nodes, materials } = useGLTF('/my_trophy.glb');
 
   return (
     <group 
