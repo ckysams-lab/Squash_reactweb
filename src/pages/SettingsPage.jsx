@@ -1,7 +1,7 @@
 // src/pages/SettingsPage.jsx (Version 1.1)
 
 import React from 'react';
-import { ImageIcon, Trash2, Upload, Plus, History, Save, Trophy, Users } from 'lucide-react'; // 👈 引入新的 Icon
+import { ImageIcon, Trash2, Upload, Plus, History, Save, Trophy, Users, Download } from 'lucide-react'; // 👈 引入新的 Icon
 import { collection, addDoc, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function SettingsPage({
