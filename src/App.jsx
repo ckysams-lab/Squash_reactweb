@@ -20,6 +20,7 @@ import AttendancePage from './pages/AttendancePage';
 import AssessmentsPage from './pages/AssessmentsPage';
 import SettingsPage from './pages/SettingsPage';
 import CompetitionsPage from './pages/CompetitionsPage';
+import WallOfFamePage from './pages/WallOfFamePage';
 import FinancialPage from './pages/FinancialPage';
 import PlayerDashboard from './components/PlayerDashboard';
 import MyDashboardPage from './pages/MyDashboardPage';
@@ -163,7 +164,9 @@ const {
     externalTournaments, 
     assessments, 
     tacticalShots,
-    feedPosts
+    feedPosts,
+    trophies,
+    alumni
   } = useFirebaseData();
 
   const [role, setRole] = useState(null);
@@ -2184,6 +2187,7 @@ const myDashboardData = useMemo(() => {
                         <NavButton tabName="league" icon={<Swords size={20} />}>聯賽專區</NavButton>
                         <NavButton tabName="socialFeed" icon={<MessageSquare size={20} />}>球隊動態</NavButton>
                         <NavButton tabName="gallery" icon={<ImageIcon size={20} />}>精彩花絮</NavButton>
+                        <NavButton tabName="wallOfFame" icon={<Trophy size={20} />}>榮譽殿堂</NavButton>
                         <NavButton tabName="awards" icon={<Award size={20} />}>獎項成就</NavButton>
                         <NavButton tabName="schedules" icon={<CalendarIcon size={20} />}>訓練日程</NavButton>
                         <NavButton tabName="competitions" icon={<Megaphone size={20} />}>比賽與公告</NavButton>
@@ -2699,7 +2703,11 @@ const myDashboardData = useMemo(() => {
                     deleteItem={deleteItem}
                 />
             )}
-          
+
+           {!viewingStudent && activeTab === 'wallOfFame' && (
+              <WallOfFamePage trophies={trophies} alumni={alumni} />
+          )}
+                
           {/* AWARDS TAB */}
           {!viewingStudent && activeTab === 'awards' && (
               <AwardsPage 
