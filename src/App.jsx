@@ -2510,7 +2510,6 @@ const myDashboardData = useMemo(() => {
         birthYearStats={birthYearStats}
         selectedYearFilter={selectedYearFilter}
         setSelectedYearFilter={setSelectedYearFilter}
-        downloadTemplate={downloadTemplate}
         handleCSVImportStudents={handleCSVImportStudents}
         setViewingStudent={setViewingStudent}
         handleManualAward={handleManualAward}
