@@ -98,5 +98,5 @@ export const useFirebaseData = () => {
         feedPosts,
         trophies,
         alumni
-    }; = useFirebaseData();
+    }; 
 };
