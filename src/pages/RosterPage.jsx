@@ -1,18 +1,23 @@
 // src/pages/RosterPage.jsx
+
 import React from 'react';
 import { 
-  Users, Filter, ChevronDown, Download, Upload, 
+  Users, Filter, ChevronDown, Upload, 
   Cake, Award, Layers, Key, UserCog, Trash2, Plus 
 } from 'lucide-react';
 import { BADGE_DATA, ACHIEVEMENT_DATA } from '../constants/data';
 
+// 1. 引入我們獨立的下載元件
+import TemplateDownloader from '../components/TemplateDownloader';
+
+// 2. 從 props 中移除 downloadTemplate
 export default function RosterPage({
     students,
     filteredStudents,
     birthYearStats,
     selectedYearFilter,
     setSelectedYearFilter,
-    downloadTemplate,
+    // downloadTemplate, <--- 已移除
     handleCSVImportStudents,
     setViewingStudent,
     handleManualAward,
@@ -61,9 +66,10 @@ export default function RosterPage({
                         </select>
                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/>
                     </div>
-                    <button onClick={() => downloadTemplate('students')} className="p-5 bg-slate-50 text-slate-400 border border-slate-100 rounded-[2rem] hover:text-blue-600 transition-all" title="下載名單範本">
-                        <Download size={24}/>
-                    </button>
+
+                    {/* 3. 將舊的下載按鈕，替換成獨立的 TemplateDownloader 元件 */}
+                    <TemplateDownloader type="students" />
+
                     <label className="bg-blue-600 text-white px-10 py-5 rounded-[2.2rem] cursor-pointer hover:bg-blue-700 shadow-2xl shadow-blue-100 flex items-center gap-3 transition-all active:scale-[0.98]">
                         <Upload size={20}/> 批量匯入 CSV 名單
                         <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
@@ -75,18 +81,14 @@ export default function RosterPage({
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {filteredStudents.sort((a,b) => a.class.localeCompare(b.class)).map(s => (
                     <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[3rem] shadow-sm hover:shadow-xl hover:shadow-slate-100 transition-all flex flex-col items-center group relative cursor-pointer" onClick={() => setViewingStudent(s)}>
-                        {/* 章別標籤 */}
                         <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[8px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
                             {s.badge}
                         </div>
-                        {/* 姓名頭像 */}
                         <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center text-3xl mb-4 text-slate-300 border border-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-all font-black uppercase">
                             {s.name[0]}
                         </div>
                         <p className="text-xl font-black text-slate-800">{s.name}</p>
                         <p className="text-[10px] text-slate-400 mt-1 font-black uppercase tracking-widest">{s.class} ({s.classNo})</p>
-
-                        {/* 顯示主打勳章 */}
                         <div className="flex items-center justify-center gap-2 mt-3 h-6">
                             {s.featuredBadges?.map(badgeId => {
                                 const badge = ACHIEVEMENT_DATA[badgeId];
@@ -98,8 +100,6 @@ export default function RosterPage({
                                 );
                             })}
                         </div>
-
-                        {/* 生日與班別 */}
                         {s.dob ? (
                             <div className="mt-2 text-[10px] bg-slate-50 text-slate-500 px-3 py-1 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={10}/> {s.dob}</div>
                         ) : (
@@ -107,7 +107,6 @@ export default function RosterPage({
                         )}
                         <div className="mt-1 text-[10px] text-blue-500 font-bold">{s.squashClass}</div>
                         
-                        {/* 操作按鈕 */}
                         <div className="mt-6 pt-6 border-t border-slate-50 w-full flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button onClick={() => handleManualAward(s)} className="text-slate-300 hover:text-yellow-500 hover:bg-yellow-50 p-2 rounded-xl transition-all" title="授予徽章"><Award size={16}/></button>
                             <button onClick={() => handleUpdateSquashClass(s)} className="text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 p-2 rounded-xl transition-all" title="設定報名班別"><Layers size={16}/></button>
@@ -118,7 +117,6 @@ export default function RosterPage({
                     </div>
                 ))}
                 
-                {/* 新增單一隊員按鈕 */}
                 <button onClick={() => setShowAddPlayerModal(true)} className="p-8 border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center text-slate-300 hover:text-blue-600 hover:border-blue-600 transition-all group">
                     <Plus size={32} className="mb-2 group-hover:scale-125 transition-all"/>
                     <span className="text-sm font-black uppercase tracking-widest">新增單一隊員</span>
@@ -127,4 +125,3 @@ export default function RosterPage({
         </div>
     );
 }
-
