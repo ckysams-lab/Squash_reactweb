@@ -279,7 +279,24 @@ const {
           // 可以在這裡加入一個小小的錯誤提示，如果需要的話
       }
   };
-
+const parseCsvRow = (row) => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < row.length; i++) {
+        const char = row[i];
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    result.push(current.trim());
+    return result;
+};
   const handleAddComment = async (postId, commentText) => {
       if (!user) {
           alert("請先登入才能留言喔！");
@@ -1300,30 +1317,27 @@ const handleSaveFeaturedBadges = async () => {
 const handleCSVImportTrophies = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  setIsUpdating(true); // 開始更新狀態，顯示處理中
+  setIsUpdating(true);
   try {
-    // 讀取 CSV 檔案內容
     const text = await readCSVFile(file, importEncoding);
-    // 將文本分割成行，並過濾掉空行和標題行
     const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-    
-    const batch = writeBatch(db); // 建立一個批次寫入操作
-    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'trophies'); // 指定要寫入的資料庫集合
+    const batch = writeBatch(db);
+    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'trophies');
     let count = 0;
 
     rows.forEach(row => {
-      const cols = row.split(',');
-      // 基礎驗證，確保所有欄位都存在
+      // 👇 使用我們新的、更強大的解析器
+      const cols = parseCsvRow(row);
+      
       if (cols.length >= 4) {
-        const [year, tournamentName, award, roster] = cols.map(s => s?.trim().replace(/^"|"$/g, ''));
+        const [year, tournamentName, award, roster] = cols;
         if (year && tournamentName && award) {
-          const newDocRef = doc(colRef); // 建立一個新的文件參照
+          const newDocRef = doc(colRef);
           batch.set(newDocRef, {
             year: Number(year) || 0,
             tournamentName: tournamentName,
             award: award,
-            // 將隊員名單字串，轉換為陣列格式儲存，方便未來使用
-            roster: roster ? roster.split(',').map(name => name.trim()) : [], 
+            roster: roster ? roster.split(',').map(name => name.trim()) : [],
             createdAt: serverTimestamp()
           });
           count++;
@@ -1331,17 +1345,22 @@ const handleCSVImportTrophies = async (e) => {
       }
     });
 
-    await batch.commit(); // 執行所有批次寫入操作
-    alert(`✅ 成功匯入 ${count} 筆團隊獎項紀錄！`);
+    if (count > 0) {
+        await batch.commit();
+        alert(`✅ 成功匯入 ${count} 筆團隊獎項紀錄！`);
+    } else {
+        alert("⚠️ 匯入 0 筆紀錄。請檢查您的 CSV 檔案內容是否為空，或格式是否完全符合範本要求 (包含標題行)。");
+    }
+
   } catch (err) {
     console.error("Trophy import failed:", err);
-    alert('獎項紀錄匯入失敗，請嚴格檢查 CSV 格式是否符合模板。');
+    alert('獎項紀錄匯入失敗，請檢查檔案格式或內容。');
   }
-  setIsUpdating(false); // 結束更新狀態
-  if (e.target) e.target.value = null; // 清空檔案選擇，以便可以重複上傳同一個檔案
+  setIsUpdating(false);
+  if (e.target) e.target.value = null;
 };
 
-// 處理 alumni.csv (傳奇校友) 的匯入
+// 升級版的 handleCSVImportAlumni
 const handleCSVImportAlumni = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -1349,15 +1368,16 @@ const handleCSVImportAlumni = async (e) => {
   try {
     const text = await readCSVFile(file, importEncoding);
     const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-    
     const batch = writeBatch(db);
     const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'alumni');
     let count = 0;
 
     rows.forEach(row => {
-      const cols = row.split(',');
+      // 👇 使用我們新的、更強大的解析器
+      const cols = parseCsvRow(row);
+
       if (cols.length >= 3) {
-        const [name, graduationYear, achievement] = cols.map(s => s?.trim().replace(/^"|"$/g, ''));
+        const [name, graduationYear, achievement] = cols;
         if (name && graduationYear) {
           const newDocRef = doc(colRef);
           batch.set(newDocRef, {
@@ -1371,16 +1391,20 @@ const handleCSVImportAlumni = async (e) => {
       }
     });
 
-    await batch.commit();
-    alert(`✅ 成功匯入 ${count} 筆傳奇校友紀錄！`);
+    if (count > 0) {
+        await batch.commit();
+        alert(`✅ 成功匯入 ${count} 筆傳奇校友紀錄！`);
+    } else {
+        alert("⚠️ 匯入 0 筆紀錄。請檢查您的 CSV 檔案內容是否為空，或格式是否完全符合範本要求 (包含標題行)。");
+    }
+
   } catch (err) {
     console.error("Alumni import failed:", err);
-    alert('傳奇校友匯入失敗，請嚴格檢查 CSV 格式是否符合模板。');
+    alert('傳奇校友匯入失敗，請檢查檔案格式或內容。');
   }
   setIsUpdating(false);
   if (e.target) e.target.value = null;
 };
-
 // --- END: Version 1.0 (榮譽殿堂) ---
 
   
