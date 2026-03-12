@@ -1,13 +1,14 @@
-// src/pages/SettingsPage.jsx (Version 1.4 - Corrected Final Fix)
+// src/pages/SettingsPage.jsx
 
 import React from 'react';
-import { ImageIcon, Trash2, Upload, Plus, History, Save, Trophy, Users, Download } from 'lucide-react';
+// 注意：這裡不再需要 import Download，因為它已經被封裝在 TemplateDownloader 裡面了
+import { ImageIcon, Trash2, Upload, Plus, History, Save, Trophy, Users } from 'lucide-react';
 import { collection, addDoc, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
-// 這是我們剛剛建立的獨立下載器
+// 引入我們剛剛建立的新元件
 import TemplateDownloader from '../components/TemplateDownloader';
 
-// 我們不再需要從 props 接收 downloadTemplate
+// 注意：props 中已移除 downloadTemplate
 export default function SettingsPage({
     systemConfig,
     setSystemConfig,
@@ -24,18 +25,26 @@ export default function SettingsPage({
     handleCSVImportAlumni
 }) {
     
-    // ... 內部函式保持不變
+    // 內部函式保持不變
     const handleAddSingleTournament = async () => { /* ... */ };
     const handleSaveSystemConfig = async () => { /* ... */ };
 
     return (
         <div className="max-w-4xl mx-auto space-y-10 animate-in zoom-in-95 duration-500 font-bold">
             
-            {/* ... 上方區塊不變 ... */}
-            <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">...</div>
-            <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">...</div>
+            {/* 系統偏好設定區塊 */}
+            <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                <h3 className="text-3xl font-black mb-10 text-center">系統偏好設定</h3>
+                {/* ... 此處內容不變 ... */}
+            </div>
 
-            {/* --- 榮譽殿堂資料管理區塊 (修正版) --- */}
+            {/* 校外賽事名稱管理 */}
+            <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                 <h3 className="text-2xl font-black mb-4">校外賽事名稱管理</h3>
+                 {/* ... 此處內容不變 ... */}
+            </div>
+
+            {/* 榮譽殿堂資料管理區塊 */}
             <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
                 <h3 className="text-2xl font-black mb-4">榮譽殿堂資料管理</h3>
                 <p className="text-slate-400 mb-8">請在此處，分別上傳你已準備好的 `trophies.csv` 和 `alumni.csv` 檔案。</p>
@@ -48,7 +57,7 @@ export default function SettingsPage({
                             <span className="font-black">匯入團隊獎項 (.csv)</span>
                             <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportTrophies}/>
                         </label>
-                        {/* 👇 **修正後**：傳遞 type prop 來指定要下載哪個範本 */}
+                        {/* 使用新的獨立元件，並告訴它要下載 'trophies' 範本 */}
                         <TemplateDownloader type="trophies" />
                     </div>
                 </div>
@@ -61,65 +70,21 @@ export default function SettingsPage({
                             <span className="font-black">匯入傳奇校友 (.csv)</span>
                             <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportAlumni}/>
                         </label>
-                        {/* 👇 **修正後**：傳遞 type prop 來指定要下載哪個範本 */}
+                        {/* 使用新的獨立元件，並告訴它要下載 'alumni' 範本 */}
                         <TemplateDownloader type="alumni" />
                     </div>
                 </div>
             </div>
 
-            {/* ... 下方區塊不變 ... */}
-            <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">...</div>
-            <div className="p-8 text-center ...">...</div>
+            {/* 進階設定 */}
+            <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+               {/* ... 此處內容不變 ... */}
+            </div>
+
+            {/* 版權宣告 */}
+            <div className="p-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.5em]">
+                Copyright © 2026 正覺壁球. All Rights Reserved.
+            </div>
         </div>
     );
 }
-
-
-// --- TemplateDownloader.jsx 也需要一個小更新 ---
-// 請用這份程式碼更新 `src/components/TemplateDownloader.jsx`
-// src/components/TemplateDownloader.jsx (Version 1.1)
-
-import React from 'react';
-import { Download } from 'lucide-react';
-
-// 接收一個 type prop
-export default function TemplateDownloader({ type }) {
-
-    const download = () => {
-        let csvContent = "\\uFEFF";
-        let fileName = '';
-
-        if (type === 'trophies') {
-            csvContent += 'year,tournamentName,award,roster\\n';
-            csvContent += '2023,全港學界精英壁球比賽,男子甲組團體 冠軍,"陳大文,李小明,張三"\\n';
-            fileName = 'trophies_template.csv';
-        } else if (type === 'alumni') {
-            csvContent += 'name,graduationYear,achievement\\n';
-            csvContent += '高偉諾,2020,"創隊隊長, 奠定球隊奮鬥精神"\\n';
-            fileName = 'alumni_template.csv';
-        } else {
-            return; // 如果沒有 type，就不執行
-        }
-
-        // ... (下載的邏輯不變)
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    };
-
-    return (
-        <button 
-            onClick={download}
-            className="w-full sm:w-auto px-6 py-4 bg-white text-slate-500 border rounded-[1.5rem] hover:bg-slate-100 transition-all flex items-center justify-center gap-2" 
-            title={`下載 ${type} 的 CSV 範本`}>
-            <Download size={20}/> <span className="font-bold">下載範本</span>
-        </button>
-    );
-}
-
