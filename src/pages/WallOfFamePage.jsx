@@ -1,158 +1,78 @@
-// src/pages/WallOfFamePage.jsx (Version 2.4 - Custom Model Fix)
+// src/pages/WallOfFamePage.jsx (Version 1.0)
 
-import React, { useState, Suspense } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, useGLTF, Html } from '@react-three/drei';
-import { X, Users, Award as AwardIcon, Star } from 'lucide-react';
+import React from 'react';
+import { Trophy, Users, Star, Award as AwardIcon } from 'lucide-react';
 
-// 獎盃 3D 模型組件
-function TrophyModel({ position, trophy, onClick }) {
-  const [hovered, setHovered] = useState(false);
-  // 載入你自己的模型
-  const { nodes, materials } = useGLTF('/my_trophy.glb');
-
-  return (
-    <group 
-        position={position} 
-        onClick={() => onClick(trophy, position)} 
-        onPointerOver={() => setHovered(true)} 
-        onPointerOut={() => setHovered(false)}
-        dispose={null}
-        scale={1.5} // 你可以微調這個數字，來改變獎盃的大小
-    >
-      {/* 基座 */}
-      <mesh position={[0, -1, 0]}>
-          <cylinderGeometry args={[1, 1, 0.2, 64]} />
-          <meshStandardMaterial color="#1e293b" metalness={0.8} roughness={0.2} />
-      </mesh>
-       <Html position={[0, -0.8, 0]}>
-          <div className="text-center w-40 pointer-events-none">
-              <p className="text-white font-black text-lg">{trophy.year}</p>
-              <p className="text-xs text-slate-400 leading-tight">{trophy.tournamentName}</p>
-          </div>
-       </Html>
-      
-      {/* --- 修正之處 --- */}
-      {/* 使用你模型中正確的零件名稱 'Object_4' */}
-      <mesh
-        castShadow
-        receiveShadow
-        geometry={nodes.Object_4.geometry}
-        material={materials['default']} // 大部分模型的預設材質名稱是 'default'
-        material-emissive={hovered ? '#fbbf24' : 'black'}
-      />
-    </group>
-  );
-}
-useGLTF.preload('/my_trophy.glb');
-
-
-// --- 以下所有程式碼保持不變 ---
-
-// 獎盃資訊卡
-const TrophyInfoCard = ({ trophy, onClose }) => {
-    if (!trophy) return null;
+const WallOfFamePage = ({ trophies, alumni }) => {
     return (
-        <Html>
-            <div className="bg-slate-800/80 backdrop-blur-md text-white p-6 rounded-2xl w-72 shadow-2xl animate-in fade-in zoom-in-95" >
-                <button onClick={onClose} className="absolute top-2 right-2 text-slate-400 hover:text-white transition-colors"><X size={18} /></button>
-                <p className="text-xs text-slate-300 font-bold">{trophy.year}</p>
-                <h3 className="text-lg font-black text-amber-300 mt-1">{trophy.tournamentName}</h3>
-                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-yellow-500/20 text-yellow-300 rounded-full">
-                    <AwardIcon size={14} />
-                    <span className="font-bold text-sm">{trophy.award}</span>
+        <div className="space-y-12 animate-in fade-in duration-500 font-bold">
+            
+            {/* Section 1: 團隊獎項 */}
+            <div>
+                <div className="mb-8 text-center">
+                    <Trophy className="mx-auto text-yellow-500 mb-2" size={48} />
+                    <h2 className="text-3xl font-black text-slate-800">團隊榮譽榜</h2>
+                    <p className="text-sm text-slate-400 mt-1">記錄每一個揮灑汗水換來的獎盃</p>
                 </div>
-                {trophy.roster && trophy.roster.length > 0 && (
-                    <div className="mt-4 pt-3 border-t border-slate-600">
-                        <h4 className="text-xs uppercase font-bold text-slate-400 mb-2 flex items-center gap-2"><Users size={14}/> 獲獎隊員</h4>
-                        <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
-                            {trophy.roster.map((player, index) => (
-                                <span key={index} className="px-2 py-0.5 bg-slate-700 text-slate-200 rounded text-xs font-bold">{player}</span>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
-        </Html>
-    );
-};
-
-// 傳奇校友彈出視窗
-const AlumniModal = ({ alumni, onClose }) => {
-    return (
-        <div className="absolute inset-0 z-20 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
-            <div className="bg-white rounded-[3rem] w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="p-8 border-b">
-                    <h2 className="text-3xl font-black text-slate-800 flex items-center gap-3"><Users className="text-indigo-500"/> 傳奇校友錄</h2>
-                    <p className="text-sm text-slate-500 mt-1">感謝這些為球隊奠定輝煌基礎的前輩們</p>
-                </div>
-                <div className="p-8 overflow-y-auto space-y-4">
-                    {alumni.map(person => (
-                        <div key={person.id} className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex items-center gap-6">
-                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-md">
-                                <Star className="text-indigo-400" size={32} />
-                            </div>
-                            <div>
-                                <p className="text-xl font-black text-slate-800">{person.name}</p>
-                                <p className="text-xs text-slate-400 font-bold mt-1">畢業年份: {person.graduationYear}</p>
-                                <p className="mt-2 text-sm text-slate-600 font-semibold">"{person.achievement}"</p>
+                
+                <div className="space-y-8">
+                    {trophies.length > 0 ? trophies.map(trophy => (
+                        <div key={trophy.id} className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm transition-all hover:shadow-lg hover:border-blue-200">
+                            <div className="flex flex-col md:flex-row gap-6 items-start">
+                                <div className="p-4 bg-slate-50 text-slate-400 rounded-2xl text-center">
+                                    <span className="block text-3xl font-black text-blue-600">{trophy.year}</span>
+                                    <span className="text-xs tracking-widest">年份</span>
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-xl font-black text-slate-800">{trophy.tournamentName}</h3>
+                                    <div className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-yellow-50 text-yellow-700 rounded-full border border-yellow-200">
+                                        <AwardIcon size={16} />
+                                        <span className="font-bold text-sm">{trophy.award}</span>
+                                    </div>
+                                    {trophy.roster && trophy.roster.length > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-slate-100">
+                                            <h4 className="text-xs uppercase font-bold text-slate-400 mb-2">獲獎隊員</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {trophy.roster.map((player, index) => (
+                                                    <span key={index} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{player}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    ))}
-                </div>
-                <div className="p-4 text-center border-t">
-                    <button onClick={onClose} className="px-6 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold hover:bg-slate-200">關閉</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-export default function WallOfFamePage({ trophies, alumni }) {
-    const [selectedTrophy, setSelectedTrophy] = useState(null); 
-    const [showAlumni, setShowAlumni] = useState(false);
-    const spacing = 5;
-    const itemsPerRow = 5;
-
-    return (
-        <div className="w-full h-[80vh] bg-gray-900 rounded-3xl overflow-hidden relative animate-in fade-in duration-500 border-4 border-slate-700">
-            <Canvas camera={{ position: [0, 6, 18], fov: 60 }} shadows>
-                <Suspense fallback={<Html center><span className="text-white font-bold animate-pulse">載入 3D 場景及模型中...</span></Html>}>
-                    <ambientLight intensity={0.7} />
-                    <spotLight position={[20, 30, 10]} angle={0.3} penumbra={1} intensity={2} castShadow />
-                    <directionalLight position={[-10, 10, -5]} intensity={1} color="#ffffff" />
-                    <pointLight position={[0, -10, 0]} intensity={1} color="#334155" />
-                    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-                        <planeGeometry args={[100, 100]} />
-                        <meshStandardMaterial color="#1e293b" roughness={0.3} metalness={0.1} />
-                    </mesh>
-                    <OrbitControls enablePan={false} minDistance={5} maxDistance={30} minPolarAngle={Math.PI / 4} maxPolarAngle={Math.PI / 2.2}/>
-
-                    {trophies.map((trophy, index) => {
-                        const row = Math.floor(index / itemsPerRow);
-                        const col = index % itemsPerRow;
-                        const x = (col - (itemsPerRow - 1) / 2) * spacing;
-                        const z = -row * spacing;
-                        return <TrophyModel key={trophy.id} position={[x, 1, z]} trophy={trophy} onClick={(data, pos) => setSelectedTrophy({ data, pos })} />
-                    })}
-                    
-                    {selectedTrophy && (
-                        <group position={selectedTrophy.pos}>
-                            <TrophyInfoCard trophy={selectedTrophy.data} onClose={() => setSelectedTrophy(null)} />
-                        </group>
+                    )) : (
+                        <p className="text-center text-slate-400 py-10">暫無團隊獎項紀錄，請教練在系統設定中匯入。</p>
                     )}
-                </Suspense>
-            </Canvas>
-
-             <div className="absolute top-6 left-6 text-white p-4 rounded-xl bg-black/30 backdrop-blur-sm pointer-events-none">
-                <h2 className="text-2xl font-black">榮譽殿堂</h2>
-                <p className="text-xs text-slate-300">使用滑鼠拖曳、滾動來瀏覽</p>
+                </div>
             </div>
-             <button onClick={() => setShowAlumni(true)} className="absolute bottom-6 right-6 text-white p-4 rounded-xl bg-black/30 backdrop-blur-sm max-w-xs text-left hover:bg-black/50 transition-colors">
-                <h3 className="text-lg font-bold flex items-center gap-2"><Users size={16}/> 傳奇校友</h3>
-                <p className="text-xs text-slate-300 mt-1">點擊查看歷屆傑出隊員</p>
-            </button>
-            {showAlumni && <AlumniModal alumni={alumni} onClose={() => setShowAlumni(false)} />}
+
+            {/* Section 2: 傳奇校友 */}
+            <div>
+                <div className="mb-8 text-center">
+                    <Users className="mx-auto text-indigo-500 mb-2" size={48} />
+                    <h2 className="text-3xl font-black text-slate-800">傳奇校友錄</h2>
+                    <p className="text-sm text-slate-400 mt-1">感謝這些為球隊奠定輝煌基礎的前輩</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {alumni.length > 0 ? alumni.map(person => (
+                        <div key={person.id} className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center flex flex-col items-center transition-all hover:shadow-lg hover:scale-105">
+                            <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center border-4 border-white shadow-md mb-4">
+                                <Star className="text-indigo-300" size={40} />
+                            </div>
+                            <p className="text-xl font-black text-slate-800">{person.name}</p>
+                            <p className="text-xs text-slate-400 font-bold mt-1">畢業年份: {person.graduationYear}</p>
+                            <p className="mt-4 text-sm text-slate-600 font-semibold h-20">"{person.achievement}"</p>
+                        </div>
+                    )) : (
+                         <p className="text-center text-slate-400 py-10 col-span-full">暫無傳奇校友紀錄，請教練在系統設定中匯入。</p>
+                    )}
+                </div>
+            </div>
         </div>
     );
-}
+};
+
+export default WallOfFamePage;
