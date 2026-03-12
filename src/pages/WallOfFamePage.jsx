@@ -1,6 +1,6 @@
-// src/pages/WallOfFamePage.jsx (Version 2.3 - Build Fix)
+// src/pages/WallOfFamePage.jsx (Version 2.4 - Custom Model Fix)
 
-import React, { useState, Suspense, useMemo } from 'react';
+import React, { useState, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, useGLTF, Html } from '@react-three/drei';
 import { X, Users, Award as AwardIcon, Star } from 'lucide-react';
@@ -8,8 +8,8 @@ import { X, Users, Award as AwardIcon, Star } from 'lucide-react';
 // 獎盃 3D 模型組件
 function TrophyModel({ position, trophy, onClick }) {
   const [hovered, setHovered] = useState(false);
+  // 載入你自己的模型
   const { nodes, materials } = useGLTF('/my_trophy.glb');
-  console.log("我的新模型結構 (nodes):", nodes);
 
   return (
     <group 
@@ -18,10 +18,11 @@ function TrophyModel({ position, trophy, onClick }) {
         onPointerOver={() => setHovered(true)} 
         onPointerOut={() => setHovered(false)}
         dispose={null}
-        scale={0.5}
+        scale={1.5} // 你可以微調這個數字，來改變獎盃的大小
     >
+      {/* 基座 */}
       <mesh position={[0, -1, 0]}>
-          <cylinderGeometry args={[1.5, 1.5, 0.2, 64]} />
+          <cylinderGeometry args={[1, 1, 0.2, 64]} />
           <meshStandardMaterial color="#1e293b" metalness={0.8} roughness={0.2} />
       </mesh>
        <Html position={[0, -0.8, 0]}>
@@ -30,17 +31,23 @@ function TrophyModel({ position, trophy, onClick }) {
               <p className="text-xs text-slate-400 leading-tight">{trophy.tournamentName}</p>
           </div>
        </Html>
+      
+      {/* --- 修正之處 --- */}
+      {/* 使用你模型中正確的零件名稱 'Object_4' */}
       <mesh
         castShadow
         receiveShadow
-        geometry={nodes.Trophy_1.geometry}
-        material={materials.Trophy}
+        geometry={nodes.Object_4.geometry}
+        material={materials['default']} // 大部分模型的預設材質名稱是 'default'
         material-emissive={hovered ? '#fbbf24' : 'black'}
       />
     </group>
   );
 }
-useGLTF.preload('my_trophy.glb');
+useGLTF.preload('/my_trophy.glb');
+
+
+// --- 以下所有程式碼保持不變 ---
 
 // 獎盃資訊卡
 const TrophyInfoCard = ({ trophy, onClose }) => {
@@ -70,7 +77,7 @@ const TrophyInfoCard = ({ trophy, onClose }) => {
     );
 };
 
-// (V2.3 修正) 直接定義完整的 AlumniModal 元件，不再有任何重新賦值
+// 傳奇校友彈出視窗
 const AlumniModal = ({ alumni, onClose }) => {
     return (
         <div className="absolute inset-0 z-20 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
