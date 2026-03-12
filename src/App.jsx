@@ -2785,6 +2785,7 @@ const myDashboardData = useMemo(() => {
                   appId={appId}
                   handleCSVImportTrophies={handleCSVImportTrophies}
                   handleCSVImportAlumni={handleCSVImportAlumni}
+                  downloadTemplate={downloadTemplate}
               />
           )}
           {showAddPlayerModal && (
