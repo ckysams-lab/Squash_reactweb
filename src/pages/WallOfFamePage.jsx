@@ -1,10 +1,7 @@
-// src/pages/WallOfFamePage.jsx (Version 2.0 - 2D Trophy Cabinet)
+// src/pages/WallOfFamePage.jsx (Version 2.1 - 2D Trophy Cabinet Fix)
 
 import React, { useState } from 'react';
-import { X, Users, Award as AwardIcon, Star } from 'lucide-react';
-
-// 獎盃圖片的 URL (我們使用一個免費、高品質的圖檔)
-const TROPHY_IMAGE_URL = 'https://cdn.jsdelivr.net/gh/tabler/tabler-icons@latest/static/trophy.svg';
+import { X, Users, Award as AwardIcon, Star, Trophy } from 'lucide-react'; // 👈 確保引入了 Trophy
 
 // 獎項資訊彈出視窗
 const TrophyInfoModal = ({ trophy, onClose }) => {
@@ -13,7 +10,10 @@ const TrophyInfoModal = ({ trophy, onClose }) => {
     return (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
             <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-8 text-center" onClick={e => e.stopPropagation()}>
-                <img src={TROPHY_IMAGE_URL} alt="Trophy" className="w-24 h-24 mx-auto mb-4 text-yellow-500" />
+                {/* 👇 改用 Lucide Icon，並加上金黃色 */}
+                <div className="flex justify-center mb-4">
+                     <Trophy size={80} className="text-yellow-500 drop-shadow-md" />
+                </div>
                 <p className="text-sm font-bold text-slate-500">{trophy.year}</p>
                 <h2 className="text-2xl font-black text-slate-800 mt-2">{trophy.tournamentName}</h2>
                 <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-full border border-yellow-200">
@@ -92,10 +92,11 @@ export default function WallOfFamePage({ trophies, alumni }) {
                             onClick={() => setSelectedTrophy(trophy)}
                         >
                             <div className="flex-1 flex items-center justify-center">
-                                <img 
-                                    src={TROPHY_IMAGE_URL} 
-                                    alt="Trophy" 
-                                    className="w-3/4 h-3/4 object-contain drop-shadow-[0_5px_15px_rgba(250,204,21,0.4)] group-hover:drop-shadow-[0_8px_25px_rgba(250,204,21,0.6)] transition-all"
+                                {/* 👇 改用 Lucide Icon */}
+                                <Trophy 
+                                    size={80} 
+                                    className="text-yellow-400 drop-shadow-[0_5px_15px_rgba(250,204,21,0.4)] group-hover:drop-shadow-[0_8px_25px_rgba(250,204,21,0.6)] group-hover:scale-110 transition-all duration-300"
+                                    strokeWidth={1.5}
                                 />
                             </div>
                             <div className="h-px w-full bg-yellow-700/50 my-2"></div>
@@ -124,4 +125,3 @@ export default function WallOfFamePage({ trophies, alumni }) {
         </div>
     );
 }
-
