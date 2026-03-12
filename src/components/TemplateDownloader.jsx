@@ -11,12 +11,12 @@ export default function TemplateDownloader({ type }) {
         let fileName = '';
 
         if (type === 'trophies') {
-            csvContent += 'year,tournamentName,award,roster\\n';
-            csvContent += '2023,全港學界精英壁球比賽,男子甲組團體 冠軍,"陳大文,李小明,張三"\\n';
+            csvContent += 'year,tournamentName,award,roster\n';
+            csvContent += '2023,全港學界精英壁球比賽,男子甲組團體 冠軍,"陳大文,李小明,張三"\n';
             fileName = 'trophies_template.csv';
         } else if (type === 'alumni') {
-            csvContent += 'name,graduationYear,achievement\\n';
-            csvContent += '高偉諾,2020,"創隊隊長, 奠定球隊奮鬥精神"\\n';
+            csvContent += 'name,graduationYear,achievement\n';
+            csvContent += '高偉諾,2020,"創隊隊長, 奠定球隊奮鬥精神"\n';
             fileName = 'alumni_template.csv';
         } else {
             console.error("TemplateDownloader: 未知的 type ->", type);
