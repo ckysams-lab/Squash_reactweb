@@ -18,6 +18,8 @@ export const useFirebaseData = () => {
     const [downloadFiles, setDownloadFiles] = useState([]);
     const [galleryItems, setGalleryItems] = useState([]);
     const [awards, setAwards] = useState([]);
+    const [trophies, setTrophies] = useState([]);
+    const [alumni, setAlumni] = useState([]);
     const [achievements, setAchievements] = useState([]);
     const [externalTournaments, setExternalTournaments] = useState([]);
     const [assessments, setAssessments] = useState([]);
