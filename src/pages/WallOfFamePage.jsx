@@ -39,7 +39,7 @@ function TrophyModel({ position, trophy, onClick }) {
     </group>
   );
 }
-useGLTF.preload('https://api.pmnd.rs/models/trophy.glb');
+useGLTF.preload('my_trophy.glb');
 
 // 獎盃資訊卡
 const TrophyInfoCard = ({ trophy, onClose }) => {
