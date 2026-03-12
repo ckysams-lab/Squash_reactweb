@@ -16,11 +16,9 @@ export default function SettingsPage({
     setIsUpdating,
     db,
     appId,
-
-    // 👇 接收從 App.jsx 傳來的新 props
     handleCSVImportTrophies,
-    handleCSVImportAlumni
-
+    handleCSVImportAlumni,
+    downloadTemplate
 }) {
     
     // ... (現有的 handleAddSingleTournament 和 handleSaveSystemConfig 函式保持不變)
@@ -170,29 +168,41 @@ export default function SettingsPage({
             <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
                 <h3 className="text-2xl font-black mb-4">榮譽殿堂資料管理</h3>
                 <p className="text-slate-400 mb-8">請在此處，分別上傳你已準備好的 `trophies.csv` 和 `alumni.csv` 檔案，為「榮譽殿堂」注入靈魂。</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* 匯入團隊獎項 */}
-                    <label className="bg-amber-500 text-white p-8 rounded-[2rem] cursor-pointer hover:bg-amber-600 shadow-2xl shadow-amber-100 flex flex-col items-center justify-center gap-3 transition-all active:scale-[0.98]">
-                        <div className="flex items-center gap-3">
-                            <Trophy size={24}/>
-                            <span className="text-lg font-black">匯入團隊獎項</span>
-                        </div>
-                        <p className="text-xs font-bold text-white/80">(trophies.csv)</p>
-                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportTrophies}/>
-                    </label>
+                
+                {/* 團隊獎項區 */}
+                <div className="bg-slate-50/70 p-6 rounded-3xl border mb-6">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <label className="flex-1 w-full bg-amber-500 text-white p-6 rounded-[1.5rem] cursor-pointer hover:bg-amber-600 shadow-lg shadow-amber-100 flex items-center justify-center gap-3 transition-all active:scale-[0.98]">
+                            <Upload size={20}/>
+                            <span className="font-black">匯入團隊獎項 (.csv)</span>
+                            <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportTrophies}/>
+                        </label>
+                        <button 
+                            onClick={() => downloadTemplate('trophies')}
+                            className="w-full sm:w-auto px-6 py-4 bg-white text-slate-500 border rounded-[1.5rem] hover:bg-slate-100 transition-all flex items-center justify-center gap-2" 
+                            title="下載團隊獎項的 CSV 範本">
+                            <Download size={20}/> <span className="font-bold">下載範本</span>
+                        </button>
+                    </div>
+                </div>
 
-                    {/* 匯入傳奇校友 */}
-                    <label className="bg-indigo-500 text-white p-8 rounded-[2rem] cursor-pointer hover:bg-indigo-600 shadow-2xl shadow-indigo-100 flex flex-col items-center justify-center gap-3 transition-all active:scale-[0.98]">
-                        <div className="flex items-center gap-3">
-                            <Users size={24}/>
-                            <span className="text-lg font-black">匯入傳奇校友</span>
-                        </div>
-                        <p className="text-xs font-bold text-white/80">(alumni.csv)</p>
-                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportAlumni}/>
-                    </label>
+                {/* 傳奇校友區 */}
+                <div className="bg-slate-50/70 p-6 rounded-3xl border">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <label className="flex-1 w-full bg-indigo-500 text-white p-6 rounded-[1.5rem] cursor-pointer hover:bg-indigo-600 shadow-lg shadow-indigo-100 flex items-center justify-center gap-3 transition-all active:scale-[0.98]">
+                            <Upload size={20}/>
+                            <span className="font-black">匯入傳奇校友 (.csv)</span>
+                            <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportAlumni}/>
+                        </label>
+                        <button 
+                            onClick={() => downloadTemplate('alumni')}
+                            className="w-full sm:w-auto px-6 py-4 bg-white text-slate-500 border rounded-[1.5rem] hover:bg-slate-100 transition-all flex items-center justify-center gap-2" 
+                            title="下載傳奇校友的 CSV 範本">
+                            <Download size={20}/> <span className="font-bold">下載範本</span>
+                        </button>
+                    </div>
                 </div>
             </div>
-            {/* --- END: Version 1.0 (榮譽殿堂) --- */}
 
             {/* 進階設定 (保持不變) */}
             <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
