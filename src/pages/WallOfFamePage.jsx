@@ -9,6 +9,7 @@ import { X, Users, Award as AwardIcon, Star } from 'lucide-react';
 function TrophyModel({ position, trophy, onClick }) {
   const [hovered, setHovered] = useState(false);
   const { nodes, materials } = useGLTF('/my_trophy.glb');
+  console.log("我的新模型結構 (nodes):", nodes);
 
   return (
     <group 
