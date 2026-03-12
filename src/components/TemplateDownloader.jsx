@@ -7,7 +7,7 @@ import { Download } from 'lucide-react';
 export default function TemplateDownloader({ type }) {
 
     const download = () => {
-        let csvContent = "\\uFEFF"; // 用於 Excel 的 BOM (Byte Order Mark)
+        let csvContent = "\uFEFF"; // 用於 Excel 的 BOM (Byte Order Mark)
         let fileName = '';
 
         if (type === 'trophies') {
