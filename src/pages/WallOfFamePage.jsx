@@ -1,23 +1,63 @@
-// src/pages/WallOfFamePage.jsx (Version 2.1 - 2D Trophy Cabinet Fix)
+// src/pages/WallOfFamePage.jsx (Version 2.2 - Colorful Trophies)
 
 import React, { useState } from 'react';
-import { X, Users, Award as AwardIcon, Star, Trophy } from 'lucide-react'; // 👈 確保引入了 Trophy
+import { X, Users, Award as AwardIcon, Star, Trophy, Medal } from 'lucide-react';
+
+// --- 新增：自動判別獎項顏色與圖示的小工具 ---
+const getTrophyStyle = (awardText) => {
+    const text = awardText.toLowerCase();
+    
+    if (text.includes('冠軍') || text.includes('第一') || text.includes('金')) {
+        return {
+            colorClass: 'text-yellow-400',
+            bgClass: 'bg-yellow-500/20',
+            glowClass: 'drop-shadow-[0_5px_15px_rgba(250,204,21,0.5)] group-hover:drop-shadow-[0_8px_25px_rgba(250,204,21,0.8)]',
+            Icon: Trophy
+        };
+    }
+    if (text.includes('亞軍') || text.includes('第二') || text.includes('銀')) {
+        return {
+            colorClass: 'text-slate-300', // 銀色
+            bgClass: 'bg-slate-400/20',
+            glowClass: 'drop-shadow-[0_5px_15px_rgba(203,213,225,0.4)] group-hover:drop-shadow-[0_8px_25px_rgba(203,213,225,0.6)]',
+            Icon: Trophy
+        };
+    }
+    if (text.includes('季軍') || text.includes('第三') || text.includes('銅')) {
+        return {
+            colorClass: 'text-orange-400', // 銅色
+            bgClass: 'bg-orange-500/20',
+            glowClass: 'drop-shadow-[0_5px_15px_rgba(251,146,60,0.4)] group-hover:drop-shadow-[0_8px_25px_rgba(251,146,60,0.6)]',
+            Icon: Trophy
+        };
+    }
+    // 優異獎、殿軍等，使用 Medal 圖示和藍色
+    return {
+        colorClass: 'text-blue-400',
+        bgClass: 'bg-blue-500/20',
+        glowClass: 'drop-shadow-[0_5px_15px_rgba(96,165,250,0.4)] group-hover:drop-shadow-[0_8px_25px_rgba(96,165,250,0.6)]',
+        Icon: Medal
+    };
+};
 
 // 獎項資訊彈出視窗
 const TrophyInfoModal = ({ trophy, onClose }) => {
     if (!trophy) return null;
 
+    // 取得該獎盃的專屬樣式
+    const style = getTrophyStyle(trophy.award);
+    const { Icon } = style;
+
     return (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
             <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-8 text-center" onClick={e => e.stopPropagation()}>
-                {/* 👇 改用 Lucide Icon，並加上金黃色 */}
                 <div className="flex justify-center mb-4">
-                     <Trophy size={80} className="text-yellow-500 drop-shadow-md" />
+                     <Icon size={80} className={`${style.colorClass} drop-shadow-md`} />
                 </div>
                 <p className="text-sm font-bold text-slate-500">{trophy.year}</p>
                 <h2 className="text-2xl font-black text-slate-800 mt-2">{trophy.tournamentName}</h2>
-                <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-full border border-yellow-200">
-                    <AwardIcon size={16} />
+                <div className={`mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-full border ${style.bgClass} ${style.colorClass.replace('text-', 'border-').replace('400', '200')} text-slate-700`}>
+                    <AwardIcon size={16} className={style.colorClass} />
                     <span className="font-bold">{trophy.award}</span>
                 </div>
 
@@ -85,26 +125,31 @@ export default function WallOfFamePage({ trophies, alumni }) {
             >
                 <h2 className="text-3xl font-black text-yellow-100 text-center mb-8">團隊榮譽榜</h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    {trophies.map(trophy => (
-                        <div 
-                            key={trophy.id} 
-                            className="aspect-square bg-black/20 rounded-2xl p-4 flex flex-col justify-between items-center cursor-pointer transition-all duration-300 hover:bg-black/40 hover:scale-105 group"
-                            onClick={() => setSelectedTrophy(trophy)}
-                        >
-                            <div className="flex-1 flex items-center justify-center">
-                                {/* 👇 改用 Lucide Icon */}
-                                <Trophy 
-                                    size={80} 
-                                    className="text-yellow-400 drop-shadow-[0_5px_15px_rgba(250,204,21,0.4)] group-hover:drop-shadow-[0_8px_25px_rgba(250,204,21,0.6)] group-hover:scale-110 transition-all duration-300"
-                                    strokeWidth={1.5}
-                                />
+                    {trophies.map(trophy => {
+                        // 動態取得這個獎盃的樣式
+                        const style = getTrophyStyle(trophy.award);
+                        const { Icon } = style;
+
+                        return (
+                            <div 
+                                key={trophy.id} 
+                                className="aspect-square bg-black/20 rounded-2xl p-4 flex flex-col justify-between items-center cursor-pointer transition-all duration-300 hover:bg-black/40 hover:scale-105 group"
+                                onClick={() => setSelectedTrophy(trophy)}
+                            >
+                                <div className="flex-1 flex items-center justify-center">
+                                    <Icon 
+                                        size={80} 
+                                        className={`${style.colorClass} ${style.glowClass} group-hover:scale-110 transition-all duration-300`}
+                                        strokeWidth={1.5}
+                                    />
+                                </div>
+                                <div className="h-px w-full bg-yellow-700/50 my-2"></div>
+                                <div className="bg-yellow-400 text-yellow-900 px-3 py-1 rounded-md text-center w-full">
+                                    <p className="font-black text-sm truncate" title={trophy.award}>{trophy.year}</p>
+                                </div>
                             </div>
-                            <div className="h-px w-full bg-yellow-700/50 my-2"></div>
-                            <div className="bg-yellow-400 text-yellow-900 px-3 py-1 rounded-md text-center">
-                                <p className="font-black text-sm">{trophy.year}</p>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
