@@ -1,81 +1,145 @@
-// src/pages/MonthlyStarsPage.jsx
-import React, { useState, useEffect } from 'react';
-import { Star, User } from 'lucide-react';
+// src/pages/MonthlyStarsPage.jsx (Version 3.4 - UI Standardized)
+
+import React from 'react';
+import { Star, Target, Quote, Image as ImageIcon, User, Trophy } from 'lucide-react';
+
+// 👇 引入共用 UI 元件
+import { PageHeader, Card } from '../components/ui.jsx';
 
 export default function MonthlyStarsPage({ monthlyStarsData }) {
-    const [displayMonth, setDisplayMonth] = useState('');
-
-    useEffect(() => {
-        if (monthlyStarsData && monthlyStarsData.length > 0) {
-            setDisplayMonth(monthlyStarsData[0].id);
-        }
-    }, [monthlyStarsData]);
-
-    const currentData = monthlyStarsData?.find(ms => ms.id === displayMonth);
-
+    
+    // 如果沒有任何資料的預設畫面
     if (!monthlyStarsData || monthlyStarsData.length === 0) {
         return (
-            <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center">
-               <div className="w-20 h-20 bg-yellow-50 rounded-full flex items-center justify-center text-yellow-300 mb-6"><Star size={40}/></div>
-               <p className="text-xl font-black text-slate-400">「每月之星」即將登場</p>
-               <p className="text-sm text-slate-300 mt-2">請教練在後台設定本月的得獎者。</p>
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 font-bold">
+                <PageHeader 
+                    title="每月之星" 
+                    subtitle="表揚每月表現優異、態度積極的隊員" 
+                    icon={Star} 
+                />
+                <Card className="flex flex-col items-center justify-center p-20 text-center border-dashed border-2 bg-slate-50/50">
+                    <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center text-slate-300 shadow-sm mb-6">
+                        <Star size={48} />
+                    </div>
+                    <p className="text-xl font-black text-slate-500">目前尚無每月之星紀錄</p>
+                    <p className="text-sm text-slate-400 mt-2">請教練至「每月之星管理」頁面發佈</p>
+                </Card>
             </div>
-        )
+        );
     }
 
-    return (
-        <div className="animate-in fade-in duration-500 font-bold">
-            <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
-                <h3 className="text-4xl font-black text-slate-800">每月之星 <span className="text-yellow-500">Player of the Month</span></h3>
-                <select 
-                    value={displayMonth} 
-                    onChange={e => setDisplayMonth(e.target.value)}
-                    className="bg-white border-2 border-slate-100 focus:border-blue-600 transition-all rounded-2xl p-4 outline-none text-lg font-bold shadow-sm"
-                >
-                    {monthlyStarsData.map(ms => <option key={ms.id} value={ms.id}>{ms.id.replace('-', ' 年 ')} 月</option>)}
-                </select>
-            </div>
+    // 負責渲染單一得獎者資料的內部小元件
+    const WinnerProfile = ({ winner, gender }) => {
+        if (!winner || !winner.studentId) return null;
+        
+        const isMale = gender === 'male';
+        // 根據性別設定不同的顏色主題
+        const themeColor = isMale ? 'blue' : 'pink';
+        const ThemeIcon = isMale ? Trophy : Star;
 
-            {currentData && (
-                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                    {/* 男生卡片 */}
-                    <div className="bg-gradient-to-br from-blue-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
-                        <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
-                           {currentData.maleWinner?.fullBodyPhotoUrl ? <img src={currentData.maleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top" alt="Male Winner"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
+        return (
+            <div className={`flex flex-col bg-white rounded-3xl border-2 border-${themeColor}-100 shadow-sm overflow-hidden transition-all hover:shadow-xl hover:border-${themeColor}-300 relative group`}>
+                
+                {/* 裝飾性背景 */}
+                <div className={`absolute -top-24 -right-24 w-48 h-48 bg-${themeColor}-50 rounded-full opacity-50 blur-3xl pointer-events-none group-hover:scale-150 transition-transform duration-700`}></div>
+
+                {/* 照片區塊 */}
+                <div className="w-full h-80 bg-slate-100 relative flex items-center justify-center border-b border-slate-100 overflow-hidden">
+                    {winner.fullBodyPhotoUrl ? (
+                        <img 
+                            src={winner.fullBodyPhotoUrl} 
+                            alt={winner.studentName} 
+                            className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700" 
+                        />
+                    ) : (
+                        <div className="flex flex-col items-center text-slate-300">
+                            <ImageIcon size={64} className="mb-2 opacity-50" />
+                            <span className="text-sm font-bold">尚未上傳照片</span>
                         </div>
-                        <h4 className="text-3xl font-black text-blue-800">{currentData.maleWinner?.studentName}</h4>
-                        <p className="text-sm font-bold text-slate-400 mb-6">{currentData.maleWinner?.studentClass}</p>
-                        <div className="space-y-6">
-                            <div>
-                                <h5 className="font-black text-slate-500 mb-2">獲選原因</h5>
-                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed">{currentData.maleWinner?.reason}</p>
-                            </div>
-                             <div>
-                                <h5 className="font-black text-slate-500 mb-2">本年度目標</h5>
-                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed font-semibold italic">"{currentData.maleWinner?.goals}"</p>
-                            </div>
+                    )}
+                    {/* 性別與獎項標籤 */}
+                    <div className={`absolute top-4 left-4 bg-${themeColor}-500 text-white px-4 py-1.5 rounded-full text-xs font-black shadow-lg flex items-center gap-2 tracking-widest`}>
+                        <ThemeIcon size={14} /> 
+                        {isMale ? '最佳男隊員' : '最佳女隊員'}
+                    </div>
+                </div>
+
+                {/* 資料區塊 */}
+                <div className="p-8 flex-1 flex flex-col relative z-10">
+                    <div className="mb-6 border-b border-slate-100 pb-4">
+                        <h3 className={`text-3xl font-black text-${themeColor}-600 mb-1`}>{winner.studentName}</h3>
+                        <p className="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                             <User size={14} /> Class {winner.studentClass}
+                        </p>
+                    </div>
+
+                    <div className="space-y-6 flex-1">
+                        {/* 獲選原因 */}
+                        <div>
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                <Quote size={14} className={`text-${themeColor}-400`} /> 教練評語 (獲選原因)
+                            </h4>
+                            <p className="text-slate-700 font-medium leading-relaxed bg-slate-50 p-4 rounded-2xl text-sm border border-slate-100">
+                                {winner.reason || "教練尚未填寫評語。"}
+                            </p>
+                        </div>
+
+                        {/* 本年度目標 */}
+                        <div>
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                <Target size={14} className="text-amber-500" /> 球員期許 (年度目標)
+                            </h4>
+                            <p className="text-slate-700 font-medium leading-relaxed bg-amber-50/50 p-4 rounded-2xl text-sm border border-amber-100">
+                                {winner.goals || "尚未設定目標。"}
+                            </p>
                         </div>
                     </div>
-                    {/* 女生卡片 */}
-                    <div className="bg-gradient-to-br from-pink-50 to-white p-10 rounded-[4rem] border-2 border-white shadow-xl">
-                        <div className="w-full aspect-[3/4] bg-slate-200 rounded-3xl overflow-hidden mb-8 shadow-lg">
-                            {currentData.femaleWinner?.fullBodyPhotoUrl ? <img src={currentData.femaleWinner.fullBodyPhotoUrl} className="w-full h-full object-cover object-top" alt="Female Winner"/> : <div className="flex items-center justify-center h-full text-slate-400"><User size={64}/></div>}
-                        </div>
-                        <h4 className="text-3xl font-black text-pink-800">{currentData.femaleWinner?.studentName}</h4>
-                        <p className="text-sm font-bold text-slate-400 mb-6">{currentData.femaleWinner?.studentClass}</p>
-                        <div className="space-y-6">
-                            <div>
-                                <h5 className="font-black text-slate-500 mb-2">獲選原因</h5>
-                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed">{currentData.femaleWinner?.reason}</p>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700 font-bold">
+            
+            <PageHeader 
+                title="每月之星" 
+                subtitle="表揚每月表現優異、態度積極的隊員" 
+                icon={Star} 
+            />
+
+            {/* 列表渲染：依據月份降冪排列 (最新的在最上面) */}
+            {monthlyStarsData
+                .sort((a, b) => b.month.localeCompare(a.month))
+                .map((data) => {
+                    // 解析 YYYY-MM 格式
+                    const [year, monthNum] = data.month.split('-');
+                    const monthNames = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
+                    const displayMonth = `${year} 年 ${monthNames[parseInt(monthNum, 10) - 1]}`;
+
+                    return (
+                        <div key={data.id} className="relative">
+                            
+                            {/* 月份裝飾標籤 */}
+                            <div className="sticky top-20 z-20 flex justify-center -mb-6 pointer-events-none">
+                                <div className="bg-slate-800 text-white px-8 py-3 rounded-full text-lg font-black shadow-xl border-4 border-white flex items-center gap-3">
+                                    <Star className="text-yellow-400" fill="currentColor" size={20} />
+                                    {displayMonth}
+                                </div>
                             </div>
-                             <div>
-                                <h5 className="font-black text-slate-500 mb-2">本年度目標</h5>
-                                <p className="text-slate-700 bg-white/50 p-4 rounded-xl text-sm leading-relaxed font-semibold italic">"{currentData.femaleWinner?.goals}"</p>
-                            </div>
+
+                            {/* 卡片本體 */}
+                            <Card className="pt-16 pb-8 px-6 md:px-12 bg-gradient-to-b from-slate-50 to-white">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
+                                    <WinnerProfile winner={data.maleWinner} gender="male" />
+                                    <WinnerProfile winner={data.femaleWinner} gender="female" />
+                                </div>
+                            </Card>
+                            
                         </div>
-                    </div>
-                 </div>
-            )}
+                    );
+                })
+            }
         </div>
     );
 }
