@@ -2203,8 +2203,8 @@ const myDashboardData = useMemo(() => {
                  activeTab === 'settings' ? "⚙️ 系統核心設定" :
                  activeTab === 'monthlyStarsAdmin' ? "🌟 每月之星管理" :
                  activeTab === 'monthlyStars' ? "🌟 每月之星" :
-                 activeTab === 'externalMatches' ? "📝 校外賽記錄管理" : ""}
-                 activeTab === 'videoAnalysis' ? "🤖 AI 影片分析引擎" :
+                 activeTab === 'externalMatches' ? "📝 校外賽記錄管理" : 
+                 activeTab === 'videoAnalysis' ? "🤖 AI 影片分析引擎" :""}
 
               </h1>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
