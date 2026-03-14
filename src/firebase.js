@@ -10,7 +10,7 @@ import {
 import { getFirestore, enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED } from 'firebase/firestore';
 
 // 1. 取得並解析設定
-let firebaseConfig;
+export let firebaseConfig;
 try {
   const envConfig = import.meta.env?.VITE_FIREBASE_CONFIG;
   if (envConfig) {
