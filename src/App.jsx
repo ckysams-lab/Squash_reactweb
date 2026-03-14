@@ -538,6 +538,7 @@ const handleSaveFeaturedBadges = async () => {
     const todayZero = new Date(now.setHours(0,0,0,0));
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
+    const currentAcademicYear = getAcademicYear(now); 
     const safeSchedules = Array.isArray(schedules) ? schedules : [];
     const safeCompetitions = Array.isArray(competitions) ? competitions : [];
     const safeAwards = Array.isArray(awards) ? awards : [];
@@ -562,9 +563,13 @@ const handleSaveFeaturedBadges = async () => {
     const awardsThisYear = safeAwards.filter(a => {
       if (!a.date) return false;
       const d = new Date(a.date);
-      const isThisYear = !isNaN(d) && d.getFullYear() === currentYear;
-      return isThisYear;
+      if (isNaN(d)) return false;
+      
+      const awardAcademicYear = getAcademicYear(d);
+      
+      return awardAcademicYear === currentAcademicYear;
     }).length;
+    
     return {
       thisMonthTrainings,
       daysToNextMatch,
