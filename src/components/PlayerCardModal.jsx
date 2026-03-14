@@ -1,8 +1,10 @@
-// src/components/PlayerCardModal.jsx (Version 3.1 - html2canvas color fix)
+// src/components/PlayerCardModal.jsx (Version 3.2 - Final Fix with html-to-image)
 
 import React, { useRef, useState, useMemo } from 'react';
-import { ChevronRight, Download, Loader2, Trophy as TrophyIcon, Crown } from 'lucide-react';
-import html2canvas from 'html2canvas';
+import { ChevronRight, Download, Loader2, Trophy as TrophyIcon } from 'lucide-react';
+
+// 👇 引入新的神兵利器，取代舊的 html2canvas
+import { toPng } from 'html-to-image';
 
 // --- 輔助函數 ---
 const getAcademicYear = (dateString) => {
@@ -14,27 +16,6 @@ const getAcademicYear = (dateString) => {
     } else { 
         return `${year - 1}-${year.toString().slice(-2)}`;
     }
-};
-
-const toDataURL = (url) => {
-    return new Promise((resolve) => {
-        if (!url || url.startsWith('data:image')) { resolve(url); return; }
-        const img = new Image();
-        img.crossOrigin = 'Anonymous';
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            try {
-              const dataURL = canvas.toDataURL('image/png');
-              resolve(dataURL);
-            } catch (e) { console.error("Canvas toDataURL failed:", e); resolve(null); }
-        };
-        img.onerror = () => { console.error("Image toDataURL failed to load:", url); resolve(null); };
-        img.src = url;
-    });
 };
 
 const PlayerCardModal = ({ 
@@ -103,24 +84,28 @@ const PlayerCardModal = ({
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
     const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
 
+    // 👇 使用新的下載邏輯 👇
     const handleDownload = async (e) => {
       e.stopPropagation();
       if (!cardRef.current || isDownloading) return;
       setIsDownloading(true);
 
       try {
-        await Promise.all([toDataURL(student.photo_url), toDataURL(logoUrl)]);
-        const canvas = await html2canvas(cardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-        const image = canvas.toDataURL('image/png', 1.0);
+        // html-to-image 內建處理跨域圖片，並完美支援現代 CSS
+        const dataUrl = await toPng(cardRef.current, {
+            cacheBust: true, // 避免快取問題
+            pixelRatio: 2,   // 兩倍畫質，讓文字更清晰
+            backgroundColor: '#ffffff'
+        });
+        
         const link = document.createElement('a');
-        link.href = image;
         link.download = `PlayerCard_${student.name}_${student.class}.png`;
-        document.body.appendChild(link);
+        link.href = dataUrl;
         link.click();
-        document.body.removeChild(link);
+
       } catch (err) {
         console.error("下載卡片失敗:", err);
-        alert("下載卡片圖片失敗，請檢查網絡或圖片連結。");
+        alert("下載卡片失敗，請重試。");
       } finally {
         setIsDownloading(false);
       }
@@ -130,11 +115,10 @@ const PlayerCardModal = ({
       <div className="fixed inset-0 z-[300] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={onClose}>
         <div className="relative max-w-md w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
           
-          {/* 👇 強制加上 style={{ backgroundColor: '#ffffff' }} 來覆蓋 Tailwind 可能產生的 lab() 顏色 👇 */}
-          <div ref={cardRef} className="w-full rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-100 relative" style={{ backgroundColor: '#ffffff' }}>
+          {/* 我們可以放心地用回 Tailwind 類別了，新套件看得懂 */}
+          <div ref={cardRef} className="w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-100 relative">
             
-            {/* Header */}
-            <div className="border-b p-6 flex justify-between items-center relative" style={{ backgroundColor: '#f8fafc' }}>
+            <div className="bg-slate-50 border-b border-slate-200 p-6 flex justify-between items-center relative">
               <img src={logoUrl} alt="Logo" className="object-contain w-12 h-12" crossOrigin="anonymous"/>
               <div className="text-center flex-1 z-10">
                 <h3 className="font-black text-slate-800 tracking-widest text-sm">BCKLAS SQUASH TEAM</h3>
@@ -142,54 +126,53 @@ const PlayerCardModal = ({
               <TrophyIcon size={32} className="text-slate-200 absolute right-4 opacity-50" />
             </div>
 
-            {/* Profile Info */}
             <div className="p-8 pb-4 flex flex-col items-center relative">
-              <div className="w-32 h-32 rounded-full border-4 border-white shadow-lg overflow-hidden flex items-center justify-center mb-4 relative z-10" style={{ backgroundColor: '#f1f5f9' }}>
+              <div className="w-32 h-32 rounded-full bg-slate-100 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center mb-4 relative z-10">
                  {student.photo_url ? (
                    <img src={student.photo_url} alt={student.name} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                  ) : (
                    <span className="text-5xl font-black text-slate-300">{student.name[0]}</span>
                  )}
               </div>
-              <button onClick={handlePrev} disabled={currentIndex <= 0} className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30 transition-all z-20"><ChevronRight className="rotate-180" size={24}/></button>
-              <button onClick={handleNext} disabled={currentIndex >= rankedStudents.length - 1} className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30 transition-all z-20"><ChevronRight size={24}/></button>
+              
+              <button onClick={handlePrev} disabled={currentIndex <= 0} data-html2canvas-ignore="true" className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30 transition-all z-20"><ChevronRight className="rotate-180" size={24}/></button>
+              <button onClick={handleNext} disabled={currentIndex >= rankedStudents.length - 1} data-html2canvas-ignore="true" className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white rounded-full shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30 transition-all z-20"><ChevronRight size={24}/></button>
+              
               <h2 className="text-2xl font-black text-slate-800">{student.name} {student.eng_name ? `(${student.eng_name})` : ''}</h2>
               <p className="text-sm font-bold text-slate-400 uppercase mt-1">CLASS: {student.class} ({student.classNo})</p>
             </div>
 
-            {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-2 px-6 py-4">
-               <div className="border border-blue-100 rounded-xl p-3 text-center" style={{ backgroundColor: '#eff6ff' }}>
+               <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
                  <p className="text-xl font-black text-blue-600">{student.totalPoints}</p>
                  <p className="text-[9px] font-black text-blue-400 uppercase tracking-wider mt-1">Points</p>
                </div>
-               <div className={`border rounded-xl p-3 text-center ${BADGE_DATA[student.badge]?.border || 'border-slate-200'}`} style={{ backgroundColor: '#f8fafc' }}>
+               <div className={`border rounded-xl p-3 text-center ${BADGE_DATA[student.badge]?.bg || 'bg-slate-50'} ${BADGE_DATA[student.badge]?.border || 'border-slate-200'}`}>
                  <p className="text-xl">{BADGE_DATA[student.badge]?.icon || '⚪'}</p>
                  <p className={`text-[9px] font-black uppercase tracking-wider mt-1 ${BADGE_DATA[student.badge]?.color || 'text-slate-400'}`}>{student.badge || '無'}</p>
                </div>
-               <div className="border border-slate-200 rounded-xl p-3 text-center" style={{ backgroundColor: '#f8fafc' }}>
+               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
                  <p className="text-xl font-black text-slate-700">#{rank}</p>
                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1">Rank (Team)</p>
                </div>
             </div>
 
-            {/* Matches & External */}
             <div className="px-6 py-4 space-y-4">
                <div>
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 border-b pb-2">內部聯賽表現 (Internal League)</h4>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-100 pb-2">內部聯賽表現</h4>
                   <ul className="space-y-1.5 text-sm font-bold text-slate-600">
-                    <li className="flex justify-between"><span>勝率 (Win Rate):</span> <span className="text-slate-800">{internalStats.winRate}% ({internalStats.wins}勝 {internalStats.losses}負)</span></li>
-                    <li className="flex justify-between"><span>巨人殺手 (Giant Kills):</span> <span className="text-slate-800">{internalStats.giantKills} 次</span></li>
+                    <li className="flex justify-between"><span>勝率:</span> <span className="text-slate-800">{internalStats.winRate}% ({internalStats.wins}勝 {internalStats.losses}負)</span></li>
+                    <li className="flex justify-between"><span>巨人殺手:</span> <span className="text-slate-800">{internalStats.giantKills} 次</span></li>
                   </ul>
                </div>
                <div>
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 border-b pb-2">代表學校出賽 (School Team)</h4>
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-100 pb-2">代表學校出賽</h4>
                   {externalStatsByYear.length > 0 ? (
                     <ul className="space-y-1.5 text-sm font-bold text-slate-600">
                       {externalStatsByYear.map(([year, stats]) => (
                         <li key={year} className="flex justify-between">
                           <span>{year} 學年:</span> 
-                          <span className="text-slate-800">{stats.played}場 {stats.wins}勝 {stats.losses}負 ({Math.round(stats.wins/stats.played * 100)}%)</span>
+                          <span className="text-slate-800">{stats.played}場 {stats.wins}勝 {stats.losses}負</span>
                         </li>
                       ))}
                     </ul>
@@ -199,15 +182,14 @@ const PlayerCardModal = ({
                </div>
             </div>
 
-            {/* Achievements */}
             <div className="px-8 pb-8 pt-2">
-               <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b pb-2">Achievements</h4>
+               <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">榮譽成就</h4>
                <div className="flex flex-wrap gap-2">
                  {uniqueAchievements.length > 0 ? uniqueAchievements.map(badgeId => {
                      const badge = ACHIEVEMENT_DATA[badgeId];
                      if (!badge) return null;
                      return (
-                         <div key={badgeId} className="w-10 h-10 rounded-xl flex items-center justify-center text-blue-500 shadow-sm border" title={badge.name} style={{ backgroundColor: '#f8fafc' }}>
+                         <div key={badgeId} className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500 shadow-sm border border-slate-200">
                              {badge.icon}
                          </div>
                      );
@@ -215,8 +197,7 @@ const PlayerCardModal = ({
                </div>
             </div>
 
-            {/* Footer */}
-            <div className="text-slate-400 text-center py-2 text-[8px] font-black tracking-widest uppercase" style={{ backgroundColor: '#1e293b' }}>
+            <div className="bg-slate-800 text-slate-400 text-center py-2 text-[8px] font-black tracking-widest uppercase">
               Generated by BCKLAS Squash System
             </div>
           </div>
