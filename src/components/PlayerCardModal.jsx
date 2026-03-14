@@ -1,8 +1,10 @@
+// src/components/PlayerCardModal.jsx (Version 3.1 - html2canvas color fix)
+
 import React, { useRef, useState, useMemo } from 'react';
 import { ChevronRight, Download, Loader2, Trophy as TrophyIcon, Crown } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
-// --- 輔助函數 (直接放進來讓組件獨立運作) ---
+// --- 輔助函數 ---
 const getAcademicYear = (dateString) => {
     const date = new Date(dateString);
     const year = date.getFullYear();
@@ -58,6 +60,7 @@ const PlayerCardModal = ({
       e.stopPropagation();
       if (currentIndex > 0) setShowPlayerCard(rankedStudents[currentIndex - 1]);
     };
+
     const handleNext = (e) => {
       e.stopPropagation();
       if (currentIndex < rankedStudents.length - 1) setShowPlayerCard(rankedStudents[currentIndex + 1]);
@@ -70,6 +73,7 @@ const PlayerCardModal = ({
         const internalTotal = internalMatches.length;
         const internalWins = internalMatches.filter(m => m.winnerId === student.id).length;
         const internalWinRate = internalTotal > 0 ? Math.round((internalWins / internalTotal) * 100) : 0;
+
         let giantKillsCount = 0;
         internalMatches.filter(m => m.winnerId === student.id).forEach(match => {
             const opponentId = match.player1Id === student.id ? match.player2Id : match.player1Id;
@@ -80,25 +84,15 @@ const PlayerCardModal = ({
         const externalMatches = studentMatches.filter(m => m.matchType === 'external' && m.player1Id === student.id);
         const statsByYear = externalMatches.reduce((acc, match) => {
             const year = getAcademicYear(match.date);
-            if (!acc[year]) {
-                acc[year] = { played: 0, wins: 0, losses: 0 };
-            }
+            if (!acc[year]) acc[year] = { played: 0, wins: 0, losses: 0 };
             acc[year].played += 1;
-            if (match.winnerId === student.id) {
-                acc[year].wins += 1;
-            } else {
-                acc[year].losses += 1;
-            }
+            if (match.winnerId === student.id) acc[year].wins += 1;
+            else acc[year].losses += 1;
             return acc;
         }, {});
 
         return {
-            internalStats: {
-                winRate: internalWinRate,
-                wins: internalWins,
-                losses: internalTotal - internalWins,
-                giantKills: giantKillsCount
-            },
+            internalStats: { winRate: internalWinRate, wins: internalWins, losses: internalTotal - internalWins, giantKills: giantKillsCount },
             externalStatsByYear: Object.entries(statsByYear).sort((a,b) => b[0].localeCompare(a[0]))
         };
     }, [leagueMatches, student, rankedStudents, currentIndex]);
@@ -113,9 +107,10 @@ const PlayerCardModal = ({
       e.stopPropagation();
       if (!cardRef.current || isDownloading) return;
       setIsDownloading(true);
+
       try {
         await Promise.all([toDataURL(student.photo_url), toDataURL(logoUrl)]);
-        const canvas = await html2canvas(cardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff'});
+        const canvas = await html2canvas(cardRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
         const image = canvas.toDataURL('image/png', 1.0);
         const link = document.createElement('a');
         link.href = image;
@@ -134,16 +129,22 @@ const PlayerCardModal = ({
     return (
       <div className="fixed inset-0 z-[300] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={onClose}>
         <div className="relative max-w-md w-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-          <div ref={cardRef} className="w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-100 relative">
-            <div className="bg-slate-50 border-b p-6 flex justify-between items-center relative">
+          
+          {/* 👇 強制加上 style={{ backgroundColor: '#ffffff' }} 來覆蓋 Tailwind 可能產生的 lab() 顏色 👇 */}
+          <div ref={cardRef} className="w-full rounded-[2rem] shadow-2xl overflow-hidden border-4 border-slate-100 relative" style={{ backgroundColor: '#ffffff' }}>
+            
+            {/* Header */}
+            <div className="border-b p-6 flex justify-between items-center relative" style={{ backgroundColor: '#f8fafc' }}>
               <img src={logoUrl} alt="Logo" className="object-contain w-12 h-12" crossOrigin="anonymous"/>
               <div className="text-center flex-1 z-10">
                 <h3 className="font-black text-slate-800 tracking-widest text-sm">BCKLAS SQUASH TEAM</h3>
               </div>
               <TrophyIcon size={32} className="text-slate-200 absolute right-4 opacity-50" />
             </div>
+
+            {/* Profile Info */}
             <div className="p-8 pb-4 flex flex-col items-center relative">
-              <div className="w-32 h-32 rounded-full bg-slate-100 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center mb-4 relative z-10">
+              <div className="w-32 h-32 rounded-full border-4 border-white shadow-lg overflow-hidden flex items-center justify-center mb-4 relative z-10" style={{ backgroundColor: '#f1f5f9' }}>
                  {student.photo_url ? (
                    <img src={student.photo_url} alt={student.name} className="w-full h-full object-cover" crossOrigin="anonymous"/>
                  ) : (
@@ -155,20 +156,24 @@ const PlayerCardModal = ({
               <h2 className="text-2xl font-black text-slate-800">{student.name} {student.eng_name ? `(${student.eng_name})` : ''}</h2>
               <p className="text-sm font-bold text-slate-400 uppercase mt-1">CLASS: {student.class} ({student.classNo})</p>
             </div>
+
+            {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-2 px-6 py-4">
-               <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
+               <div className="border border-blue-100 rounded-xl p-3 text-center" style={{ backgroundColor: '#eff6ff' }}>
                  <p className="text-xl font-black text-blue-600">{student.totalPoints}</p>
                  <p className="text-[9px] font-black text-blue-400 uppercase tracking-wider mt-1">Points</p>
                </div>
-               <div className={`border rounded-xl p-3 text-center ${BADGE_DATA[student.badge]?.bg || 'bg-slate-50'} ${BADGE_DATA[student.badge]?.border || 'border-slate-200'}`}>
+               <div className={`border rounded-xl p-3 text-center ${BADGE_DATA[student.badge]?.border || 'border-slate-200'}`} style={{ backgroundColor: '#f8fafc' }}>
                  <p className="text-xl">{BADGE_DATA[student.badge]?.icon || '⚪'}</p>
                  <p className={`text-[9px] font-black uppercase tracking-wider mt-1 ${BADGE_DATA[student.badge]?.color || 'text-slate-400'}`}>{student.badge || '無'}</p>
                </div>
-               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+               <div className="border border-slate-200 rounded-xl p-3 text-center" style={{ backgroundColor: '#f8fafc' }}>
                  <p className="text-xl font-black text-slate-700">#{rank}</p>
                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mt-1">Rank (Team)</p>
                </div>
             </div>
+
+            {/* Matches & External */}
             <div className="px-6 py-4 space-y-4">
                <div>
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 border-b pb-2">內部聯賽表現 (Internal League)</h4>
@@ -193,6 +198,8 @@ const PlayerCardModal = ({
                   )}
                </div>
             </div>
+
+            {/* Achievements */}
             <div className="px-8 pb-8 pt-2">
                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b pb-2">Achievements</h4>
                <div className="flex flex-wrap gap-2">
@@ -200,17 +207,20 @@ const PlayerCardModal = ({
                      const badge = ACHIEVEMENT_DATA[badgeId];
                      if (!badge) return null;
                      return (
-                         <div key={badgeId} className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500 shadow-sm border" title={badge.name}>
+                         <div key={badgeId} className="w-10 h-10 rounded-xl flex items-center justify-center text-blue-500 shadow-sm border" title={badge.name} style={{ backgroundColor: '#f8fafc' }}>
                              {badge.icon}
                          </div>
                      );
                  }) : <p className="text-xs text-slate-300">尚未獲得徽章</p>}
                </div>
             </div>
-            <div className="bg-slate-800 text-slate-400 text-center py-2 text-[8px] font-black tracking-widest uppercase">
+
+            {/* Footer */}
+            <div className="text-slate-400 text-center py-2 text-[8px] font-black tracking-widest uppercase" style={{ backgroundColor: '#1e293b' }}>
               Generated by BCKLAS Squash System
             </div>
           </div>
+
           <button 
             onClick={handleDownload} 
             disabled={isDownloading}
