@@ -1,7 +1,8 @@
 // src/components/PlayerCardModal.jsx (Version 4.0 - Premium Design)
 
 import React, { useRef, useState, useMemo } from 'react';
-import { ChevronRight, Download, Loader2, Trophy as TrophyIcon, Zap, Target } from 'lucide-react';
+// 👇 確保這裡有 Crown 👇
+import { ChevronRight, Download, Loader2, Trophy as TrophyIcon, Zap, Target, Crown } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
 // 輔助函數 (保持不變)
