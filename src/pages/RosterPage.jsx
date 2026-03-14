@@ -132,8 +132,7 @@ export default function RosterPage({
                         <div className="mt-6 pt-5 border-t border-slate-100 w-full flex justify-center gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300" onClick={(e) => e.stopPropagation()}>
                             <button onClick={() => handleManualAward(s)} className="text-slate-400 hover:text-yellow-600 hover:bg-yellow-50 p-2.5 rounded-xl transition-all" title="授予徽章"><Award size={18}/></button>
                             <button onClick={() => handleUpdateSquashClass(s)} className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 p-2.5 rounded-xl transition-all" title="設定報名班別"><Layers size={18}/></button>
-                            <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 p-2.5 rounded-xl transition-all" title="設定登入資料"><Key size={18}/></button>
-                            <div className="w-px h-8 bg-slate-200 mx-1 self-center"></div>
+                            <button onClick={() => handleSetupStudentAuth(s)} className="text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 p-2.5 rounded-xl transition-all" title="設定登入資料"><Key size={18}/></button>                            <div className="w-px h-8 bg-slate-200 mx-1 self-center"></div>
                             <button onClick={(e) => { e.stopPropagation(); setEditingStudent(s); }} className="text-slate-400 hover:text-amber-600 hover:bg-amber-50 p-2.5 rounded-xl transition-all" title="編輯此隊員"><UserCog size={18} /></button> 
                             <button onClick={(e) => { e.stopPropagation(); if(window.confirm('確定要刪除此隊員嗎?')) deleteItem('students', s.id); }} className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2.5 rounded-xl transition-all" title="刪除此隊員"><Trash2 size={18} /></button>
                         </div>
