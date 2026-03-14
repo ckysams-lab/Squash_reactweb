@@ -98,7 +98,6 @@ const {
   const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null); // 👉 新增這行：記錄正在轉播的聯賽
-  const [driveAlbums, setDriveAlbums] = useState([]); // 儲存來自 Google Drive 的相簿
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   const syncGoogleDriveGallery = async () => {
     setIsSyncingDrive(true);
