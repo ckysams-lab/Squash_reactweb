@@ -581,37 +581,39 @@ const handleSaveFeaturedBadges = async () => {
     const albums = {};
     const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
     
-    // 1. 先處理原本 Firebase 裡的照片
+    // 統一處理所有從 Firebase 來的照片 (包含手動上傳和從 Drive 同步寫入的)
     safeGallery.forEach(item => {
-      const title = item.title || "未分類";
+      // 確保即使沒有標題也有個預設值
+      const title = item.title || "未分類相簿"; 
+
       if (!albums[title]) {
-        albums[title] = { title, cover: item.url, count: 0, items: [], type: item.type, lastUpdated: item.timestamp?.seconds || 0 };
+        // 如果是新相簿，建立初始化結構
+        albums[title] = { 
+            title, 
+            cover: item.url, 
+            count: 0, 
+            items: [], 
+            type: item.type, 
+            lastUpdated: item.timestamp?.seconds || 0,
+            // 如果這張照片有 isDrive 標記，代表這個相簿是 Drive 來的
+            isDrive: item.isDrive || false 
+        };
       }
+      
       albums[title].count += 1;
       albums[title].items.push(item);
+      
+      // 更新封面為最新的一張照片
       if (item.timestamp?.seconds && item.timestamp.seconds > albums[title].lastUpdated) {
          albums[title].cover = item.url;
          albums[title].lastUpdated = item.timestamp.seconds;
       }
     });
 
-    // 2. 把 Google Drive 抓下來的相簿加進去
-    const safeDriveAlbums = Array.isArray(driveAlbums) ? driveAlbums : [];
-    safeDriveAlbums.forEach(driveAlbum => {
-      // 如果已經有同名的 Firebase 相簿，Drive 會蓋過去或者獨立成一包，這裡當作獨立的新相簿處理
-      albums[`[Drive] ${driveAlbum.album}`] = {
-         title: driveAlbum.album,
-         cover: driveAlbum.cover,
-         count: driveAlbum.count,
-         items: driveAlbum.photos.map(p => ({ id: p.id, url: p.url, type: 'image', description: p.name })), // 轉換成系統看得懂的格式
-         type: 'image',
-         lastUpdated: Date.now() / 1000, // Drive 抓下來的預設排在最前面
-         isDrive: true // 標記這是 Drive 來的
-      };
-    });
-
+    // 將整理好的相簿物件轉換成陣列，並依照最後更新時間排序
     return Object.values(albums).sort((a,b) => b.lastUpdated - a.lastUpdated);
-  }, [galleryItems, driveAlbums]); // 加上 driveAlbums 作為依賴
+
+  }, [galleryItems]);
 
   useEffect(() => {
     const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
