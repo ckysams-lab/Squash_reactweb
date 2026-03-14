@@ -954,26 +954,49 @@ const handleSaveFeaturedBadges = async () => {
 
   const rankedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
+    
     const uniqueMap = new Map();
+    
+    // 步驟 1：去重並確保取最高分
     students.forEach(s => {
       const key = `${s.class}-${s.classNo}`;
-      const currentPoints = Number(s.points) || 0;
+      // 強制轉換為數字，如果轉換失敗 (NaN) 則預設為 0
+      const currentPoints = Number(s.points) || 0; 
+      
       if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, s);
+        uniqueMap.set(key, { ...s, totalPoints: currentPoints });
       } else {
         const existing = uniqueMap.get(key);
-        const existingPoints = Number(existing.points) || 0;
-        if (currentPoints > existingPoints) uniqueMap.set(key, s);
+        // 嚴格的數字比較
+        if (currentPoints > existing.totalPoints) {
+            uniqueMap.set(key, { ...s, totalPoints: currentPoints });
+        }
       }
     });
-    return Array.from(uniqueMap.values()).map(s => ({ 
-      ...s, 
-      totalPoints: Number(s.points) || 0 
-    })).sort((a, b) => {
-      if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+
+    // 步驟 2：轉換為陣列並進行排序
+    return Array.from(uniqueMap.values()).sort((a, b) => {
+      // 確保 a 和 b 的 totalPoints 都是數字
+      const pointsA = Number(a.totalPoints) || 0;
+      const pointsB = Number(b.totalPoints) || 0;
+
+      // 主要排序：根據總分降冪排列 (高分在上面)
+      if (pointsB !== pointsA) {
+          return pointsB - pointsA; 
+      }
+      
+      // 次要排序：如果同分，則比較最後更新時間 (較新的在上面)
       const timeA = a.lastUpdated?.seconds || 0;
       const timeB = b.lastUpdated?.seconds || 0;
-      return timeB - timeA;
+      if (timeB !== timeA) {
+          return timeB - timeA;
+      }
+      
+      // 再次要排序：如果同分且時間一樣，根據班別和班號排序，確保每次渲染順序穩定
+      const classCompare = (a.class || '').localeCompare(b.class || '');
+      if (classCompare !== 0) return classCompare;
+      return (a.classNo || '').localeCompare(b.classNo || '');
+
     });
   }, [students]);
 
