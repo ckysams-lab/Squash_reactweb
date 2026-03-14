@@ -5,7 +5,7 @@ import { X, Swords, Loader2, CalendarRange, Clock, Users, Target, LayoutTemplate
 import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
 
 // 引入演算法與 UI
-import { generateRoundRobinSchedule } from '../utils/scheduler';
+import { generateRoundRobinSchedule, generateKnockoutSchedule } from '../utils/scheduler';
 import { PrimaryButton, SecondaryButton } from './ui';
 
 export default function AddTournamentModal({ onClose, db, appId, students, setSelectedTournament }) {
@@ -87,12 +87,41 @@ export default function AddTournamentModal({ onClose, db, appId, students, setSe
                     }
                 });
 
-            } else if (tournamentType === 'knockout') {
-                // --- 2. 個人淘汰賽 (Knockout) 預留區 ---
-                setIsUpdating(false);
-                return alert("淘汰賽 (Knockout) 的自動排程演算法開發中，敬請期待 Version 5.1！");
-                
+                        } else if (tournamentType === 'knockout') {
+                // --- 2. 個人淘汰賽 (Knockout) 邏輯 ---
+                const knockoutPlayersData = tournamentPlayers.map(id => {
+                    const student = students.find(s => s.id === id);
+                    return { id: student.id, name: student.name };
+                });
+
+                // 呼叫淘汰賽引擎
+                const scheduleResult = generateKnockoutSchedule(knockoutPlayersData, startDate, defaultTime);
+
+                if (scheduleResult.success) {
+                    scheduleResult.matches.forEach(match => {
+                        batch.set(doc(colRef), {
+                            tournamentName: newTournamentName.trim(),
+                            tournamentType: 'knockout',
+                            groupName: match.groupName, // 會顯示 '16強賽' 等
+                            date: match.date,
+                            time: match.time,
+                            venue: match.venue,
+                            player1Id: match.player1Id, player1Name: match.player1Name,
+                            player2Id: match.player2Id, player2Name: match.player2Name,
+                            score1: match.score1, score2: match.score2, 
+                            winnerId: match.winnerId, 
+                            status: match.status,
+                            createdAt: serverTimestamp()
+                        });
+                        matchCount++;
+                    });
+                } else {
+                    setIsUpdating(false);
+                    return alert(scheduleResult.message);
+                }
+
             } else if (tournamentType === 'team') {
+
                 // --- 3. 團體賽 (Team) 預留區 ---
                 setIsUpdating(false);
                 return alert("團體賽 (Team) 的自訂排陣介面即將推出，敬請期待 Version 5.2！");
