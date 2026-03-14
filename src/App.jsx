@@ -2121,7 +2121,6 @@ const myDashboardData = useMemo(() => {
                       <>
                         <div className="text-[10px] uppercase tracking-widest mb-4 px-6" style={{ color: 'var(--theme-text-faint)' }}>主選單</div>
                         <NavButton tabName="myDashboard" icon={<UserCheck size={20} />}>我的表現</NavButton>
-                        <NavButton tabName="dashboard" icon={<LayoutDashboard size={20} />}>管理概況</NavButton>
                         <NavButton tabName="monthlyStars" icon={<Star size={20} />}>每月之星</NavButton>
                         <NavButton tabName="rankings" icon={<Trophy size={20} />}>積分排行</NavButton>
                         <NavButton tabName="league" icon={<Swords size={20} />}>聯賽專區</NavButton>
@@ -2136,6 +2135,7 @@ const myDashboardData = useMemo(() => {
                     {role === 'admin' && (
                       <>
                         <div className="text-[10px] uppercase tracking-widest my-6 px-6 pt-6 border-t" style={{ color: 'var(--theme-text-faint)', borderColor: 'var(--theme-border)' }}>教練工具</div>
+                        <NavButton tabName="dashboard" icon={<LayoutDashboard size={20} />}>管理概況</NavButton>
                         <NavButton tabName="assessments" icon={<Activity size={20} />}>綜合能力評估</NavButton>
                         <NavButton tabName="monthlyStarsAdmin" icon={<Crown size={20} />}>每月之星管理</NavButton>
                         <NavButton tabName="students" icon={<Users size={20} />}>隊員管理</NavButton>
@@ -2362,7 +2362,7 @@ const myDashboardData = useMemo(() => {
         />
     )}
         
-          {!viewingStudent && activeTab === 'dashboard' && (role === 'admin' || role === 'student') && (
+          {!viewingStudent && activeTab === 'dashboard' && role === 'admin' && (
             <DashboardPage 
                   competitions={competitions}
                   schedules={schedules}
