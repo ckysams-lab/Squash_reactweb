@@ -97,45 +97,51 @@ export default function FinancialPage({
                 </Card>
 
                 {/* 右側：統計摘要 */}
-                <Card className="flex flex-col h-full bg-slate-800 text-white border-none shadow-2xl" noPadding>
-                    <div className="p-8 border-b border-slate-700">
-                        <h3 className="text-2xl font-black text-slate-100">預估財務摘要</h3>
-                        <p className="text-sm text-slate-400 mt-1">根據左側設定自動即時試算</p>
+                <Card className="flex flex-col h-full bg-slate-50 border-2 border-slate-200 shadow-md">
+                    <div className="p-8 border-b border-slate-200 bg-white rounded-t-[3rem]">
+                        <h3 className="text-2xl font-black text-slate-800">預估財務摘要</h3>
+                        <p className="text-sm text-slate-500 mt-1 font-bold">根據左側設定自動即時試算</p>
                     </div>
                     
-                    <div className="p-8 flex-1 flex flex-col justify-center space-y-8">
+                    <div className="p-8 flex-1 flex flex-col justify-center space-y-6">
                         {/* 收入 */}
-                        <div className="flex items-center justify-between bg-slate-900/50 p-6 rounded-3xl border border-emerald-500/30">
+                        <div className="flex items-center justify-between bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-2xl"><TrendingUp size={24}/></div>
+                                <div className="p-4 bg-emerald-100 text-emerald-600 rounded-2xl"><TrendingUp size={28}/></div>
                                 <div>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">總預估收入</p>
-                                    <p className="text-3xl font-black text-emerald-400 font-mono mt-1">${financialSummary.revenue.toLocaleString()}</p>
+                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">總預估收入</p>
+                                    <p className="text-4xl font-black text-emerald-600 font-mono mt-1">${financialSummary.revenue.toLocaleString()}</p>
                                 </div>
                             </div>
                         </div>
 
                         {/* 支出 */}
-                        <div className="flex items-center justify-between bg-slate-900/50 p-6 rounded-3xl border border-rose-500/30">
+                        <div className="flex items-center justify-between bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
                              <div className="flex items-center gap-4">
-                                <div className="p-3 bg-rose-500/20 text-rose-400 rounded-2xl"><TrendingDown size={24}/></div>
+                                <div className="p-4 bg-rose-100 text-rose-600 rounded-2xl"><TrendingDown size={28}/></div>
                                 <div>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">總預估支出</p>
-                                    <p className="text-3xl font-black text-rose-400 font-mono mt-1">${financialSummary.expense.toLocaleString()}</p>
+                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">總預估支出</p>
+                                    <p className="text-4xl font-black text-rose-600 font-mono mt-1">${financialSummary.expense.toLocaleString()}</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="h-px bg-slate-700 w-full my-4"></div>
+                        <div className="h-0.5 bg-slate-200 w-full my-4 rounded-full"></div>
 
                         {/* 結餘 */}
-                        <div className="text-center">
-                            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">預估盈餘 / 虧損</p>
-                            <p className={`text-6xl font-black font-mono tracking-tighter ${financialSummary.profit >= 0 ? 'text-white' : 'text-rose-500'}`}>
+                        <div className="text-center bg-white p-8 rounded-3xl border border-slate-200 shadow-md relative overflow-hidden">
+                            {/* 裝飾性背景色塊 */}
+                            <div className={`absolute -right-10 -top-10 w-32 h-32 rounded-full blur-3xl opacity-20 ${financialSummary.profit >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+                            
+                            <p className="text-sm font-black text-slate-500 uppercase tracking-widest mb-3 relative z-10">預估盈餘 / 虧損</p>
+                            <p className={`text-6xl md:text-7xl font-black font-mono tracking-tighter relative z-10 ${financialSummary.profit >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>
                                 {financialSummary.profit >= 0 ? '+' : '-'}${Math.abs(financialSummary.profit).toLocaleString()}
                             </p>
+                            
                             {financialSummary.profit < 0 && (
-                                <p className="text-xs text-rose-400 mt-2 font-bold animate-pulse">⚠️ 警告：目前設定將導致財務赤字</p>
+                                <p className="text-sm text-rose-500 mt-4 font-black animate-pulse bg-rose-50 inline-block px-4 py-2 rounded-full border border-rose-100">
+                                    ⚠️ 警告：目前設定將導致財務赤字
+                                </p>
                             )}
                         </div>
                     </div>
