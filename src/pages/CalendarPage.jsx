@@ -3,6 +3,7 @@ import React from 'react';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import TemplateDownloader from '../components/TemplateDownloader';
 import { Calendar as CalendarIcon, Layers, Download, Upload } from 'lucide-react';
 
 const localizer = momentLocalizer(moment);
@@ -14,7 +15,6 @@ export default function CalendarPage({
     setSelectedClassFilter,
     calendarEvents,
     setSelectedSchedule,
-    downloadTemplate,
     handleCSVImportSchedules
 }) {
     return (
@@ -49,7 +49,7 @@ export default function CalendarPage({
                     {/* 教練專屬操作按鈕 */}
                     {role === 'admin' && (
                         <div className="flex gap-2">
-                            <button onClick={() => downloadTemplate('schedule')} className="p-4 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-2xl border transition-all" title="下載日程範本">
+                            <TemplateDownloader type="schedule" />
                                 <Download size={20}/>
                             </button>
                             <label className="bg-blue-600 text-white px-8 py-4 rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all font-black text-sm">
