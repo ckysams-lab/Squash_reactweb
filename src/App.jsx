@@ -2798,6 +2798,7 @@ const myDashboardData = useMemo(() => {
         db={db}
         appId={appId}
         compressImage={compressImage}
+        handleSetupStudentAuth={handleSetupStudentAuth}
     />
 )}        
         </div>
