@@ -1,6 +1,8 @@
-// src/pages/AssessmentsPage.jsx
+// src/pages/AssessmentsPage.jsx (Version 3.9 - UI Standardized)
+
 import React from 'react';
-import { Activity, Swords, Save, Loader2 } from 'lucide-react';
+import { Activity, Save, Zap, Dumbbell, User } from 'lucide-react';
+import { PageHeader, Card, PrimaryButton } from '../components/ui.jsx';
 
 export default function AssessmentsPage({
     students,
@@ -9,76 +11,126 @@ export default function AssessmentsPage({
     handleSaveAssessment,
     isUpdating
 }) {
+    // 處理輸入，確保是數字
+    const handleChange = (field, value) => {
+        setNewAssessment(prev => ({
+            ...prev,
+            [field]: value
+        }));
+    };
+
     return (
-        <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in duration-500 font-bold">
-            <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
-                <h3 className="text-3xl font-black mb-2 text-center">綜合能力評估錄入</h3>
-                <p className="text-center text-slate-400 mb-10">請輸入學員各項體能與技術測試的最新成績。</p>
-                
-                <div className="space-y-8">
-                    {/* 學員與日期選擇區 */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="text-sm font-bold text-slate-500 mb-2 block">選擇學員</label>
-                            <select 
-                                value={newAssessment.studentId} 
-                                onChange={e => setNewAssessment({...newAssessment, studentId: e.target.value})} 
-                                className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none"
-                            >
-                                <option value="" disabled>-- 請選擇一位隊員 --</option>
-                                {students.sort((a,b) => a.name.localeCompare(b.name, 'zh-Hant')).map(s => (
-                                    <option key={s.id} value={s.id}>{s.name} ({s.class})</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="text-sm font-bold text-slate-500 mb-2 block">評估日期</label>
-                            <input 
-                                type="date" 
-                                value={newAssessment.date} 
-                                onChange={e => setNewAssessment({...newAssessment, date: e.target.value})} 
-                                className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none"
-                            />
-                        </div>
-                    </div>
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 font-bold max-w-4xl mx-auto">
+            
+            <PageHeader 
+                title="綜合能力評估" 
+                subtitle="定期紀錄球員體能與技術數據，以產生雷達圖" 
+                icon={Activity} 
+            />
 
-                    {/* 體能測試指標 */}
-                    <div className="bg-slate-50 p-6 rounded-3xl border space-y-6">
-                        <h4 className="text-lg font-black text-slate-700 flex items-center gap-2"><Activity size={20}/> 體能測試指標</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            <div><label className="text-xs text-slate-500 block mb-1">仰臥起坐 (次/分)</label><input type="number" value={newAssessment.situps} onChange={e => setNewAssessment({...newAssessment, situps: e.target.value})} className="w-full p-3 rounded-xl border-2 outline-none focus:border-blue-500" placeholder="例如: 45"/></div>
-                            <div><label className="text-xs text-slate-500 block mb-1">1分鐘折返跑 (次)</label><input type="number" value={newAssessment.shuttleRun} onChange={e => setNewAssessment({...newAssessment, shuttleRun: e.target.value})} className="w-full p-3 rounded-xl border-2 outline-none focus:border-blue-500" placeholder="跑3組平均值"/></div>
-                            <div><label className="text-xs text-slate-500 block mb-1">耐力跑 (6/9分鐘)</label><input type="number" value={newAssessment.enduranceRun} onChange={e => setNewAssessment({...newAssessment, enduranceRun: e.target.value})} className="w-full p-3 rounded-xl border-2 outline-none focus:border-blue-500" placeholder="例如: 圈數"/></div>
-                            <div><label className="text-xs text-slate-500 block mb-1">手握力 (kg)</label><input type="number" value={newAssessment.gripStrength} onChange={e => setNewAssessment({...newAssessment, gripStrength: e.target.value})} className="w-full p-3 rounded-xl border-2 outline-none focus:border-blue-500" placeholder="例如: 30"/></div>
-                            <div><label className="text-xs text-slate-500 block mb-1">柔軟度 (坐姿體前彎 cm)</label><input type="number" value={newAssessment.flexibility} onChange={e => setNewAssessment({...newAssessment, flexibility: e.target.value})} className="w-full p-3 rounded-xl border-2 outline-none focus:border-blue-500" placeholder="例如: 25"/></div>
-                        </div>
+            <Card className="flex flex-col">
+                <div className="mb-8 border-b border-slate-100 pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div className="w-full md:w-1/2">
+                        <label className="text-xs font-bold text-slate-500 mb-2 block uppercase tracking-widest">1. 選擇受測學員</label>
+                        <select 
+                            value={newAssessment.studentId} 
+                            onChange={(e) => handleChange('studentId', e.target.value)}
+                            className="w-full bg-blue-50 border border-blue-200 rounded-xl p-4 outline-none focus:border-blue-500 transition-all font-black text-blue-900 appearance-none cursor-pointer"
+                        >
+                            <option value="" disabled>請選擇一名球員...</option>
+                            {students.sort((a,b) => a.class.localeCompare(b.class)).map(s => (
+                                <option key={s.id} value={s.id}>{s.name} ({s.class})</option>
+                            ))}
+                        </select>
                     </div>
-
-                    {/* 技術測試指標 */}
-                    <div className="bg-slate-50 p-6 rounded-3xl border space-y-6">
-                        <h4 className="text-lg font-black text-slate-700 flex items-center gap-2"><Swords size={20}/> 技術測試指標</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div><label className="text-xs text-slate-500 block mb-1">正手直線連續 (次)</label><input type="number" value={newAssessment.fhDrive} onChange={e => setNewAssessment({...newAssessment, fhDrive: e.target.value})} className="w-full p-3 rounded-xl border-2 outline-none focus:border-blue-500" placeholder="例如: 30"/></div>
-                            <div><label className="text-xs text-slate-500 block mb-1">反手直線連續 (次)</label><input type="number" value={newAssessment.bhDrive} onChange={e => setNewAssessment({...newAssessment, bhDrive: e.target.value})} className="w-full p-3 rounded-xl border-2 outline-none focus:border-blue-500" placeholder="例如: 20"/></div>
-                            <div><label className="text-xs text-slate-500 block mb-1">正手截擊連續 (次)</label><input type="number" value={newAssessment.fhVolley} onChange={e => setNewAssessment({...newAssessment, fhVolley: e.target.value})} className="w-full p-3 rounded-xl border-2 outline-none focus:border-blue-500" placeholder="例如: 15"/></div>
-                            <div><label className="text-xs text-slate-500 block mb-1">反手截擊連續 (次)</label><input type="number" value={newAssessment.bhVolley} onChange={e => setNewAssessment({...newAssessment, bhVolley: e.target.value})} className="w-full p-3 rounded-xl border-2 outline-none focus:border-blue-500" placeholder="例如: 10"/></div>
-                        </div>
-                    </div>
-
-                    {/* 教練評語 */}
-                    <div>
-                        <label className="text-sm font-bold text-slate-500 mb-2 block">教練評語 (可選)</label>
-                        <textarea value={newAssessment.notes} onChange={e => setNewAssessment({...newAssessment, notes: e.target.value})} className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none h-24" placeholder="輸入關於學生表現的觀察或建議..."></textarea>
-                    </div>
-
-                    {/* 儲存按鈕 */}
-                    <div className="pt-6 border-t">
-                        <button onClick={handleSaveAssessment} disabled={isUpdating} className="w-full flex items-center justify-center gap-3 py-5 bg-blue-600 text-white font-black text-xl rounded-2xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all disabled:opacity-50">
-                            {isUpdating ? <Loader2 className="animate-spin" /> : <Save />} 儲存評估成績
-                        </button>
+                    <div className="w-full md:w-1/3">
+                        <label className="text-xs font-bold text-slate-500 mb-2 block uppercase tracking-widest">2. 評測日期</label>
+                        <input 
+                            type="date" 
+                            value={newAssessment.date} 
+                            onChange={(e) => handleChange('date', e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 outline-none focus:border-blue-500 transition-all font-bold"
+                        />
                     </div>
                 </div>
-            </div>
+
+                <div className="space-y-8 flex-1">
+                    
+                    {/* 體能數據群組 */}
+                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
+                        <h4 className="font-black text-slate-700 mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
+                            <Zap className="text-amber-500"/> 體能與爆發力
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1">折返跑 (趟)</label>
+                                <input type="number" placeholder="0" value={newAssessment.shuttleRun} onChange={e => handleChange('shuttleRun', e.target.value)} className="w-full bg-white p-3 rounded-xl border border-slate-200 outline-none font-mono text-lg text-slate-800 focus:border-amber-500 transition-all" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1">仰臥起坐 (次/分)</label>
+                                <input type="number" placeholder="0" value={newAssessment.situps} onChange={e => handleChange('situps', e.target.value)} className="w-full bg-white p-3 rounded-xl border border-slate-200 outline-none font-mono text-lg text-slate-800 focus:border-amber-500 transition-all" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1">耐力跑 (級數)</label>
+                                <input type="number" placeholder="0" value={newAssessment.enduranceRun} onChange={e => handleChange('enduranceRun', e.target.value)} className="w-full bg-white p-3 rounded-xl border border-slate-200 outline-none font-mono text-lg text-slate-800 focus:border-amber-500 transition-all" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1">柔軟度 (cm)</label>
+                                <input type="number" placeholder="0" value={newAssessment.flexibility} onChange={e => handleChange('flexibility', e.target.value)} className="w-full bg-white p-3 rounded-xl border border-slate-200 outline-none font-mono text-lg text-slate-800 focus:border-amber-500 transition-all" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 技術數據群組 */}
+                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
+                        <h4 className="font-black text-slate-700 mb-4 flex items-center gap-2 border-b border-slate-200 pb-2">
+                            <Dumbbell className="text-indigo-500"/> 壁球專項技術 (滿分 10)
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1">正手長球</label>
+                                <input type="number" min="0" max="10" placeholder="0-10" value={newAssessment.fhDrive} onChange={e => handleChange('fhDrive', e.target.value)} className="w-full bg-white p-3 rounded-xl border border-slate-200 outline-none font-mono text-lg text-slate-800 focus:border-indigo-500 transition-all" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1">反手長球</label>
+                                <input type="number" min="0" max="10" placeholder="0-10" value={newAssessment.bhDrive} onChange={e => handleChange('bhDrive', e.target.value)} className="w-full bg-white p-3 rounded-xl border border-slate-200 outline-none font-mono text-lg text-slate-800 focus:border-indigo-500 transition-all" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1">正手截擊</label>
+                                <input type="number" min="0" max="10" placeholder="0-10" value={newAssessment.fhVolley} onChange={e => handleChange('fhVolley', e.target.value)} className="w-full bg-white p-3 rounded-xl border border-slate-200 outline-none font-mono text-lg text-slate-800 focus:border-indigo-500 transition-all" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1">反手截擊</label>
+                                <input type="number" min="0" max="10" placeholder="0-10" value={newAssessment.bhVolley} onChange={e => handleChange('bhVolley', e.target.value)} className="w-full bg-white p-3 rounded-xl border border-slate-200 outline-none font-mono text-lg text-slate-800 focus:border-indigo-500 transition-all" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 教練總評 */}
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 mb-2 block uppercase tracking-widest">教練評語與建議 (顯示於學生儀表板)</label>
+                        <textarea 
+                            rows="3" 
+                            placeholder="在此輸入對球員本階段訓練的觀察..." 
+                            value={newAssessment.notes} 
+                            onChange={e => handleChange('notes', e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 outline-none focus:border-blue-500 transition-all text-sm font-medium resize-none" 
+                        />
+                    </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end">
+                    <PrimaryButton 
+                        icon={Save} 
+                        onClick={handleSaveAssessment} 
+                        loading={isUpdating}
+                        className="px-12 text-lg w-full md:w-auto"
+                    >
+                        送出評估數據
+                    </PrimaryButton>
+                </div>
+            </Card>
+
         </div>
     );
 }
