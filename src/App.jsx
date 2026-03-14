@@ -28,6 +28,7 @@ import CreatePostModal from './components/CreatePostModal';
 import ExternalMatchesPage from './pages/ExternalMatchesPage';
 import SocialFeedPage from './pages/SocialFeedPage';
 import RankingPage from './pages/RankingPage';
+import VideoAnalysisPage from './pages/VideoAnalysisPage';
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
 import { useFirebaseData } from './hooks/useFirebaseData';
 import LiveScoreboardDisplay from './components/LiveScoreboardDisplay';
@@ -2136,6 +2137,7 @@ const myDashboardData = useMemo(() => {
                         <NavButton tabName="awards" icon={<Award size={20} />}>獎項成就</NavButton>
                         <NavButton tabName="schedules" icon={<CalendarIcon size={20} />}>訓練日程</NavButton>
                         <NavButton tabName="competitions" icon={<Megaphone size={20} />}>比賽與公告</NavButton>
+                        <NavButton tabName="videoAnalysis" icon={<Video size={20} />}>AI 影片分析</NavButton>
                       </>
                     )}
                     {role === 'admin' && (
@@ -2390,6 +2392,13 @@ const myDashboardData = useMemo(() => {
                     isUpdating={isUpdating}
                 />
             )}
+
+          {!viewingStudent && activeTab === 'videoAnalysis' && (role === 'admin' || role === 'student') && (
+              <VideoAnalysisPage 
+                  role={role} // 👈 傳遞 role
+                  currentUserInfo={currentUserInfo} // 👈 傳遞 currentUserInfo
+              />
+          )})}
           
           {/* RANKINGS TAB */}
       {!viewingStudent && activeTab === 'rankings' && (
