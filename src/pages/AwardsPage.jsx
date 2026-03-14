@@ -107,6 +107,7 @@ export default function WallOfFamePage({ trophies, alumni }) {
 
     // 👇 核心邏輯：將同一年份、同名稱的比賽合併為一個群組
     const groupedTrophies = useMemo(() => {
+        if (!Array.isArray(trophies)) return [];
         const groups = {};
         trophies.forEach(trophy => {
             const key = `${trophy.year}-${trophy.tournamentName}`;
