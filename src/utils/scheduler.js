@@ -1,5 +1,8 @@
-// src/utils/scheduler.js (請使用這個最終優化版)
+// src/utils/scheduler.js
 
+// ==========================================
+// 演算法一：聯賽 (單循環賽 Round-Robin)
+// ==========================================
 export const generateRoundRobinSchedule = (players, startDate, endDate, matchTime) => {
     if (!players || players.length < 2) return { success: false, message: '至少需要 2 名球員才能排程' };
     
@@ -80,5 +83,73 @@ export const generateRoundRobinSchedule = (players, startDate, endDate, matchTim
         success: true, 
         matches: scheduledMatches,
         totalMatches: scheduledMatches.length
+    };
+};
+
+
+// ==========================================
+// 演算法二：淘汰賽 (Knockout)
+// ==========================================
+export const generateKnockoutSchedule = (players, startDate, defaultTime) => {
+    if (!players || players.length < 2) return { success: false, message: '至少需要 2 名球員才能建立淘汰賽' };
+
+    const numPlayers = players.length;
+    
+    // 1. 計算下一個最接近的 2 的冪次方 (例如：13人 -> 16, 5人 -> 8)
+    const nextPowerOfTwo = Math.pow(2, Math.ceil(Math.log2(numPlayers)));
+    
+    // 2. 計算需要多少個「輪空 (Bye)」
+    const numByes = nextPowerOfTwo - numPlayers;
+    
+    // 3. 準備球員名單 (為了公平，我們將名單隨機打亂)
+    const shuffledPlayers = [...players].sort(() => 0.5 - Math.random());
+    
+    // 4. 生成第一輪 (Round of N) 的對戰組合
+    let matches = [];
+    let playerIndex = 0;
+
+    // 計算第一輪總共有多少場比賽 (包含輪空的場次)
+    const firstRoundMatches = nextPowerOfTwo / 2;
+
+    for (let i = 0; i < firstRoundMatches; i++) {
+        const player1 = shuffledPlayers[playerIndex++];
+        
+        // 如果還有「輪空」名額沒用完，這個對戰組合的 Player 2 就是 BYE
+        // 如果輪空名額用完了，就從名單中挑選下一個球員作為 Player 2
+        let player2 = null;
+        if (i < numByes) {
+            player2 = { id: 'BYE', name: '輪空 (直接晉級)' };
+        } else {
+            player2 = shuffledPlayers[playerIndex++];
+        }
+
+        matches.push({
+            // 用來標示這是哪一個階段的比賽，例如 "16強賽", "8強賽"
+            groupName: `${nextPowerOfTwo}強賽`, 
+            
+            date: startDate,
+            time: defaultTime || '16:00',
+            venue: '學校壁球場',
+            
+            player1Id: player1.id,
+            player1Name: player1.name,
+            player2Id: player2.id,
+            player2Name: player2.name,
+            
+            matchType: 'internal',
+            
+            // 如果這場比賽對手是 BYE，代表 Player 1 不戰而勝，狀態直接設為 completed
+            status: player2.id === 'BYE' ? 'completed' : 'scheduled',
+            score1: player2.id === 'BYE' ? 3 : null, // 假設 3 局勝，給予虛擬分數
+            score2: player2.id === 'BYE' ? 0 : null,
+            winnerId: player2.id === 'BYE' ? player1.id : null,
+        });
+    }
+
+    return {
+        success: true,
+        matches: matches,
+        totalMatches: matches.length,
+        bracketSize: nextPowerOfTwo // 回傳這是幾強賽，方便前端顯示
     };
 };
