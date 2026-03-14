@@ -169,7 +169,7 @@ export default function AddTournamentModal({ onClose, db, appId, students, setSe
                         const matchupName = `${teamA.name} vs ${teamB.name}`;
 
                         // 為這個對戰組合產生每一點(單打)的比賽
-                        for (let spot = 0; slot < playersPerTeam; slot++) {
+                        for (let slot = 0; slot < playersPerTeam; slot++) {
                             const p1Info = students.find(s => s.id === teamA.players[slot]);
                             const p2Info = students.find(s => s.id === teamB.players[slot]);
 
