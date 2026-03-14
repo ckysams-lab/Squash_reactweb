@@ -8,6 +8,10 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
     Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
 } from 'recharts';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+import { Download, Loader2 } from 'lucide-react';
+import PortfolioGenerator from './PortfolioGenerator';
 import { ACHIEVEMENT_DATA } from '../constants/data';
 
 export default function PlayerDashboard({ 
