@@ -55,10 +55,11 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
 } from 'recharts';
-import { db, auth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from './firebase';
-
+import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from './firebase';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 // --- 版本控制 ---
-const CURRENT_VERSION = "12.0";
+const CURRENT_VERSION = "1.0";
 
 // Calendar Localizer
 const localizer = momentLocalizer(moment);
