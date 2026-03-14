@@ -87,7 +87,7 @@ const PortfolioGenerator = forwardRef(({ student, data, schoolLogo }, ref) => {
                                     <PolarGrid stroke="#cbd5e1" />
                                     <PolarAngleAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 14, fontWeight: 'bold' }} />
                                     <PolarRadiusAxis angle={30} domain={[0, 10]} tick={false} axisLine={false} />
-                                    <Radar name="能力值" dataKey="A" stroke="#3b82f6" strokeWidth={3} fill="#3b82f6" fillOpacity={0.4} />
+                                    <Radar name="能力值" dataKey="A" stroke="#3b82f6" strokeWidth={3} fill="#3b82f6" fillOpacity={0.4} isAnimationActive={false} />
                                 </RadarChart>
                             </ResponsiveContainer>
                         ) : (
