@@ -2194,6 +2194,8 @@ const myDashboardData = useMemo(() => {
                  activeTab === 'gallery' ? "📸 精彩花絮" :
                  activeTab === 'awards' ? "🏆 獎項成就" :
                  activeTab === 'league' ? "🗓️ 聯賽專區" :
+                 activeTab === 'socialFeed' ? "💬 球隊動態牆" :
+                 activeTab === 'wallOfFame' ? "🏛️ 榮譽殿堂" :
                  activeTab === 'financial' ? "💰 財務收支管理" :
                  activeTab === 'settings' ? "⚙️ 系統核心設定" :
                  activeTab === 'monthlyStarsAdmin' ? "🌟 每月之星管理" :
