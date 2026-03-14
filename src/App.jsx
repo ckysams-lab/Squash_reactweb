@@ -2664,7 +2664,6 @@ const myDashboardData = useMemo(() => {
                   setSelectedClassFilter={setSelectedClassFilter}
                   calendarEvents={calendarEvents}
                   setSelectedSchedule={setSelectedSchedule}
-                  downloadTemplate={downloadTemplate}
                   handleCSVImportSchedules={handleCSVImportSchedules}
               />
           )}
