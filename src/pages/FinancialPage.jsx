@@ -1,6 +1,8 @@
-// src/pages/FinancialPage.jsx
+// src/pages/FinancialPage.jsx (Version 3.7 - UI Standardized)
+
 import React from 'react';
-import { Save, TrendingUp, Trash2, DollarSign } from 'lucide-react';
+import { DollarSign, Save, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
+import { PageHeader, Card, PrimaryButton } from '../components/ui.jsx';
 
 export default function FinancialPage({
     financeConfig,
@@ -8,111 +10,136 @@ export default function FinancialPage({
     financialSummary,
     saveFinanceConfig
 }) {
+    // 處理數字輸入，避免 NaN
+    const handleChange = (field, value) => {
+        setFinanceConfig(prev => ({
+            ...prev,
+            [field]: value === '' ? '' : Number(value)
+        }));
+    };
+
     return (
-        <div className="space-y-10 animate-in slide-in-from-bottom-10 duration-700 font-bold">
-            {/* 儲存按鈕 */}
-            <div className="flex justify-end">
-                <button 
-                    onClick={saveFinanceConfig} 
-                    className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-lg hover:bg-blue-700 transition-all active:scale-95"
-                >
-                    <Save size={20} /> 儲存財務設定
-                </button>
-            </div>
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 font-bold max-w-5xl mx-auto">
+            
+            <PageHeader 
+                title="財務收支管理" 
+                subtitle="球隊運作成本與學費收入試算" 
+                icon={DollarSign} 
+            />
 
-            {/* 三大指標卡片 */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* 預計總收入 */}
-                <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-                    <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6">
-                        <TrendingUp size={32}/>
-                    </div>
-                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總收入</p>
-                    <h3 className="text-4xl font-black text-emerald-500">${financialSummary.revenue.toLocaleString()}</h3>
-                </div>
-
-                {/* 預計總支出 */}
-                <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
-                    <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6">
-                        <Trash2 size={32}/>
-                    </div>
-                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計總支出</p>
-                    <h3 className="text-4xl font-black text-rose-500">${financialSummary.expense.toLocaleString()}</h3>
-                </div>
-
-                {/* 預計資助盈餘 */}
-                <div className={`p-10 rounded-[3.5rem] border shadow-sm flex flex-col justify-center items-center text-center ${financialSummary.profit >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-rose-50 border-rose-100'}`}>
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${financialSummary.profit >= 0 ? 'bg-white text-blue-600 shadow-sm' : 'bg-white text-rose-600 shadow-sm'}`}>
-                        <DollarSign size={32}/>
-                    </div>
-                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">預計資助盈餘</p>
-                    <h3 className={`text-4xl font-black ${financialSummary.profit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-                        ${financialSummary.profit.toLocaleString()}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* 左側：設定參數 */}
+                <Card className="flex flex-col h-full">
+                    <h3 className="text-2xl font-black text-slate-800 mb-6 pb-4 border-b flex items-center gap-2">
+                        <Wallet className="text-blue-500" /> 參數設定
                     </h3>
-                </div>
-            </div>
-
-            {/* 表單設定區 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                {/* 支出設定 (教練費) */}
-                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-4 mb-10">
-                        <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center shadow-sm">
-                            <Trash2 size={24}/>
-                        </div>
-                        <h4 className="text-2xl font-black text-slate-800">支出設定 (教練費)</h4>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {[ 
-                            { label: '校隊教練次數', key: 'nTeam' }, 
-                            { label: '單次校隊成本', key: 'costTeam' }, 
-                            { label: '進階班次數', key: 'nTrain' }, 
-                            { label: '單次進階成本', key: 'costTrain' }, 
-                            { label: '趣味班次數', key: 'nHobby' }, 
-                            { label: '單次趣味成本', key: 'costHobby' } 
-                        ].map(item => (
-                            <div key={item.key}>
-                                <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">{item.label}</label>
-                                <input 
-                                    type="number" 
-                                    className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-rose-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" 
-                                    value={financeConfig[item.key]} 
-                                    onChange={e => setFinanceConfig({...financeConfig, [item.key]: Number(e.target.value)})}
-                                />
+                    
+                    <div className="space-y-6 flex-1">
+                        {/* 收入設定 */}
+                        <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 space-y-4">
+                            <h4 className="text-sm font-black text-emerald-800 uppercase tracking-widest">預估收入設定</h4>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">預計總收生人數</label>
+                                    <input type="number" min="0" value={financeConfig.totalStudents} onChange={e => handleChange('totalStudents', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-500 transition-all font-mono" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">每人學費收入 ($)</label>
+                                    <input type="number" min="0" value={financeConfig.feePerStudent} onChange={e => handleChange('feePerStudent', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-500 transition-all font-mono" />
+                                </div>
                             </div>
-                        ))}
-                    </div>
-                </div>
+                        </div>
 
-                {/* 預計收入 (學費) */}
-                <div className="bg-white p-10 rounded-[4rem] border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-4 mb-10">
-                        <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center shadow-sm">
-                            <DollarSign size={24}/>
+                        {/* 支出設定 */}
+                        <div className="bg-rose-50/50 p-6 rounded-2xl border border-rose-100 space-y-4">
+                            <h4 className="text-sm font-black text-rose-800 uppercase tracking-widest">教練費支出設定</h4>
+                            
+                            <div className="grid grid-cols-[1fr_2fr] gap-4 items-center">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">校隊班 數量</label>
+                                    <input type="number" min="0" value={financeConfig.nTeam} onChange={e => handleChange('nTeam', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-rose-500 transition-all font-mono" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">校隊班 單班總成本 ($)</label>
+                                    <input type="number" min="0" value={financeConfig.costTeam} onChange={e => handleChange('costTeam', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-rose-500 transition-all font-mono" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-[1fr_2fr] gap-4 items-center">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">精英班 數量</label>
+                                    <input type="number" min="0" value={financeConfig.nTrain} onChange={e => handleChange('nTrain', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-rose-500 transition-all font-mono" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">精英班 單班總成本 ($)</label>
+                                    <input type="number" min="0" value={financeConfig.costTrain} onChange={e => handleChange('costTrain', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-rose-500 transition-all font-mono" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-[1fr_2fr] gap-4 items-center">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">初/興趣班 數量</label>
+                                    <input type="number" min="0" value={financeConfig.nHobby} onChange={e => handleChange('nHobby', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-rose-500 transition-all font-mono" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-1 block">初/興趣班 單班總成本 ($)</label>
+                                    <input type="number" min="0" value={financeConfig.costHobby} onChange={e => handleChange('costHobby', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-rose-500 transition-all font-mono" />
+                                </div>
+                            </div>
                         </div>
-                        <h4 className="text-2xl font-black text-slate-800">預計收入 (學費)</h4>
                     </div>
-                    <div className="space-y-10">
-                        <div>
-                            <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">預計總人數</label>
-                            <input 
-                                type="number" 
-                                className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" 
-                                value={financeConfig.totalStudents} 
-                                onChange={e => setFinanceConfig({...financeConfig, totalStudents: Number(e.target.value)})}
-                            />
+
+                    <div className="mt-8 pt-6 border-t border-slate-100">
+                        <PrimaryButton icon={Save} onClick={saveFinanceConfig} className="w-full text-lg">
+                            儲存並更新計算
+                        </PrimaryButton>
+                    </div>
+                </Card>
+
+                {/* 右側：統計摘要 */}
+                <Card className="flex flex-col h-full bg-slate-800 text-white border-none shadow-2xl" noPadding>
+                    <div className="p-8 border-b border-slate-700">
+                        <h3 className="text-2xl font-black text-slate-100">預估財務摘要</h3>
+                        <p className="text-sm text-slate-400 mt-1">根據左側設定自動即時試算</p>
+                    </div>
+                    
+                    <div className="p-8 flex-1 flex flex-col justify-center space-y-8">
+                        {/* 收入 */}
+                        <div className="flex items-center justify-between bg-slate-900/50 p-6 rounded-3xl border border-emerald-500/30">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-2xl"><TrendingUp size={24}/></div>
+                                <div>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">總預估收入</p>
+                                    <p className="text-3xl font-black text-emerald-400 font-mono mt-1">${financialSummary.revenue.toLocaleString()}</p>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-3 block">每位學員學費 ($)</label>
-                            <input 
-                                type="number" 
-                                className="w-full p-5 bg-slate-50 border-2 border-transparent focus:border-emerald-500/20 focus:bg-white rounded-2xl outline-none transition-all font-mono text-lg font-black" 
-                                value={financeConfig.feePerStudent} 
-                                onChange={e => setFinanceConfig({...financeConfig, feePerStudent: Number(e.target.value)})}
-                            />
+
+                        {/* 支出 */}
+                        <div className="flex items-center justify-between bg-slate-900/50 p-6 rounded-3xl border border-rose-500/30">
+                             <div className="flex items-center gap-4">
+                                <div className="p-3 bg-rose-500/20 text-rose-400 rounded-2xl"><TrendingDown size={24}/></div>
+                                <div>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">總預估支出</p>
+                                    <p className="text-3xl font-black text-rose-400 font-mono mt-1">${financialSummary.expense.toLocaleString()}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="h-px bg-slate-700 w-full my-4"></div>
+
+                        {/* 結餘 */}
+                        <div className="text-center">
+                            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">預估盈餘 / 虧損</p>
+                            <p className={`text-6xl font-black font-mono tracking-tighter ${financialSummary.profit >= 0 ? 'text-white' : 'text-rose-500'}`}>
+                                {financialSummary.profit >= 0 ? '+' : '-'}${Math.abs(financialSummary.profit).toLocaleString()}
+                            </p>
+                            {financialSummary.profit < 0 && (
+                                <p className="text-xs text-rose-400 mt-2 font-bold animate-pulse">⚠️ 警告：目前設定將導致財務赤字</p>
+                            )}
                         </div>
                     </div>
-                </div>
+                </Card>
             </div>
         </div>
     );
