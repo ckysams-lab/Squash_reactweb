@@ -2430,12 +2430,24 @@ const myDashboardData = useMemo(() => {
                           <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
                           <td className="px-8 py-8">
     <div className="flex items-center gap-4">
-        <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">{s.name[0]}</div>
-        <div>
-            <div className="flex items-center gap-2">
-                <div className="font-black text-lg text-slate-800">{s.name}</div>
-                {/* --- START: 版本 12.9 新增 - 顯示主打勳章 --- */}
-                <div className="flex items-center gap-1">
+        {/* 頭像 (保持不變) */}
+        <div className="w-12 h-12 bg-slate-50 rounded-2xl flex shrink-0 items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase">
+            {s.name[0]}
+        </div>
+        
+        {/* 資料區 (加上 min-w-0 防止被 Flex 子元素撐破) */}
+        <div className="min-w-0"> 
+            
+            {/* 姓名與勳章的容器 (加上 flex-wrap 允許在極端情況下勳章掉到下一行，但名字本身不換行) */}
+            <div className="flex flex-wrap items-center gap-2">
+                
+                {/* 姓名 (加上 truncate 讓過長的名字變 ...，加上 max-w-full 控制最大寬度) */}
+                <div className="font-black text-lg text-slate-800 truncate max-w-[120px] md:max-w-[200px]" title={s.name}>
+                    {s.name}
+                </div>
+
+                {/* 主打勳章區塊 (加上 shrink-0 防止勳章被擠壓變形) */}
+                <div className="flex shrink-0 items-center gap-1">
                     {s.featuredBadges?.map(badgeId => {
                         const badge = ACHIEVEMENT_DATA[badgeId];
                         if (!badge) return null;
@@ -2446,9 +2458,12 @@ const myDashboardData = useMemo(() => {
                         );
                     })}
                 </div>
-                {/* --- END: 版本 12.9 新增 --- */}
             </div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Class {s.class} • No.{s.classNo}</div>
+            
+            {/* 班別班號 */}
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">
+                Class {s.class} • No.{s.classNo}
+            </div>
         </div>
     </div>
 </td>
