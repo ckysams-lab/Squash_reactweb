@@ -2400,7 +2400,7 @@ const myDashboardData = useMemo(() => {
                   role={role} // 👈 傳遞 role
                   currentUserInfo={currentUserInfo} // 👈 傳遞 currentUserInfo
               />
-          )})}
+          )}
           
           {/* RANKINGS TAB */}
       {!viewingStudent && activeTab === 'rankings' && (
