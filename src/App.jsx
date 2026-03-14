@@ -40,7 +40,7 @@ import {
   Key, LayoutDashboard, Layers, Link as LinkIcon, ListChecks, Loader2, Lock, LogIn, LogOut, Mail, MapPin, Medal,
   Megaphone, Menu, MinusCircle, Pencil, Percent, PlayCircle, Plus, PlusCircle, Printer, Rocket, Save, Search, Settings2,
   Shield as ShieldIcon, ShieldCheck, Sparkles, Star, Sun, Swords, Target, Trash2, TrendingUp, Trophy, Trophy as TrophyIcon,
-  Upload, User, UserCheck, UserCog, UserPlus, Users, Video, X, Zap, MessageSquare
+  Upload, User, UserCheck, UserCog, UserPlus, Users, , X, Zap, MessageSquare
 } from 'lucide-react';
 
 import { 
@@ -1146,7 +1146,7 @@ const handleSaveFeaturedBadges = async () => {
         
         try {
            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
-              type: 'video',
+              type: '',
               url,
               title: title || '未命名影片',
               description: desc,
@@ -2136,7 +2136,6 @@ const myDashboardData = useMemo(() => {
                         <NavButton tabName="awards" icon={<Award size={20} />}>獎項成就</NavButton>
                         <NavButton tabName="schedules" icon={<CalendarIcon size={20} />}>訓練日程</NavButton>
                         <NavButton tabName="competitions" icon={<Megaphone size={20} />}>比賽與公告</NavButton>
-                        <NavButton tabName="videoAnalysis" icon={<Video size={20} />}>AI 影片分析</NavButton>
                       </>
                     )}
                     {role === 'admin' && (
@@ -2203,7 +2202,6 @@ const myDashboardData = useMemo(() => {
                  activeTab === 'monthlyStarsAdmin' ? "🌟 每月之星管理" :
                  activeTab === 'monthlyStars' ? "🌟 每月之星" :
                  activeTab === 'externalMatches' ? "📝 校外賽記錄管理" : ""}
-                 activeTab === 'videoAnalysis' ? "🤖 AI 影片分析引擎" :
 
               </h1>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
