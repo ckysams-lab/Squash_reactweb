@@ -28,7 +28,6 @@ import CreatePostModal from './components/CreatePostModal';
 import ExternalMatchesPage from './pages/ExternalMatchesPage';
 import SocialFeedPage from './pages/SocialFeedPage';
 import RankingPage from './pages/RankingPage';
-import VideoAnalysisPage from './pages/VideoAnalysisPage';
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
 import { useFirebaseData } from './hooks/useFirebaseData';
 import LiveScoreboardDisplay from './components/LiveScoreboardDisplay';
