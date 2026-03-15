@@ -2258,6 +2258,8 @@ const myDashboardData = useMemo(() => {
                   systemConfig={systemConfig}
                   BADGE_DATA={BADGE_DATA}
                   ACHIEVEMENT_DATA={ACHIEVEMENT_DATA}
+                  assessments={assessments} 
+                  attendanceLogs={attendanceLogs}
               /> 
           )}  
           {selectedSchedule && (
