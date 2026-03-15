@@ -7,7 +7,7 @@ import { toPng } from 'html-to-image';
 const PlayerCardModal = ({ 
     student, onClose, rankedStudents, setShowPlayerCard, 
     leagueMatches, achievements, systemConfig, BADGE_DATA, ACHIEVEMENT_DATA
-}) {
+}) => {
     const cardRef = useRef(null);
     const [isDownloading, setIsDownloading] = useState(false);
 
