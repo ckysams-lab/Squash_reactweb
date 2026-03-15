@@ -73,7 +73,15 @@ const PlayerCardModal = ({
             stats: { PAC, SHO, PAS, PHY, DEF, MEN, OVR },
             matchSummary: { internalWins, externalWins }
         };
-    }, [student, leagueMatches, assessments, attendanceLogs]);
+    }, [
+        student.id, 
+        student.totalPoints,
+        leagueMatches?.length, 
+        assessments?.length, 
+        attendanceLogs?.length,
+        // 加入 stringify 確保即使長度沒變但內容變了也能抓到 (例如修改分數)
+        JSON.stringify(assessments?.find(a => a.studentId === student.id))
+    ]);
 
     // -------------------------------------------------------------
     // 2. 視覺設定
