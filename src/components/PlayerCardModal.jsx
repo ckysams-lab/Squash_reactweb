@@ -1,4 +1,4 @@
-// src/components/PlayerCardModal.jsx (Version 5.2 - Custom Squash Metrics)
+// src/components/PlayerCardModal.jsx (Version 5.3 - Real Stats & PER Added)
 
 import React, { useRef, useState, useMemo } from 'react';
 import { ChevronRight, Download, Loader2, Trophy as TrophyIcon, Crown, X, Star } from 'lucide-react';
@@ -29,10 +29,11 @@ const PlayerCardModal = ({
     const handleNext = (e) => { e.stopPropagation(); if (currentIndex < rankedStudents.length - 1) setShowPlayerCard(rankedStudents[currentIndex + 1]); };
     
     // -------------------------------------------------------------
-    // 1. 客製化算分引擎：壁球專屬六維能力值
+    // 1. 真實數據計算與底分調整 (包含全新的 PER)
     // -------------------------------------------------------------
     const { stats, matchSummary, internalStats, externalStatsByYear } = useMemo(() => {
-        // --- 比賽數據統計 ---
+        
+        // --- 比賽數據 (勝率與戰績) ---
         const studentMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === student.id || m.player2Id === student.id));
         const internalMatches = studentMatches.filter(m => m.matchType !== 'external');
         const externalMatches = studentMatches.filter(m => m.matchType === 'external' && m.player1Id === student.id);
@@ -57,30 +58,25 @@ const PlayerCardModal = ({
             return acc;
         }, {});
 
-        // --- 體測數據轉化 ---
+        // --- 體測數據轉化為卡片數值 (預設底分 50) ---
         const studentAssessments = (assessments || []).filter(a => a.studentId === student.id).sort((a, b) => b.date.localeCompare(a.date));
         const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
 
-        // 預設底分 50
-        let PAC = 50, FH = 50, BH = 50, EDR = 50, FLE = 50, PWR = 50;
+        let PAC = 50, FH = 50, BH = 50, EDR = 50, FLE = 50;
 
         if (latestAssessment) {
-            // 1. PAC (速度): 14趟=50分, 22趟=99分 (線性方程: y = mx + c)
-            // (99-50)/(22-14) = 49/8 = 6.125 (斜率)
-            // y - 50 = 6.125(x - 14) => y = 6.125x - 85.75 + 50 => y = 6.125x - 35.75
+            // 1. PAC (速度): 14趟=50分, 22趟=99分
             if (latestAssessment.shuttleRun) {
                 const val = Number(latestAssessment.shuttleRun);
-                if (val <= 14) PAC = Math.max(0, Math.floor(val * (50/14))); // 低於14的懲罰機制
+                if (val <= 14) PAC = Math.max(0, Math.floor(val * (50/14))); 
                 else PAC = Math.min(99, Math.floor((6.125 * val) - 35.75));
             }
 
             // 2. FH (正手): fhDrive(滿分40) + fhVolley(滿分60)
             if (latestAssessment.fhDrive !== undefined && latestAssessment.fhVolley !== undefined) {
-                // 假設輸入的資料就是依照 40, 60 的配分輸入的
-                // 為了防止有人直接輸入 0-10 分，我們做個簡單的轉換保護 (假設滿分是10)
                 let dScore = Number(latestAssessment.fhDrive) <= 10 ? (Number(latestAssessment.fhDrive)/10)*40 : Number(latestAssessment.fhDrive);
                 let vScore = Number(latestAssessment.fhVolley) <= 10 ? (Number(latestAssessment.fhVolley)/10)*60 : Number(latestAssessment.fhVolley);
-                FH = Math.min(99, Math.max(50, Math.floor(dScore + vScore))); // 總和，保底50
+                FH = Math.min(99, Math.max(50, Math.floor(dScore + vScore))); 
             }
 
             // 3. BH (反手): bhDrive(滿分40) + bhVolley(滿分60)
@@ -90,46 +86,45 @@ const PlayerCardModal = ({
                 BH = Math.min(99, Math.max(50, Math.floor(dScore + vScore)));
             }
 
-            // 4. EDR (耐力): 滿分 1800 米
+            // 4. EDR (耐力): 滿分 1800 米 (假設 900米=50分)
             if (latestAssessment.enduranceRun) {
                 const val = Number(latestAssessment.enduranceRun);
-                // 假設 900米 是及格線 50 分
                 if (val <= 900) EDR = Math.max(0, Math.floor(val * (50/900)));
                 else EDR = Math.min(99, Math.floor(50 + ((val - 900) / 900) * 49));
             }
 
-            // 5. FLE (柔軟度): 滿分 30 cm
+            // 5. FLE (柔軟度): 滿分 30 cm (假設 15cm=50分)
             if (latestAssessment.flexibility) {
                 const val = Number(latestAssessment.flexibility);
-                // 假設 15cm 是及格線 50 分
                 if (val <= 15) FLE = Math.max(0, Math.floor(val * (50/15)));
                 else FLE = Math.min(99, Math.floor(50 + ((val - 15) / 15) * 49));
             }
+        }
 
-            // 6. PWR (力量): 滿分 70
-            if (latestAssessment.gripStrength) {
-                const val = Number(latestAssessment.gripStrength);
-                // 假設 35 是及格線 50 分
-                if (val <= 35) PWR = Math.max(0, Math.floor(val * (50/35)));
-                else PWR = Math.min(99, Math.floor(50 + ((val - 35) / 35) * 49));
-            }
+        // 6. PER (Performance 表現): 總積分轉換 (100分=50, 500分=99)
+        let PER = 50; 
+        const pts = student.totalPoints || student.points || 0;
+        if (pts <= 100) {
+            PER = Math.max(0, Math.floor(pts * (50/100)));
+        } else {
+            PER = Math.min(99, Math.floor(50 + ((pts - 100) / 400) * 49));
         }
 
         // OVR (Overall Rating) 總評 = 六項平均
-        const OVR = Math.floor((PAC + FH + BH + EDR + FLE + PWR) / 6);
+        const OVR = Math.floor((PAC + FH + BH + EDR + FLE + PER) / 6);
 
         return { 
-            stats: { PAC, FH, BH, EDR, FLE, PWR, OVR },
+            stats: { PAC, FH, BH, EDR, FLE, PER, OVR },
             matchSummary: { internalWins, externalWins },
             internalStats: { winRate: internalWinRate, wins: internalWins, losses: internalMatches.length - internalWins, giantKills: giantKillsCount },
             externalStatsByYear: Object.entries(statsByYear).sort((a,b) => b[0].localeCompare(a[0]))
         };
     }, [
         student.id, 
+        student.totalPoints, // 確保積分改變時重新計算 PER
         leagueMatches?.length, 
         assessments?.length, 
         attendanceLogs?.length,
-        // 加入 JSON.stringify 強制深度比對，確保體測分數修改時卡片會即時更新
         JSON.stringify(assessments?.filter(a => a.studentId === student.id).sort((a,b) => b.date.localeCompare(a.date))[0])
     ]);
 
@@ -150,7 +145,7 @@ const PlayerCardModal = ({
       if (!cardRef.current || isDownloading) return;
       setIsDownloading(true);
       try {
-        const dataUrl = await toPng(cardRef.current, { cacheBust: true, pixelRatio: 3 });
+        const dataUrl = await toPng(cardRef.current, { cacheBust: true, pixelRatio: 3, backgroundColor: '#ffffff' });
         const link = document.createElement('a');
         link.download = `PlayerCard_${student.name}.png`;
         link.href = dataUrl;
@@ -171,9 +166,10 @@ const PlayerCardModal = ({
 
         <div className="relative w-full max-w-[360px] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
           
-          <div ref={cardRef} className={`w-full aspect-[2.5/3.5] rounded-3xl p-1.5 bg-gradient-to-br ${cardTheme.border} ${cardTheme.glow} relative isolate overflow-hidden`}>
+          <div ref={cardRef} className={`w-full aspect-[2.5/3.5] rounded-3xl p-1.5 bg-gradient-to-br ${cardTheme.border} ${cardTheme.glow} relative isolate overflow-hidden`} style={{ backgroundColor: '#ffffff' }}>
             <div className={`w-full h-full rounded-[1.25rem] bg-gradient-to-b ${cardTheme.bg} flex flex-col relative overflow-hidden isolate`}>
                 
+                {/* 閃卡全息特效層 */}
                 <div className={`absolute inset-0 ${cardTheme.foil} mix-blend-overlay opacity-80 pointer-events-none z-30`}></div>
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-color-dodge z-30 pointer-events-none"></div>
 
@@ -185,7 +181,7 @@ const PlayerCardModal = ({
                     <img src={logoUrl} alt="Logo" className="w-6 h-6 object-contain opacity-90" crossOrigin="anonymous"/>
                 </div>
 
-                {/* 戰績小文字 */}
+                {/* 勝場小文字 */}
                 <div className="absolute top-28 left-4 z-20 flex flex-col gap-1 drop-shadow-md border-l-2 border-white/20 pl-2">
                     <div className="flex items-baseline gap-1">
                         <span className="text-[9px] font-bold text-white/60 tracking-wider">INT. WINS</span>
@@ -212,6 +208,7 @@ const PlayerCardModal = ({
                 {/* 底部資料區塊 */}
                 <div className="absolute bottom-0 left-0 w-full h-[40%] bg-gradient-to-t from-black via-black/95 to-transparent z-20 flex flex-col justify-end p-5">
                     
+                    {/* 姓名與稱號 */}
                     <div className="text-center mb-3 border-b border-white/10 pb-3">
                         <h2 className="text-3xl font-black text-white uppercase tracking-wider transform -skew-x-6" style={{ textShadow: '2px 2px 0px rgba(0,0,0,1)' }}>
                             {student.name}
@@ -219,7 +216,7 @@ const PlayerCardModal = ({
                         {student.eng_name && <p className={`text-[9px] font-black uppercase tracking-[0.3em] ${cardTheme.text} mt-1`}>{student.eng_name}</p>}
                     </div>
 
-                    {/* 👇 修正：壁球專屬六維能力值標籤 👇 */}
+                    {/* 六維能力值面板 (包含 PER) */}
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 px-2">
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-white font-bold">{stats.PAC}</span>
@@ -238,8 +235,8 @@ const PlayerCardModal = ({
                             <span className="text-white/50 text-[10px] font-bold">EDR (耐力)</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                            <span className="text-white font-bold">{stats.PWR}</span>
-                            <span className="text-white/50 text-[10px] font-bold">PWR (力量)</span>
+                            <span className="text-white font-bold">{stats.PER}</span>
+                            <span className="text-white/50 text-[10px] font-bold">PER (表現)</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-white font-bold">{stats.FLE}</span>
@@ -247,6 +244,7 @@ const PlayerCardModal = ({
                         </div>
                     </div>
 
+                    {/* 稀有度標籤與徽章 */}
                     <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center">
                         <div className="flex gap-1.5">
                             {uniqueAchievements.length > 0 ? uniqueAchievements.map(badgeId => {
@@ -263,6 +261,7 @@ const PlayerCardModal = ({
             </div>
           </div>
 
+          {/* 外部控制與下載按鈕 */}
           <div className="absolute top-1/2 -translate-y-1/2 w-full flex justify-between px-[-30px] pointer-events-none z-10" style={{ width: 'calc(100% + 5rem)' }}>
               <button onClick={(e) => { handlePrev(e); setIsDownloading(false); }} disabled={currentIndex <= 0} className="pointer-events-auto p-4 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white/30 disabled:opacity-30 transition-all"><ChevronRight className="rotate-180" size={28}/></button>
               <button onClick={(e) => { handleNext(e); setIsDownloading(false); }} disabled={currentIndex >= rankedStudents.length - 1} className="pointer-events-auto p-4 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white/30 disabled:opacity-30 transition-all"><ChevronRight size={28}/></button>
