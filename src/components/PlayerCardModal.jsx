@@ -1,12 +1,21 @@
-// src/components/PlayerCardModal.jsx (Version 5.0 - Ultimate Trading Card Edition)
+// src/components/PlayerCardModal.jsx (Version 5.1 - Real Stats & Match Info)
 
 import React, { useRef, useState, useMemo } from 'react';
-import { ChevronRight, Download, Loader2, X, Star } from 'lucide-react';
+import { ChevronRight, Download, Loader2, Trophy as TrophyIcon, Crown } from 'lucide-react';
 import { toPng } from 'html-to-image';
+
+const getAcademicYear = (dateString) => {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = date.getMonth(); 
+    if (month >= 8) return `${year}-${(year + 1).toString().slice(-2)}`;
+    return `${year - 1}-${year.toString().slice(-2)}`;
+};
 
 const PlayerCardModal = ({ 
     student, onClose, rankedStudents, setShowPlayerCard, 
-    leagueMatches, achievements, systemConfig, BADGE_DATA, ACHIEVEMENT_DATA
+    leagueMatches, achievements, systemConfig, BADGE_DATA, ACHIEVEMENT_DATA,
+    assessments, attendanceLogs
 }) => {
     const cardRef = useRef(null);
     const [isDownloading, setIsDownloading] = useState(false);
@@ -14,72 +23,70 @@ const PlayerCardModal = ({
     if (!student) return null;
 
     const currentIndex = rankedStudents.findIndex(s => s.id === student.id);
+    const rank = currentIndex >= 0 ? currentIndex + 1 : '-';
+
+    const handlePrev = (e) => { e.stopPropagation(); if (currentIndex > 0) setShowPlayerCard(rankedStudents[currentIndex - 1]); };
+    const handleNext = (e) => { e.stopPropagation(); if (currentIndex < rankedStudents.length - 1) setShowPlayerCard(rankedStudents[currentIndex + 1]); };
     
     // -------------------------------------------------------------
-    // 1. 數據轉換：將系統數據轉化為 0-99 的「遊戲球星卡」能力值
+    // 1. 真實數據計算與底分調整 (底分 50)
     // -------------------------------------------------------------
-    const stats = useMemo(() => {
-        // 從勝率計算技巧 (Skill)
+    const { stats, matchSummary } = useMemo(() => {
+        // 分離內部與外部比賽
         const studentMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === student.id || m.player2Id === student.id));
-        const wins = studentMatches.filter(m => m.winnerId === student.id).length;
-        const winRate = studentMatches.length > 0 ? (wins / studentMatches.length) : 0;
-        const baseSkill = 50 + (winRate * 45); // 勝率 100% 就是 95 分
+        const internalMatches = studentMatches.filter(m => m.matchType !== 'external');
+        const externalMatches = studentMatches.filter(m => m.matchType === 'external' && m.player1Id === student.id);
 
-        // 從積分計算經驗/總評基數
-        const points = student.totalPoints || 0;
-        const experience = Math.min(99, 40 + (points / 20));
+        const internalWins = internalMatches.filter(m => m.winnerId === student.id).length;
+        const externalWins = externalMatches.filter(m => m.winnerId === student.id).length;
+        const internalWinRate = internalMatches.length > 0 ? (internalWins / internalMatches.length) : 0;
 
-        // 模擬的六維能力值 (在真實環境中，可以從 AssessmentsPage 的數據來對應)
-        const PAC = Math.min(99, Math.floor(baseSkill * 0.9 + Math.random() * 10)); // 步法速度
-        const SHO = Math.min(99, Math.floor(baseSkill * 1.05)); // 擊球
-        const PAS = Math.min(99, Math.floor(baseSkill * 0.95)); // 控球
-        const PHY = Math.min(99, Math.floor(experience * 0.8 + 20)); // 體能
-        const DEF = Math.min(99, Math.floor(baseSkill * 0.85 + 10)); // 防守
-        const MEN = Math.min(99, Math.floor(experience * 0.9 + 10)); // 心理素質
+        // --- 能力值計算 (基礎分皆為 50) ---
+        const calcScore = (val, max, base = 50) => {
+            if (!val || val <= 0) return base; // 沒有數據就給 50 分
+            return Math.min(99, Math.floor(base + ((val / max) * (99 - base))));
+        };
 
-        // OVR (Overall Rating) 總評
+        const studentAssessments = (assessments || []).filter(a => a.studentId === student.id).sort((a, b) => b.date.localeCompare(a.date));
+        const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
+
+        let PAC = 50, SHO = 50, PAS = 50, PHY = 50;
+
+        if (latestAssessment) {
+            PAC = calcScore(latestAssessment.shuttleRun, 25, 50);
+            const powerScore = ((latestAssessment.fhDrive || 0) + (latestAssessment.bhDrive || 0)) / 2;
+            SHO = calcScore(powerScore + (latestAssessment.gripStrength || 0)/5, 20, 50);
+            const controlScore = ((latestAssessment.fhVolley || 0) + (latestAssessment.bhVolley || 0)) / 2;
+            PAS = calcScore(controlScore, 10, 50);
+            PHY = calcScore(latestAssessment.enduranceRun, 10, 50);
+        }
+
+        const DEF = Math.min(99, Math.floor(50 + (internalWinRate * 49))); 
+        
+        const studentAttendance = (attendanceLogs || []).filter(log => log.studentId === student.id);
+        const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
+        const MEN = calcScore(attendedSessions, 20, 50);
+
         const OVR = Math.floor((PAC + SHO + PAS + PHY + DEF + MEN) / 6);
 
-        return { PAC, SHO, PAS, PHY, DEF, MEN, OVR };
-    }, [student, leagueMatches]);
+        return { 
+            stats: { PAC, SHO, PAS, PHY, DEF, MEN, OVR },
+            matchSummary: { internalWins, externalWins }
+        };
+    }, [student, leagueMatches, assessments, attendanceLogs]);
 
     // -------------------------------------------------------------
-    // 2. 視覺設定：根據 OVR 決定卡片的稀有度 (金、銀、銅卡)
+    // 2. 視覺設定
     // -------------------------------------------------------------
     const cardTheme = useMemo(() => {
-        if (stats.OVR >= 85) return { // 傳奇金卡
-            type: 'GOLD',
-            border: 'from-yellow-300 via-yellow-600 to-yellow-800',
-            bg: 'from-stone-900 via-stone-800 to-black',
-            text: 'text-yellow-400',
-            glow: 'shadow-[0_0_30px_rgba(234,179,8,0.3)]',
-            foil: 'bg-gradient-to-tr from-yellow-300/20 via-transparent to-white/20'
-        };
-        if (stats.OVR >= 70) return { // 精英銀卡
-            type: 'SILVER',
-            border: 'from-slate-300 via-slate-500 to-slate-700',
-            bg: 'from-slate-800 via-slate-900 to-black',
-            text: 'text-slate-300',
-            glow: 'shadow-[0_0_30px_rgba(148,163,184,0.3)]',
-            foil: 'bg-gradient-to-tr from-slate-200/20 via-transparent to-white/20'
-        };
-        return { // 基礎銅卡
-            type: 'BRONZE',
-            border: 'from-orange-400 via-orange-700 to-orange-900',
-            bg: 'from-neutral-800 via-neutral-900 to-black',
-            text: 'text-orange-400',
-            glow: 'shadow-[0_0_30px_rgba(249,115,22,0.2)]',
-            foil: 'bg-gradient-to-tr from-orange-300/10 via-transparent to-white/10'
-        };
+        if (stats.OVR >= 85) return { type: 'GOLD', border: 'from-yellow-300 via-yellow-600 to-yellow-800', bg: 'from-stone-900 via-stone-800 to-black', text: 'text-yellow-400', glow: 'shadow-[0_0_30px_rgba(234,179,8,0.3)]', foil: 'bg-gradient-to-tr from-yellow-300/20 via-transparent to-white/20' };
+        if (stats.OVR >= 70) return { type: 'SILVER', border: 'from-slate-300 via-slate-500 to-slate-700', bg: 'from-slate-800 via-slate-900 to-black', text: 'text-slate-300', glow: 'shadow-[0_0_30px_rgba(148,163,184,0.3)]', foil: 'bg-gradient-to-tr from-slate-200/20 via-transparent to-white/20' };
+        return { type: 'BRONZE', border: 'from-orange-400 via-orange-700 to-orange-900', bg: 'from-neutral-800 via-neutral-900 to-black', text: 'text-orange-400', glow: 'shadow-[0_0_30px_rgba(249,115,22,0.2)]', foil: 'bg-gradient-to-tr from-orange-300/10 via-transparent to-white/10' };
     }, [stats.OVR]);
 
-    // 取得徽章 (最多顯示 3 個)
     const uniqueAchievements = [...new Set(achievements.filter(ach => ach.studentId === student.id).map(ach => ach.badgeId))].slice(0, 3);
     const logoUrl = systemConfig?.schoolLogo || "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
 
-    // -------------------------------------------------------------
-    // 下載邏輯
-    // -------------------------------------------------------------
     const handleDownload = async (e) => {
       e.stopPropagation();
       if (!cardRef.current || isDownloading) return;
@@ -100,33 +107,36 @@ const PlayerCardModal = ({
     return (
       <div className="fixed inset-0 z-[300] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={onClose}>
         
-        {/* 關閉按鈕 */}
         <button onClick={onClose} className="absolute top-6 right-6 p-3 text-white/50 hover:text-white bg-white/10 rounded-full hover:bg-white/20 transition-all z-50">
             <X size={24}/>
         </button>
 
         <div className="relative w-full max-w-[360px] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
           
-          {/* ========================================== */}
-          {/* 🌟 球星卡本體 (2.5 : 3.5 比例) 🌟 */}
-          {/* ========================================== */}
-          <div 
-            ref={cardRef} 
-            className={`w-full aspect-[2.5/3.5] rounded-3xl p-1.5 bg-gradient-to-br ${cardTheme.border} ${cardTheme.glow} relative isolate overflow-hidden`}
-          >
-            {/* 卡片內層背景 */}
+          <div ref={cardRef} className={`w-full aspect-[2.5/3.5] rounded-3xl p-1.5 bg-gradient-to-br ${cardTheme.border} ${cardTheme.glow} relative isolate overflow-hidden`}>
             <div className={`w-full h-full rounded-[1.25rem] bg-gradient-to-b ${cardTheme.bg} flex flex-col relative overflow-hidden isolate`}>
                 
-                {/* 閃卡全息特效層 (Foil Effect) */}
                 <div className={`absolute inset-0 ${cardTheme.foil} mix-blend-overlay opacity-80 pointer-events-none z-30`}></div>
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-color-dodge z-30 pointer-events-none"></div>
 
-                {/* 頂部：OVR 總評與國籍/位置 */}
+                {/* 頂部：OVR 與 Logo */}
                 <div className="absolute top-4 left-4 z-20 flex flex-col items-center drop-shadow-md">
                     <span className="text-4xl font-black text-white leading-none tracking-tighter" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>{stats.OVR}</span>
                     <span className={`text-[10px] font-black uppercase tracking-widest ${cardTheme.text} mt-0.5`}>{student.squashClass ? student.squashClass.substring(0,2) : 'SQ'}</span>
                     <div className="w-6 h-[2px] bg-white/30 my-1.5"></div>
                     <img src={logoUrl} alt="Logo" className="w-6 h-6 object-contain opacity-90" crossOrigin="anonymous"/>
+                </div>
+
+                {/* 👇 新增：戰績小文字 (放置在左側，OVR 面板的下方) 👇 */}
+                <div className="absolute top-28 left-4 z-20 flex flex-col gap-1 drop-shadow-md border-l-2 border-white/20 pl-2">
+                    <div className="flex items-baseline gap-1">
+                        <span className="text-[9px] font-bold text-white/60 tracking-wider">INT. WINS</span>
+                        <span className={`text-xs font-black ${cardTheme.text}`}>{matchSummary.internalWins}</span>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                        <span className="text-[9px] font-bold text-white/60 tracking-wider">EXT. WINS</span>
+                        <span className={`text-xs font-black ${cardTheme.text}`}>{matchSummary.externalWins}</span>
+                    </div>
                 </div>
 
                 {/* 選手照片區塊 */}
@@ -144,7 +154,6 @@ const PlayerCardModal = ({
                 {/* 底部資料區塊 */}
                 <div className="absolute bottom-0 left-0 w-full h-[40%] bg-gradient-to-t from-black via-black/95 to-transparent z-20 flex flex-col justify-end p-5">
                     
-                    {/* 姓名與特殊稱號 */}
                     <div className="text-center mb-3 border-b border-white/10 pb-3">
                         <h2 className="text-3xl font-black text-white uppercase tracking-wider transform -skew-x-6" style={{ textShadow: '2px 2px 0px rgba(0,0,0,1)' }}>
                             {student.name}
@@ -152,7 +161,6 @@ const PlayerCardModal = ({
                         {student.eng_name && <p className={`text-[9px] font-black uppercase tracking-[0.3em] ${cardTheme.text} mt-1`}>{student.eng_name}</p>}
                     </div>
 
-                    {/* 六維能力值面板 (FIFA Style) */}
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 px-2">
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-white font-bold">{stats.PAC}</span>
@@ -160,11 +168,11 @@ const PlayerCardModal = ({
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-white font-bold">{stats.SHO}</span>
-                            <span className="text-white/50 text-[10px] font-bold">SHO (擊球)</span>
+                            <span className="text-white/50 text-[10px] font-bold">SHO (火力)</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-white font-bold">{stats.PAS}</span>
-                            <span className="text-white/50 text-[10px] font-bold">PAS (控球)</span>
+                            <span className="text-white/50 text-[10px] font-bold">PAS (技巧)</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-white font-bold">{stats.PHY}</span>
@@ -176,11 +184,10 @@ const PlayerCardModal = ({
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-white font-bold">{stats.MEN}</span>
-                            <span className="text-white/50 text-[10px] font-bold">MEN (心理)</span>
+                            <span className="text-white/50 text-[10px] font-bold">MEN (態度)</span>
                         </div>
                     </div>
 
-                    {/* 稀有度標籤與徽章 */}
                     <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center">
                         <div className="flex gap-1.5">
                             {uniqueAchievements.length > 0 ? uniqueAchievements.map(badgeId => {
@@ -197,9 +204,6 @@ const PlayerCardModal = ({
             </div>
           </div>
 
-          {/* ========================================== */}
-          {/* 外部控制與下載按鈕 */}
-          {/* ========================================== */}
           <div className="absolute top-1/2 -translate-y-1/2 w-full flex justify-between px-[-30px] pointer-events-none z-10" style={{ width: 'calc(100% + 5rem)' }}>
               <button onClick={(e) => { handlePrev(e); setIsDownloading(false); }} disabled={currentIndex <= 0} className="pointer-events-auto p-4 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white/30 disabled:opacity-30 transition-all"><ChevronRight className="rotate-180" size={28}/></button>
               <button onClick={(e) => { handleNext(e); setIsDownloading(false); }} disabled={currentIndex >= rankedStudents.length - 1} className="pointer-events-auto p-4 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white/30 disabled:opacity-30 transition-all"><ChevronRight size={28}/></button>
