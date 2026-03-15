@@ -1,4 +1,4 @@
-// src/components/PlayerCardModal.jsx (Version 5.1 - Real Stats & Match Info)
+// src/components/PlayerCardModal.jsx (Version 5.2 - Custom Squash Metrics)
 
 import React, { useRef, useState, useMemo } from 'react';
 import { ChevronRight, Download, Loader2, Trophy as TrophyIcon, Crown, X, Star } from 'lucide-react';
@@ -29,58 +29,108 @@ const PlayerCardModal = ({
     const handleNext = (e) => { e.stopPropagation(); if (currentIndex < rankedStudents.length - 1) setShowPlayerCard(rankedStudents[currentIndex + 1]); };
     
     // -------------------------------------------------------------
-    // 1. 真實數據計算與底分調整 (底分 50)
+    // 1. 客製化算分引擎：壁球專屬六維能力值
     // -------------------------------------------------------------
-    const { stats, matchSummary } = useMemo(() => {
-        // 分離內部與外部比賽
+    const { stats, matchSummary, internalStats, externalStatsByYear } = useMemo(() => {
+        // --- 比賽數據統計 ---
         const studentMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === student.id || m.player2Id === student.id));
         const internalMatches = studentMatches.filter(m => m.matchType !== 'external');
         const externalMatches = studentMatches.filter(m => m.matchType === 'external' && m.player1Id === student.id);
 
         const internalWins = internalMatches.filter(m => m.winnerId === student.id).length;
         const externalWins = externalMatches.filter(m => m.winnerId === student.id).length;
-        const internalWinRate = internalMatches.length > 0 ? (internalWins / internalMatches.length) : 0;
+        const internalWinRate = internalMatches.length > 0 ? Math.round((internalWins / internalMatches.length) * 100) : 0;
+        
+        let giantKillsCount = 0;
+        internalMatches.filter(m => m.winnerId === student.id).forEach(match => {
+            const opponentId = match.player1Id === student.id ? match.player2Id : match.player1Id;
+            const opponentIndex = rankedStudents.findIndex(s => s.id === opponentId);
+            if (opponentIndex >= 0 && (currentIndex - opponentIndex) >= 5) giantKillsCount++;
+        });
 
-        // --- 能力值計算 (基礎分皆為 50) ---
-        const calcScore = (val, max, base = 50) => {
-            if (!val || val <= 0) return base; // 沒有數據就給 50 分
-            return Math.min(99, Math.floor(base + ((val / max) * (99 - base))));
-        };
+        const statsByYear = externalMatches.reduce((acc, match) => {
+            const year = getAcademicYear(match.date);
+            if (!acc[year]) acc[year] = { played: 0, wins: 0, losses: 0 };
+            acc[year].played += 1;
+            if (match.winnerId === student.id) acc[year].wins += 1;
+            else acc[year].losses += 1;
+            return acc;
+        }, {});
 
+        // --- 體測數據轉化 ---
         const studentAssessments = (assessments || []).filter(a => a.studentId === student.id).sort((a, b) => b.date.localeCompare(a.date));
         const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
 
-        let PAC = 50, SHO = 50, PAS = 50, PHY = 50;
+        // 預設底分 50
+        let PAC = 50, FH = 50, BH = 50, EDR = 50, FLE = 50, PWR = 50;
 
         if (latestAssessment) {
-            PAC = calcScore(latestAssessment.shuttleRun, 25, 50);
-            const powerScore = ((latestAssessment.fhDrive || 0) + (latestAssessment.bhDrive || 0)) / 2;
-            SHO = calcScore(powerScore + (latestAssessment.gripStrength || 0)/5, 20, 50);
-            const controlScore = ((latestAssessment.fhVolley || 0) + (latestAssessment.bhVolley || 0)) / 2;
-            PAS = calcScore(controlScore, 10, 50);
-            PHY = calcScore(latestAssessment.enduranceRun, 10, 50);
+            // 1. PAC (速度): 14趟=50分, 22趟=99分 (線性方程: y = mx + c)
+            // (99-50)/(22-14) = 49/8 = 6.125 (斜率)
+            // y - 50 = 6.125(x - 14) => y = 6.125x - 85.75 + 50 => y = 6.125x - 35.75
+            if (latestAssessment.shuttleRun) {
+                const val = Number(latestAssessment.shuttleRun);
+                if (val <= 14) PAC = Math.max(0, Math.floor(val * (50/14))); // 低於14的懲罰機制
+                else PAC = Math.min(99, Math.floor((6.125 * val) - 35.75));
+            }
+
+            // 2. FH (正手): fhDrive(滿分40) + fhVolley(滿分60)
+            if (latestAssessment.fhDrive !== undefined && latestAssessment.fhVolley !== undefined) {
+                // 假設輸入的資料就是依照 40, 60 的配分輸入的
+                // 為了防止有人直接輸入 0-10 分，我們做個簡單的轉換保護 (假設滿分是10)
+                let dScore = Number(latestAssessment.fhDrive) <= 10 ? (Number(latestAssessment.fhDrive)/10)*40 : Number(latestAssessment.fhDrive);
+                let vScore = Number(latestAssessment.fhVolley) <= 10 ? (Number(latestAssessment.fhVolley)/10)*60 : Number(latestAssessment.fhVolley);
+                FH = Math.min(99, Math.max(50, Math.floor(dScore + vScore))); // 總和，保底50
+            }
+
+            // 3. BH (反手): bhDrive(滿分40) + bhVolley(滿分60)
+            if (latestAssessment.bhDrive !== undefined && latestAssessment.bhVolley !== undefined) {
+                let dScore = Number(latestAssessment.bhDrive) <= 10 ? (Number(latestAssessment.bhDrive)/10)*40 : Number(latestAssessment.bhDrive);
+                let vScore = Number(latestAssessment.bhVolley) <= 10 ? (Number(latestAssessment.bhVolley)/10)*60 : Number(latestAssessment.bhVolley);
+                BH = Math.min(99, Math.max(50, Math.floor(dScore + vScore)));
+            }
+
+            // 4. EDR (耐力): 滿分 1800 米
+            if (latestAssessment.enduranceRun) {
+                const val = Number(latestAssessment.enduranceRun);
+                // 假設 900米 是及格線 50 分
+                if (val <= 900) EDR = Math.max(0, Math.floor(val * (50/900)));
+                else EDR = Math.min(99, Math.floor(50 + ((val - 900) / 900) * 49));
+            }
+
+            // 5. FLE (柔軟度): 滿分 30 cm
+            if (latestAssessment.flexibility) {
+                const val = Number(latestAssessment.flexibility);
+                // 假設 15cm 是及格線 50 分
+                if (val <= 15) FLE = Math.max(0, Math.floor(val * (50/15)));
+                else FLE = Math.min(99, Math.floor(50 + ((val - 15) / 15) * 49));
+            }
+
+            // 6. PWR (力量): 滿分 70
+            if (latestAssessment.gripStrength) {
+                const val = Number(latestAssessment.gripStrength);
+                // 假設 35 是及格線 50 分
+                if (val <= 35) PWR = Math.max(0, Math.floor(val * (50/35)));
+                else PWR = Math.min(99, Math.floor(50 + ((val - 35) / 35) * 49));
+            }
         }
 
-        const DEF = Math.min(99, Math.floor(50 + (internalWinRate * 49))); 
-        
-        const studentAttendance = (attendanceLogs || []).filter(log => log.studentId === student.id);
-        const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
-        const MEN = calcScore(attendedSessions, 20, 50);
-
-        const OVR = Math.floor((PAC + SHO + PAS + PHY + DEF + MEN) / 6);
+        // OVR (Overall Rating) 總評 = 六項平均
+        const OVR = Math.floor((PAC + FH + BH + EDR + FLE + PWR) / 6);
 
         return { 
-            stats: { PAC, SHO, PAS, PHY, DEF, MEN, OVR },
-            matchSummary: { internalWins, externalWins }
+            stats: { PAC, FH, BH, EDR, FLE, PWR, OVR },
+            matchSummary: { internalWins, externalWins },
+            internalStats: { winRate: internalWinRate, wins: internalWins, losses: internalMatches.length - internalWins, giantKills: giantKillsCount },
+            externalStatsByYear: Object.entries(statsByYear).sort((a,b) => b[0].localeCompare(a[0]))
         };
     }, [
         student.id, 
-        student.totalPoints,
         leagueMatches?.length, 
         assessments?.length, 
         attendanceLogs?.length,
-        // 加入 stringify 確保即使長度沒變但內容變了也能抓到 (例如修改分數)
-        JSON.stringify(assessments?.find(a => a.studentId === student.id))
+        // 加入 JSON.stringify 強制深度比對，確保體測分數修改時卡片會即時更新
+        JSON.stringify(assessments?.filter(a => a.studentId === student.id).sort((a,b) => b.date.localeCompare(a.date))[0])
     ]);
 
     // -------------------------------------------------------------
@@ -135,7 +185,7 @@ const PlayerCardModal = ({
                     <img src={logoUrl} alt="Logo" className="w-6 h-6 object-contain opacity-90" crossOrigin="anonymous"/>
                 </div>
 
-                {/* 👇 新增：戰績小文字 (放置在左側，OVR 面板的下方) 👇 */}
+                {/* 戰績小文字 */}
                 <div className="absolute top-28 left-4 z-20 flex flex-col gap-1 drop-shadow-md border-l-2 border-white/20 pl-2">
                     <div className="flex items-baseline gap-1">
                         <span className="text-[9px] font-bold text-white/60 tracking-wider">INT. WINS</span>
@@ -169,30 +219,31 @@ const PlayerCardModal = ({
                         {student.eng_name && <p className={`text-[9px] font-black uppercase tracking-[0.3em] ${cardTheme.text} mt-1`}>{student.eng_name}</p>}
                     </div>
 
+                    {/* 👇 修正：壁球專屬六維能力值標籤 👇 */}
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 px-2">
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-white font-bold">{stats.PAC}</span>
                             <span className="text-white/50 text-[10px] font-bold">PAC (步法)</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                            <span className="text-white font-bold">{stats.SHO}</span>
-                            <span className="text-white/50 text-[10px] font-bold">SHO (火力)</span>
+                            <span className="text-white font-bold">{stats.FH}</span>
+                            <span className="text-white/50 text-[10px] font-bold">FH (正手)</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                            <span className="text-white font-bold">{stats.PAS}</span>
-                            <span className="text-white/50 text-[10px] font-bold">PAS (技巧)</span>
+                            <span className="text-white font-bold">{stats.BH}</span>
+                            <span className="text-white/50 text-[10px] font-bold">BH (反手)</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                            <span className="text-white font-bold">{stats.PHY}</span>
-                            <span className="text-white/50 text-[10px] font-bold">PHY (體能)</span>
+                            <span className="text-white font-bold">{stats.EDR}</span>
+                            <span className="text-white/50 text-[10px] font-bold">EDR (耐力)</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                            <span className="text-white font-bold">{stats.DEF}</span>
-                            <span className="text-white/50 text-[10px] font-bold">DEF (防守)</span>
+                            <span className="text-white font-bold">{stats.PWR}</span>
+                            <span className="text-white/50 text-[10px] font-bold">PWR (力量)</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                            <span className="text-white font-bold">{stats.MEN}</span>
-                            <span className="text-white/50 text-[10px] font-bold">MEN (態度)</span>
+                            <span className="text-white font-bold">{stats.FLE}</span>
+                            <span className="text-white/50 text-[10px] font-bold">FLE (柔軟)</span>
                         </div>
                     </div>
 
