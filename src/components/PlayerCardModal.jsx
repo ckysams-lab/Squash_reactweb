@@ -1,7 +1,7 @@
 // src/components/PlayerCardModal.jsx (Version 5.1 - Real Stats & Match Info)
 
 import React, { useRef, useState, useMemo } from 'react';
-import { ChevronRight, Download, Loader2, Trophy as TrophyIcon, Crown } from 'lucide-react';
+import { ChevronRight, Download, Loader2, Trophy as TrophyIcon, Crown, X } from 'lucide-react';
 import { toPng } from 'html-to-image';
 
 const getAcademicYear = (dateString) => {
