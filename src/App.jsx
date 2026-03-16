@@ -655,14 +655,45 @@ const handleSaveFeaturedBadges = async () => {
   };
 
     const handleSaveAssessment = async () => {
-    const { studentId, date, situps, shuttleRun, enduranceRun, gripStrength, flexibility, fhDrive, bhDrive, fhVolley, bhVolley } = newAssessment;
+    // 1. 將 newAssessment 裡面所有的欄位獨立抽出來。
+    // 同時，我們明確宣告預設值為空字串 '' 或 0，徹底消滅 undefined！
+    const { 
+        studentId, 
+        date, 
+        notes = '', 
+        situps = 0, 
+        shuttleRun = 0, 
+        enduranceRun = 0, 
+        gripStrength = 0, 
+        flexibility = 0, 
+        fhDrive = 0, 
+        bhDrive = 0, 
+        fhVolley = 0, 
+        bhVolley = 0,
+        rankT1 = '', 
+        rankT2 = '', 
+        rankT3 = '', 
+        hoursT1 = '', 
+        hoursT2 = '', 
+        hoursT3 = '' 
+        // ⚠️ 注意：這裡刻意沒有抽取 'id'，所以 id 已經被我們遺棄了
+    } = newAssessment;
+
+    // 2. 必填驗證
     if (!studentId || !date) {
       alert("請選擇學員並填寫評估日期！"); return;
     }
+
     setIsUpdating(true);
+
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assessments'), {
-        ...newAssessment,
+      // 3. 我們親手打造一個乾淨的物件給 Firebase
+      const cleanDataToSave = {
+        studentId: studentId,
+        date: date,
+        notes: notes || '', 
+        
+        // 確保數字欄位都是 Number
         situps: Number(situps) || 0,
         shuttleRun: Number(shuttleRun) || 0,
         enduranceRun: Number(enduranceRun) || 0,
@@ -672,16 +703,36 @@ const handleSaveFeaturedBadges = async () => {
         bhDrive: Number(bhDrive) || 0,
         fhVolley: Number(fhVolley) || 0,
         bhVolley: Number(bhVolley) || 0,
+
+        // 確保字串欄位都是 String
+        rankT1: String(rankT1 || ''),
+        rankT2: String(rankT2 || ''),
+        rankT3: String(rankT3 || ''),
+        hoursT1: String(hoursT1 || ''),
+        hoursT2: String(hoursT2 || ''),
+        hoursT3: String(hoursT3 || ''),
+
         timestamp: serverTimestamp()
-      });
+      };
+
+      // 4. 將這包乾淨的資料寫入
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assessments'), cleanDataToSave);
+
       alert('✅ 綜合能力評估儲存成功！');
+      
+      // 5. 儲存成功後，清空前端表單
       setNewAssessment({
-        studentId: '', date: new Date().toISOString().split('T')[0], situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', fhDrive: '', bhDrive: '', fhVolley: '', bhVolley: '', notes: ''
+        studentId: '', date: new Date().toISOString().split('T')[0], 
+        situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', 
+        fhDrive: '', bhDrive: '', fhVolley: '', bhVolley: '', notes: '',
+        rankT1: '', rankT2: '', rankT3: '', hoursT1: '', hoursT2: '', hoursT3: ''
       });
+
     } catch (e) {
-      console.error("Failed to save assessment", e);
-      alert('儲存失敗，請檢查網絡連線。');
+      console.error("Failed to save assessment:", e);
+      alert('儲存失敗，請檢查瀏覽器 Console 尋找原因。');
     }
+
     setIsUpdating(false);
   };
   
