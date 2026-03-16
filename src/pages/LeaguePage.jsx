@@ -1,45 +1,25 @@
+// src/pages/LeaguePage.jsx (Version 3.2 - Team Tie Results Added)
+
 import React, { useRef, useState } from 'react';
-import { Target, Activity, Plus, Swords, Zap, PlayCircle, FileText, Pencil, Trash2, Download, Loader2 } from 'lucide-react';
+import { Target, Activity, Plus, Swords, Zap, PlayCircle, FileText, Pencil, Trash2, Download, Loader2, Trophy } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
 
 export default function LeaguePage({
-    role,
-    currentUserInfo,
-    setShowTacticalBoard,
-    setShowUmpirePanel,
-    setActiveLeagueMatch,
-    setShowTournamentModal,
-    selectedTournament,
-    setSelectedTournament,
-    tournamentList,
-    leagueMatches,
-    myTournamentStats,
-    myUpcomingMatches,
-    groupedMatches,
-    tournamentStandings,
-    handleCheerMatch,
-    handleUpdateLeagueMatchScore,
-    handleEditLeagueMatch,
-    deleteItem,
-    schoolLogo // 接收從 App.jsx 傳來的 schoolLogo
+    role, currentUserInfo, setShowTacticalBoard, setShowUmpirePanel,
+    setActiveLeagueMatch, setShowTournamentModal, selectedTournament,
+    setSelectedTournament, tournamentList, leagueMatches, myTournamentStats,
+    myUpcomingMatches, groupedMatches, tournamentStandings, handleCheerMatch,
+    handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, schoolLogo
 }) {
-
     const posterRef = useRef();
     const [isRenderingPoster, setIsRenderingPoster] = useState(false);
 
     const handleDownloadPoster = () => {
-        if (Object.keys(tournamentStandings).length === 0) {
-            alert("目前沒有可生成的積分榜數據。");
-            return;
-        }
+        if (Object.keys(tournamentStandings).length === 0) return alert("目前沒有可生成的積分榜數據。");
         setIsRenderingPoster(true);
-
         setTimeout(() => {
-            html2canvas(posterRef.current, {
-                scale: 2,
-                useCORS: true,
-            }).then(canvas => {
+            html2canvas(posterRef.current, { scale: 2, useCORS: true }).then(canvas => {
                 const link = document.createElement('a');
                 link.download = `league_standings_${selectedTournament}.png`;
                 link.href = canvas.toDataURL('image/png');
@@ -52,6 +32,77 @@ export default function LeaguePage({
             });
         }, 500);
     };
+
+    // 👇 --- 新增：渲染團體賽戰果結算面板的邏輯 --- 👇
+    const renderTeamTieResult = (groupName, matches) => {
+        // 確保這是團體賽 (特徵是 groupName 包含 ' vs ')
+        if (!groupName || !groupName.includes(' vs ')) return null;
+
+        const [teamA, teamB] = groupName.split(' vs ');
+        let teamAWins = 0;
+        let teamBWins = 0;
+        let completedMatches = 0;
+
+        matches.forEach(match => {
+            if (match.status === 'completed') {
+                completedMatches++;
+                // 判斷獲勝者屬於哪一隊 (我們在排程時，把隊名寫在 player1Name 和 player2Name 的前面了)
+                if (match.winnerId === match.player1Id && match.player1Name.startsWith(teamA)) teamAWins++;
+                else if (match.winnerId === match.player2Id && match.player2Name.startsWith(teamA)) teamAWins++;
+                else if (match.winnerId === match.player1Id && match.player1Name.startsWith(teamB)) teamBWins++;
+                else if (match.winnerId === match.player2Id && match.player2Name.startsWith(teamB)) teamBWins++;
+            }
+        });
+
+        const isAllCompleted = completedMatches === matches.length && matches.length > 0;
+        const winnerTeam = teamAWins > teamBWins ? teamA : (teamBWins > teamAWins ? teamB : '平手');
+
+        return (
+            <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-6 mb-6 text-white shadow-lg relative overflow-hidden">
+                {/* 裝飾光暈 */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full bg-blue-500/10 blur-3xl pointer-events-none"></div>
+                
+                <h5 className="text-center text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">團體對抗賽戰況 (Team Tie)</h5>
+                
+                <div className="flex items-center justify-between max-w-lg mx-auto relative z-10">
+                    <div className="text-center flex-1">
+                        <p className={`text-2xl md:text-3xl font-black ${teamAWins > teamBWins ? 'text-yellow-400' : 'text-white'}`}>{teamA}</p>
+                    </div>
+                    
+                    <div className="flex items-center gap-4 px-6">
+                        <div className="w-12 h-16 bg-slate-800 rounded-xl border-2 border-slate-700 flex items-center justify-center text-3xl font-black">{teamAWins}</div>
+                        <span className="text-slate-500 font-black text-xl">-</span>
+                        <div className="w-12 h-16 bg-slate-800 rounded-xl border-2 border-slate-700 flex items-center justify-center text-3xl font-black">{teamBWins}</div>
+                    </div>
+                    
+                    <div className="text-center flex-1">
+                        <p className={`text-2xl md:text-3xl font-black ${teamBWins > teamAWins ? 'text-yellow-400' : 'text-white'}`}>{teamB}</p>
+                    </div>
+                </div>
+
+                <div className="mt-6 text-center">
+                    {isAllCompleted ? (
+                        <div className="inline-flex flex-col items-center">
+                            <span className="bg-yellow-500 text-yellow-950 px-6 py-2 rounded-full font-black text-sm tracking-widest uppercase flex items-center gap-2 shadow-[0_0_15px_rgba(234,179,8,0.5)]">
+                                <Trophy size={16} /> {winnerTeam === '平手' ? '雙方戰平' : `${winnerTeam} 奪得勝利！`}
+                            </span>
+                            {/* 未來可以加上一鍵發放團體積分的按鈕 */}
+                            {role === 'admin' && winnerTeam !== '平手' && (
+                                <button className="mt-3 text-xs text-blue-300 hover:text-white transition-colors underline underline-offset-4">
+                                    [開發中] 為勝隊所有成員發放 +50 團隊積分
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <span className="bg-slate-700/50 border border-slate-600 px-4 py-1.5 rounded-full text-xs font-bold text-slate-300 tracking-wider">
+                            進度：已賽 {completedMatches} / 總計 {matches.length} 點
+                        </span>
+                    )}
+                </div>
+            </div>
+        );
+    };
+    // 👆 ------------------------------------------------ 👆
 
     return (
         <div className="space-y-10 animate-in fade-in duration-500 font-bold">
@@ -133,13 +184,21 @@ export default function LeaguePage({
                     </div>
                 ) : (
                     Object.keys(groupedMatches).map(groupName => (
-                        <div key={groupName} className="mb-10">
-                            <h4 className="text-2xl font-black text-slate-600 mb-4 pl-2">{groupName}</h4>
+                        <div key={groupName} className="mb-12">
+                            {/* 群組標題 (如果不是對戰名稱，就當作普通群組顯示) */}
+                            {!groupName.includes(' vs ') && (
+                                <h4 className="text-2xl font-black text-slate-600 mb-4 pl-2">{groupName}</h4>
+                            )}
+
                             <div className="overflow-x-auto bg-slate-50/50 p-2 md:p-6 rounded-3xl border">
                                 
-                                {/* 分組積分榜 */}
-                                {tournamentStandings[groupName] && (
-                                    <table className="w-full text-left mb-4">
+                                {/* 👇 --- 在這裡插入我們寫好的戰果面板 --- 👇 */}
+                                {renderTeamTieResult(groupName, groupedMatches[groupName])}
+                                {/* 👆 --------------------------------- 👆 */}
+
+                                {/* 分組積分榜 (僅在非團體賽，且有積分榜資料時顯示) */}
+                                {!groupName.includes(' vs ') && tournamentStandings[groupName] && (
+                                    <table className="w-full text-left mb-6">
                                         <thead className="text-[10px] text-slate-400 uppercase tracking-widest font-black">
                                             <tr>
                                                 <th className="px-4 py-3">排名</th>
@@ -167,11 +226,11 @@ export default function LeaguePage({
                                     </table>
                                 )}
 
-                                {/* 分組對戰列表 */}
-                                <table className="w-full text-left mt-6">
-                                    <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-black">
+                                {/* 分組/團體對戰列表 */}
+                                <table className="w-full text-left mt-2">
+                                    <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-black border-b border-slate-200">
                                         <tr>
-                                            <th className="px-4 py-4 whitespace-nowrap">日期 / 地點</th>
+                                            <th className="px-4 py-4 whitespace-nowrap">日期 / 點數</th>
                                             <th className="px-4 py-4 whitespace-nowrap">對賽球員</th>
                                             <th className="px-4 py-4 text-center whitespace-nowrap">比分</th>
                                             <th className="px-4 py-4 text-center whitespace-nowrap">狀態</th>
@@ -179,12 +238,13 @@ export default function LeaguePage({
                                             {role === 'admin' && <th className="px-4 py-4 text-center whitespace-nowrap">操作</th>}
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-200/50">
-                                        {groupedMatches[groupName].sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)).map(match => (
-                                            <tr key={match.id} className={`transition-all ${match.status === 'completed' ? 'text-slate-400' : 'hover:bg-white/50'}`}>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {groupedMatches[groupName].sort((a,b) => a.date.localeCompare(b.date) || (a.matchOrder || '').localeCompare(b.matchOrder || '')).map(match => (
+                                            <tr key={match.id} className={`transition-all ${match.status === 'completed' ? 'text-slate-400 bg-white/30' : 'hover:bg-white shadow-sm'}`}>
                                                 <td className="px-4 py-5 whitespace-nowrap">
                                                     <div className="font-bold text-slate-800">{match.date} <span className="font-mono text-sm ml-2">{match.time}</span></div>
-                                                    <div className="text-xs">{match.venue}</div>
+                                                    {/* 如果有設定「第幾單打」，就顯示出來 */}
+                                                    <div className="text-xs text-blue-600 font-bold mt-0.5">{match.matchOrder || match.venue}</div>
                                                 </td>
                                                 <td className="px-4 py-5 whitespace-nowrap">
                                                     <div className="flex items-center gap-3">
@@ -234,7 +294,6 @@ export default function LeaguePage({
                                                                     >
                                                                         <PlayCircle size={16}/>
                                                                     </button>
-
                                                                     <button onClick={() => handleUpdateLeagueMatchScore(match)} className="p-3 bg-white text-blue-600 rounded-xl border hover:bg-blue-600 hover:text-white transition-all" title="輸入比分"><FileText size={16}/></button>
                                                                     <button onClick={() => handleEditLeagueMatch(match)} className="p-3 bg-white text-gray-600 rounded-xl border hover:bg-gray-600 hover:text-white transition-all" title="編輯比賽"><Pencil size={16}/></button>
                                                                 </>
@@ -252,7 +311,7 @@ export default function LeaguePage({
                     ))
                 )}
             </div>
-
+            
             {/* Hidden Poster for Rendering */}
             {isRenderingPoster && (
                 <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100 }}>
