@@ -655,15 +655,29 @@ const handleSaveFeaturedBadges = async () => {
   };
 
      const handleSaveAssessment = async () => {
-    // 1. 安全解構：把所有欄位抽出來，如果它是 undefined，就給它一個空字串 '' 作為預設值
+    // 1. 安全解構：即使 newAssessment 裡面沒有這些屬性，也會給予預設值 (空字串或 0)
     const { 
-        studentId, date, notes = '', 
-        situps = '', shuttleRun = '', enduranceRun = '', gripStrength = '', flexibility = '', 
-        fhDrive = '', bhDrive = '', fhVolley = '', bhVolley = '',
-        rankT1 = '', rankT2 = '', rankT3 = '', 
-        hoursT1 = '', hoursT2 = '', hoursT3 = '' 
+        studentId, 
+        date, 
+        notes = '', 
+        situps = 0, 
+        shuttleRun = 0, 
+        enduranceRun = 0, 
+        gripStrength = 0, 
+        flexibility = 0, 
+        fhDrive = 0, 
+        bhDrive = 0, 
+        fhVolley = 0, 
+        bhVolley = 0,
+        rankT1 = '', 
+        rankT2 = '', 
+        rankT3 = '', 
+        hoursT1 = '', 
+        hoursT2 = '', 
+        hoursT3 = '' 
     } = newAssessment;
 
+    // 2. 必填驗證
     if (!studentId || !date) {
       alert("請選擇學員並填寫評估日期！"); return;
     }
@@ -671,13 +685,13 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(true);
 
     try {
-      // 2. 明確指定要存入的欄位，絕對不允許 undefined 出現
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assessments'), {
+      // 3. 建立一個 100% 乾淨、沒有 undefined 的物件
+      const dataToSave = {
         studentId: studentId,
         date: date,
-        notes: notes,
+        notes: notes || '', // 確保不是 undefined
         
-        // 體測與技術數據 (強制轉為數字，如果沒填就是 0)
+        // 強制轉換為純數字
         situps: Number(situps) || 0,
         shuttleRun: Number(shuttleRun) || 0,
         enduranceRun: Number(enduranceRun) || 0,
@@ -688,20 +702,23 @@ const handleSaveFeaturedBadges = async () => {
         fhVolley: Number(fhVolley) || 0,
         bhVolley: Number(bhVolley) || 0,
 
-        // 學業與訓練數據 (如果沒填，就是空字串，這在 Firebase 是合法的)
-        rankT1: rankT1,
-        rankT2: rankT2,
-        rankT3: rankT3,
-        hoursT1: hoursT1,
-        hoursT2: hoursT2,
-        hoursT3: hoursT3,
+        // 確保是字串 (Firebase 允許空字串 '')
+        rankT1: String(rankT1 || ''),
+        rankT2: String(rankT2 || ''),
+        rankT3: String(rankT3 || ''),
+        hoursT1: String(hoursT1 || ''),
+        hoursT2: String(hoursT2 || ''),
+        hoursT3: String(hoursT3 || ''),
 
         timestamp: serverTimestamp()
-      });
+      };
+
+      // 4. 寫入 Firebase
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assessments'), dataToSave);
 
       alert('✅ 綜合能力評估儲存成功！');
       
-      // 3. 儲存成功後，清空表單
+      // 5. 清空表單
       setNewAssessment({
         studentId: '', date: new Date().toISOString().split('T')[0], 
         situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', 
@@ -710,8 +727,8 @@ const handleSaveFeaturedBadges = async () => {
       });
 
     } catch (e) {
-      console.error("Failed to save assessment", e);
-      alert('儲存失敗，請檢查網絡連線。');
+      console.error("Failed to save assessment:", e);
+      alert(`儲存失敗：${e.message}`); // 顯示具體錯誤訊息以方便除錯
     }
 
     setIsUpdating(false);
