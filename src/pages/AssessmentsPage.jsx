@@ -1,4 +1,4 @@
-// src/pages/AssessmentsPage.jsx (Version 4.1 - Auto-fill Previous Data)
+// src/pages/AssessmentsPage.jsx (Version 4.2 - Auto-fill Fixed Sort)
 
 import React from 'react';
 import { Activity, Save, Zap, Dumbbell, BookOpen, Clock, History } from 'lucide-react';
@@ -6,7 +6,7 @@ import { PageHeader, Card, PrimaryButton } from '../components/ui.jsx';
 
 export default function AssessmentsPage({
     students,
-    assessments, // 👈 接收傳進來的歷史評估資料
+    assessments, 
     newAssessment,
     setNewAssessment,
     handleSaveAssessment,
@@ -21,7 +21,7 @@ export default function AssessmentsPage({
         }));
     };
 
-    // 👇 --- 核心邏輯：當選擇學生時，自動載入上一次的數據 --- 👇
+    // 核心邏輯：當選擇學生時，自動載入上一次的數據
     const handleStudentChange = (e) => {
         const selectedId = e.target.value;
         const today = new Date().toISOString().split('T')[0];
@@ -32,38 +32,33 @@ export default function AssessmentsPage({
             return;
         }
 
-        // 去歷史資料庫中，找出這個學生的所有紀錄，並依日期由新到舊排序
-                // 👇 修正後：更精準的排序邏輯 👇
+        // 去歷史資料庫中，找出這個學生的所有紀錄
+        // 修正：使用雙重排序 (日期 + 確切的 timestamp) 來保證一定能拿到最新那筆
         const studentHistory = (assessments || [])
             .filter(a => a.studentId === selectedId)
             .sort((a, b) => {
-                // 第一層：先比較日期字串 (例如 '2026-03-16')
                 const dateCompare = b.date.localeCompare(a.date);
-                
-                // 如果日期是同一天 (dateCompare === 0)
                 if (dateCompare === 0) {
-                    // 第二層：比較 Firebase 的精確時間戳記 (誰的時間晚，誰排前面)
                     const timeA = a.timestamp?.seconds || 0;
                     const timeB = b.timestamp?.seconds || 0;
                     return timeB - timeA;
                 }
-                
                 return dateCompare;
             });
-        // 👆 ---------------------- 👆
 
+        if (studentHistory.length > 0) {
+            // 找到上次的紀錄！
+            const lastRecord = studentHistory[0];
             
-            // 將上次的紀錄填入表單，但把日期強制設為「今天」
+            // 安全做法：剝離 id，避免 undefined 寫入錯誤
+            const { id, ...cleanRecord } = lastRecord;
+            
+            // 將乾淨的舊紀錄填入表單，並覆蓋日期與評語
             setNewAssessment({
-                ...lastRecord,
-                // 不要覆蓋以下兩個欄位 (這是新的紀錄)
-                id: undefined, // 刪除舊的 document ID，確保建立新文件
-                date: today,   // 日期設為今天
-                notes: ''      // 清空教練評語，因為每次評語都不同
+                ...cleanRecord,
+                date: today,   
+                notes: ''      
             });
-            
-            // 可以選擇彈出一個小提示讓教練知道資料已載入
-            // alert("已自動載入該學員上一次的評估數據。");
             
         } else {
             // 如果是第一次評估，給一個乾淨的空表單
@@ -76,8 +71,6 @@ export default function AssessmentsPage({
             });
         }
     };
-    // 👆 -------------------------------------------------------- 👆
-
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 font-bold max-w-4xl mx-auto">
@@ -94,11 +87,9 @@ export default function AssessmentsPage({
                     <div className="w-full md:w-1/2 relative">
                         <label className="text-xs font-bold text-slate-500 mb-2 block uppercase tracking-widest flex items-center gap-2">
                             1. 選擇受測學員 
-                            {/* 如果有載入舊資料，顯示一個小小的 History 圖示提示 */}
                             {newAssessment.studentId && newAssessment.shuttleRun && <span className="text-[10px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full flex items-center gap-1"><History size={10}/> 已載入前次紀錄</span>}
                         </label>
                         
-                        {/* 👇 注意：這裡的 onChange 改成我們剛寫的 handleStudentChange */}
                         <select 
                             value={newAssessment.studentId || ''} 
                             onChange={handleStudentChange}
