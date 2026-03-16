@@ -1,4 +1,4 @@
-// src/components/PlayerCardModal.jsx (Version 5.3 - Real Stats & PER Added)
+// src/components/PlayerCardModal.jsx (Version 5.4 - Final Data Sync Fix)
 
 import React, { useRef, useState, useMemo } from 'react';
 import { ChevronRight, Download, Loader2, Trophy as TrophyIcon, Crown, X, Star } from 'lucide-react';
@@ -29,7 +29,7 @@ const PlayerCardModal = ({
     const handleNext = (e) => { e.stopPropagation(); if (currentIndex < rankedStudents.length - 1) setShowPlayerCard(rankedStudents[currentIndex + 1]); };
     
     // -------------------------------------------------------------
-    // 1. 真實數據計算與底分調整 (包含全新的 PER)
+    // 1. 真實數據計算與底分調整
     // -------------------------------------------------------------
     const { stats, matchSummary, internalStats, externalStatsByYear } = useMemo(() => {
         
@@ -58,9 +58,21 @@ const PlayerCardModal = ({
             return acc;
         }, {});
 
-        // --- 體測數據轉化為卡片數值 (預設底分 50) ---
-        const studentAssessments = (assessments || []).filter(a => a.studentId === student.id).sort((a, b) => b.date.localeCompare(a.date));
-        const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
+
+        // 👇 --- 核心修復：精準抓取最新體測紀錄 --- 👇
+        const studentAssessments = (assessments || []).filter(a => a.studentId === student.id);
+        
+        let latestAssessment = null;
+        if (studentAssessments.length > 0) {
+            // 使用 reduce 來找出時間戳記 (timestamp) 最大的一筆，保證是最新
+            latestAssessment = studentAssessments.reduce((latest, current) => {
+                const timeLatest = latest.timestamp?.seconds || new Date(latest.date).getTime() / 1000;
+                const timeCurrent = current.timestamp?.seconds || new Date(current.date).getTime() / 1000;
+                return (timeCurrent > timeLatest) ? current : latest;
+            });
+        }
+        // 👆 --------------------------------------- 👆
+
 
         let PAC = 50, FH = 50, BH = 50, EDR = 50, FLE = 50;
 
@@ -121,11 +133,11 @@ const PlayerCardModal = ({
         };
     }, [
         student.id, 
-        student.totalPoints, // 確保積分改變時重新計算 PER
+        student.totalPoints, 
         leagueMatches?.length, 
-        assessments?.length, 
-        attendanceLogs?.length,
-        JSON.stringify(assessments?.filter(a => a.studentId === student.id).sort((a,b) => b.date.localeCompare(a.date))[0])
+        // 👇 --- 這裡也改為監聽長度，確保只要有新增就會觸發更新 --- 👇
+        assessments?.filter(a => a.studentId === student.id).length, 
+        attendanceLogs?.length
     ]);
 
     // -------------------------------------------------------------
@@ -169,11 +181,9 @@ const PlayerCardModal = ({
           <div ref={cardRef} className={`w-full aspect-[2.5/3.5] rounded-3xl p-1.5 bg-gradient-to-br ${cardTheme.border} ${cardTheme.glow} relative isolate overflow-hidden`} style={{ backgroundColor: '#ffffff' }}>
             <div className={`w-full h-full rounded-[1.25rem] bg-gradient-to-b ${cardTheme.bg} flex flex-col relative overflow-hidden isolate`}>
                 
-                {/* 閃卡全息特效層 */}
                 <div className={`absolute inset-0 ${cardTheme.foil} mix-blend-overlay opacity-80 pointer-events-none z-30`}></div>
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-color-dodge z-30 pointer-events-none"></div>
 
-                {/* 頂部：OVR 與 Logo */}
                 <div className="absolute top-4 left-4 z-20 flex flex-col items-center drop-shadow-md">
                     <span className="text-4xl font-black text-white leading-none tracking-tighter" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>{stats.OVR}</span>
                     <span className={`text-[10px] font-black uppercase tracking-widest ${cardTheme.text} mt-0.5`}>{student.squashClass ? student.squashClass.substring(0,2) : 'SQ'}</span>
@@ -181,7 +191,6 @@ const PlayerCardModal = ({
                     <img src={logoUrl} alt="Logo" className="w-6 h-6 object-contain opacity-90" crossOrigin="anonymous"/>
                 </div>
 
-                {/* 勝場小文字 */}
                 <div className="absolute top-28 left-4 z-20 flex flex-col gap-1 drop-shadow-md border-l-2 border-white/20 pl-2">
                     <div className="flex items-baseline gap-1">
                         <span className="text-[9px] font-bold text-white/60 tracking-wider">INT. WINS</span>
@@ -193,7 +202,6 @@ const PlayerCardModal = ({
                     </div>
                 </div>
 
-                {/* 選手照片區塊 */}
                 <div className="absolute top-0 right-0 w-full h-[65%] flex items-end justify-center z-10">
                     <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/90 z-10"></div>
                     {student.photo_url ? (
@@ -205,10 +213,8 @@ const PlayerCardModal = ({
                     )}
                 </div>
 
-                {/* 底部資料區塊 */}
                 <div className="absolute bottom-0 left-0 w-full h-[40%] bg-gradient-to-t from-black via-black/95 to-transparent z-20 flex flex-col justify-end p-5">
                     
-                    {/* 姓名與稱號 */}
                     <div className="text-center mb-3 border-b border-white/10 pb-3">
                         <h2 className="text-3xl font-black text-white uppercase tracking-wider transform -skew-x-6" style={{ textShadow: '2px 2px 0px rgba(0,0,0,1)' }}>
                             {student.name}
@@ -216,7 +222,6 @@ const PlayerCardModal = ({
                         {student.eng_name && <p className={`text-[9px] font-black uppercase tracking-[0.3em] ${cardTheme.text} mt-1`}>{student.eng_name}</p>}
                     </div>
 
-                    {/* 六維能力值面板 (包含 PER) */}
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 px-2">
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-white font-bold">{stats.PAC}</span>
@@ -244,7 +249,6 @@ const PlayerCardModal = ({
                         </div>
                     </div>
 
-                    {/* 稀有度標籤與徽章 */}
                     <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center">
                         <div className="flex gap-1.5">
                             {uniqueAchievements.length > 0 ? uniqueAchievements.map(badgeId => {
@@ -261,7 +265,6 @@ const PlayerCardModal = ({
             </div>
           </div>
 
-          {/* 外部控制與下載按鈕 */}
           <div className="absolute top-1/2 -translate-y-1/2 w-full flex justify-between px-[-30px] pointer-events-none z-10" style={{ width: 'calc(100% + 5rem)' }}>
               <button onClick={(e) => { handlePrev(e); setIsDownloading(false); }} disabled={currentIndex <= 0} className="pointer-events-auto p-4 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white/30 disabled:opacity-30 transition-all"><ChevronRight className="rotate-180" size={28}/></button>
               <button onClick={(e) => { handleNext(e); setIsDownloading(false); }} disabled={currentIndex >= rankedStudents.length - 1} className="pointer-events-auto p-4 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white/30 disabled:opacity-30 transition-all"><ChevronRight size={28}/></button>
