@@ -40,14 +40,18 @@ export default function AssessmentsPage({
         if (studentHistory.length > 0) {
             // 找到上次的紀錄！
             const lastRecord = studentHistory[0];
-
-            const { id, ...cleanRecord } = lastRecord;
+            
             // 將上次的紀錄填入表單，但把日期強制設為「今天」
             setNewAssessment({
-                ...cleanRecord,
+                ...lastRecord,
+                // 不要覆蓋以下兩個欄位 (這是新的紀錄)
+                id: undefined, // 刪除舊的 document ID，確保建立新文件
                 date: today,   // 日期設為今天
-                notes: ''      // 清空教練評語
+                notes: ''      // 清空教練評語，因為每次評語都不同
             });
+            
+            // 可以選擇彈出一個小提示讓教練知道資料已載入
+            // alert("已自動載入該學員上一次的評估數據。");
             
         } else {
             // 如果是第一次評估，給一個乾淨的空表單
