@@ -2379,6 +2379,7 @@ const myDashboardData = useMemo(() => {
                   schedules={schedules}
                   students={students}
                   dashboardStats={dashboardStats}
+                  assessments={assessments}
               />
           )}
           {!viewingStudent && activeTab === 'monthlyStars' && (<MonthlyStarsPage monthlyStarsData={monthlyStars} />)}
