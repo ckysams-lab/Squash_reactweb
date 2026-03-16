@@ -1793,7 +1793,6 @@ const playerDashboardData = useMemo(() => {
     const completedMatches = studentMatches.filter(m => m.status === 'completed');
     const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
     const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
-    const studentAssessments = assessments.filter(a => a.studentId === studentData.id).sort((a, b) => b.date.localeCompare(a.date));
 
     const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
     const totalPlayed = completedMatches.length;
@@ -1807,8 +1806,15 @@ const playerDashboardData = useMemo(() => {
         { date: '初始積分', points: BADGE_DATA[studentData.badge]?.basePoints || 0 },
         { date: '目前', points: studentData.totalPoints || studentData.points || 0 }
     ];
-
-    const latestAssessment = studentAssessments.length > 0 ? studentAssessments[0] : null;
+    const studentAssessments = (assessments || []).filter(a => a.studentId === studentData.id);
+    let latestAssessment = null;
+    if (studentAssessments.length > 0) {
+        latestAssessment = studentAssessments.reduce((latest, current) => {
+            const timeLatest = latest.timestamp?.seconds || new Date(latest.date).getTime() / 1000;
+            const timeCurrent = current.timestamp?.seconds || new Date(current.date).getTime() / 1000;
+            return (timeCurrent > timeLatest) ? current : latest;
+        });
+    }
     
     let radarData = [];
     if (latestAssessment) {
