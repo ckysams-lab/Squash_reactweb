@@ -2388,6 +2388,7 @@ const myDashboardData = useMemo(() => {
             {!viewingStudent && activeTab === 'assessments' && role === 'admin' && (
                 <AssessmentsPage 
                     students={students}
+                    assessments={assessments}
                     newAssessment={newAssessment}
                     setNewAssessment={setNewAssessment}
                     handleSaveAssessment={handleSaveAssessment}
