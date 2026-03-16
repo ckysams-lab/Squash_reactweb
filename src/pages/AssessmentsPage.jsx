@@ -33,13 +33,25 @@ export default function AssessmentsPage({
         }
 
         // 去歷史資料庫中，找出這個學生的所有紀錄，並依日期由新到舊排序
+                // 👇 修正後：更精準的排序邏輯 👇
         const studentHistory = (assessments || [])
             .filter(a => a.studentId === selectedId)
-            .sort((a, b) => b.date.localeCompare(a.date));
+            .sort((a, b) => {
+                // 第一層：先比較日期字串 (例如 '2026-03-16')
+                const dateCompare = b.date.localeCompare(a.date);
+                
+                // 如果日期是同一天 (dateCompare === 0)
+                if (dateCompare === 0) {
+                    // 第二層：比較 Firebase 的精確時間戳記 (誰的時間晚，誰排前面)
+                    const timeA = a.timestamp?.seconds || 0;
+                    const timeB = b.timestamp?.seconds || 0;
+                    return timeB - timeA;
+                }
+                
+                return dateCompare;
+            });
+        // 👆 ---------------------- 👆
 
-        if (studentHistory.length > 0) {
-            // 找到上次的紀錄！
-            const lastRecord = studentHistory[0];
             
             // 將上次的紀錄填入表單，但把日期強制設為「今天」
             setNewAssessment({
