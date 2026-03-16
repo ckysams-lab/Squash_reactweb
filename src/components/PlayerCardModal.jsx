@@ -84,17 +84,27 @@ const PlayerCardModal = ({
                 else PAC = Math.min(99, Math.floor((6.125 * val) - 35.75));
             }
 
-            // 2. FH (正手): fhDrive(滿分40) + fhVolley(滿分60)
             if (latestAssessment.fhDrive !== undefined && latestAssessment.fhVolley !== undefined) {
-                let dScore = Number(latestAssessment.fhDrive) <= 10 ? (Number(latestAssessment.fhDrive)/10)*40 : Number(latestAssessment.fhDrive);
-                let vScore = Number(latestAssessment.fhVolley) <= 10 ? (Number(latestAssessment.fhVolley)/10)*60 : Number(latestAssessment.fhVolley);
+                // 限制長球最多只能輸入 10 球，截擊最多 7 球
+                let driveHits = Math.min(10, Number(latestAssessment.fhDrive) || 0);
+                let volleyHits = Math.min(7, Number(latestAssessment.fhVolley) || 0);
+
+                // 計算得分：長球每球 4 分，截擊每球 (60/7) 分
+                let dScore = driveHits * 4;
+                let vScore = volleyHits * (60 / 7);
+                
+                // 相加並四捨五入，最後確保在 50~99 之間
                 FH = Math.min(99, Math.max(50, Math.floor(dScore + vScore))); 
             }
 
-            // 3. BH (反手): bhDrive(滿分40) + bhVolley(滿分60)
+            // 3. BH (反手): 邏輯同上
             if (latestAssessment.bhDrive !== undefined && latestAssessment.bhVolley !== undefined) {
-                let dScore = Number(latestAssessment.bhDrive) <= 10 ? (Number(latestAssessment.bhDrive)/10)*40 : Number(latestAssessment.bhDrive);
-                let vScore = Number(latestAssessment.bhVolley) <= 10 ? (Number(latestAssessment.bhVolley)/10)*60 : Number(latestAssessment.bhVolley);
+                let driveHits = Math.min(10, Number(latestAssessment.bhDrive) || 0);
+                let volleyHits = Math.min(7, Number(latestAssessment.bhVolley) || 0);
+
+                let dScore = driveHits * 4;
+                let vScore = volleyHits * (60 / 7);
+                
                 BH = Math.min(99, Math.max(50, Math.floor(dScore + vScore)));
             }
 
