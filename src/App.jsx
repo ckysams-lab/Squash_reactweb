@@ -654,15 +654,30 @@ const handleSaveFeaturedBadges = async () => {
     e.target.value = null;
   };
 
-    const handleSaveAssessment = async () => {
-    const { studentId, date, situps, shuttleRun, enduranceRun, gripStrength, flexibility, fhDrive, bhDrive, fhVolley, bhVolley } = newAssessment;
+     const handleSaveAssessment = async () => {
+    // 1. 安全解構：把所有欄位抽出來，如果它是 undefined，就給它一個空字串 '' 作為預設值
+    const { 
+        studentId, date, notes = '', 
+        situps = '', shuttleRun = '', enduranceRun = '', gripStrength = '', flexibility = '', 
+        fhDrive = '', bhDrive = '', fhVolley = '', bhVolley = '',
+        rankT1 = '', rankT2 = '', rankT3 = '', 
+        hoursT1 = '', hoursT2 = '', hoursT3 = '' 
+    } = newAssessment;
+
     if (!studentId || !date) {
       alert("請選擇學員並填寫評估日期！"); return;
     }
+
     setIsUpdating(true);
+
     try {
+      // 2. 明確指定要存入的欄位，絕對不允許 undefined 出現
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'assessments'), {
-        ...newAssessment,
+        studentId: studentId,
+        date: date,
+        notes: notes,
+        
+        // 體測與技術數據 (強制轉為數字，如果沒填就是 0)
         situps: Number(situps) || 0,
         shuttleRun: Number(shuttleRun) || 0,
         enduranceRun: Number(enduranceRun) || 0,
@@ -672,16 +687,33 @@ const handleSaveFeaturedBadges = async () => {
         bhDrive: Number(bhDrive) || 0,
         fhVolley: Number(fhVolley) || 0,
         bhVolley: Number(bhVolley) || 0,
+
+        // 學業與訓練數據 (如果沒填，就是空字串，這在 Firebase 是合法的)
+        rankT1: rankT1,
+        rankT2: rankT2,
+        rankT3: rankT3,
+        hoursT1: hoursT1,
+        hoursT2: hoursT2,
+        hoursT3: hoursT3,
+
         timestamp: serverTimestamp()
       });
+
       alert('✅ 綜合能力評估儲存成功！');
+      
+      // 3. 儲存成功後，清空表單
       setNewAssessment({
-        studentId: '', date: new Date().toISOString().split('T')[0], situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', fhDrive: '', bhDrive: '', fhVolley: '', bhVolley: '', notes: ''
+        studentId: '', date: new Date().toISOString().split('T')[0], 
+        situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', 
+        fhDrive: '', bhDrive: '', fhVolley: '', bhVolley: '', notes: '',
+        rankT1: '', rankT2: '', rankT3: '', hoursT1: '', hoursT2: '', hoursT3: ''
       });
+
     } catch (e) {
       console.error("Failed to save assessment", e);
       alert('儲存失敗，請檢查網絡連線。');
     }
+
     setIsUpdating(false);
   };
   
