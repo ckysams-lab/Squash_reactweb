@@ -135,7 +135,7 @@ export default function AssessmentsPage({
                         {/* 👇 手握力就在這排 👇 */}
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                             <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">折返跑 <span className="text-[10px] text-amber-600 bg-amber-100 px-1 rounded">滿分 25趟</span></label>
+                                <label className="text-xs font-bold text-slate-500 block mb-1">折返跑 <span className="text-[10px] text-amber-600 bg-amber-100 px-1 rounded">滿分 22趟</span></label>
                                 <input type="number" placeholder="趟數" value={newAssessment.shuttleRun || ''} onChange={e => handleChange('shuttleRun', e.target.value)} className="w-full bg-white p-3 rounded-xl border border-slate-200 outline-none font-mono text-lg text-slate-800 focus:border-amber-500 transition-all shadow-sm" />
                             </div>
                             <div>
@@ -207,7 +207,6 @@ export default function AssessmentsPage({
                     </PrimaryButton>
                 </div>
             </Card>
-
         </div>
     );
 }
