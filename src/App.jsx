@@ -2330,7 +2330,12 @@ const myDashboardData = useMemo(() => {
         <div className="p-10 max-w-7xl mx-auto pb-40">
 
                 {/* 👉 放在畫面最上層，如果有直播賽事就會自動顯示大螢幕 */}
-        <LiveScoreboardDisplay liveMatches={liveMatches} />
+       <LiveScoreboardDisplay 
+            liveMatches={liveMatches} 
+            TrophyIcon={TrophyIcon} 
+            // 👇 新增這行，傳遞排名資料
+            rankedStudents={rankedStudents} 
+        />
         
         {showUmpirePanel && (
     <UmpirePanelModal 
