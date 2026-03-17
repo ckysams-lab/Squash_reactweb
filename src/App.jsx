@@ -1819,12 +1819,22 @@ const playerDashboardData = useMemo(() => {
     let radarData = [];
     if (latestAssessment) {
         const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
+        
+        const calculateShotScore = (driveHitsRaw, volleyHitsRaw) => {
+            const driveHits = Math.min(10, Number(driveHitsRaw) || 0);
+            const volleyHits = Math.min(7, Number(volleyHitsRaw) || 0);
+            return Math.floor((driveHits * 4) + (volleyHits * (60 / 7)));
+        };
+
+        const fhTotalScore = calculateShotScore(latestAssessment.fhDrive, latestAssessment.fhVolley);
+        const bhTotalScore = calculateShotScore(latestAssessment.bhDrive, latestAssessment.bhVolley);
+
         radarData = [
-            { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 25), fullMark: 10 }, 
-            { subject: '力量 (仰臥/握力)', A: calcScore(((latestAssessment.situps || 0) + (latestAssessment.gripStrength || 0))/2, 50), fullMark: 10 },
-            { subject: '柔軟度', A: calcScore(latestAssessment.flexibility, 40), fullMark: 10 },
-            { subject: '正手技術', A: calcScore(((latestAssessment.fhDrive || 0) + (latestAssessment.fhVolley || 0))/2, 50), fullMark: 10 },
-            { subject: '反手技術', A: calcScore(((latestAssessment.bhDrive || 0) + (latestAssessment.bhVolley || 0))/2, 50), fullMark: 10 },
+            { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 25), fullMark: 10 },
+            { subject: '力量 (握力)', A: calcScore(latestAssessment.gripStrength, 70), fullMark: 10 },
+            { subject: '柔軟度', A: calcScore(latestAssessment.flexibility, 30), fullMark: 10 },
+            { subject: '正手技術', A: Math.max(1, Math.round(fhTotalScore / 10)), fullMark: 10 },
+            { subject: '反手技術', A: Math.max(1, Math.round(bhTotalScore / 10)), fullMark: 10 },
         ];
     }
 
