@@ -86,7 +86,8 @@ const {
     tacticalShots,
     feedPosts,
     trophies,
-    alumni
+    alumni,
+    playerJournals
   } = useFirebaseData();
 
   const [role, setRole] = useState(null);
@@ -728,6 +729,44 @@ const handleSaveFeaturedBadges = async () => {
 
     setIsUpdating(false);
   };
+
+    // 👇 --- 新增：處理教練發佈日誌 --- 👇
+  const handleAddJournalEntry = async (studentId, content) => {
+      if (!content.trim()) return;
+      setIsUpdating(true);
+      try {
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'player_journals'), {
+              studentId: studentId,
+              coachContent: content,
+              coachId: currentUserInfo?.id || 'admin',
+              coachName: currentUserInfo?.name || '教練',
+              studentReply: null, // 學生還沒回覆
+              createdAt: serverTimestamp()
+          });
+      } catch (e) {
+          console.error("Failed to add journal entry:", e);
+          alert("新增日誌失敗，請檢查網路。");
+      }
+      setIsUpdating(false);
+  };
+
+  // 👇 --- 新增：處理學生回覆日誌 --- 👇
+  const handleReplyJournalEntry = async (journalId, replyContent) => {
+      if (!replyContent.trim()) return;
+      setIsUpdating(true);
+      try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'player_journals', journalId);
+          await updateDoc(docRef, {
+              studentReply: replyContent,
+              repliedAt: serverTimestamp()
+          });
+      } catch (e) {
+          console.error("Failed to reply journal entry:", e);
+          alert("回覆失敗，請檢查網路。");
+      }
+      setIsUpdating(false);
+  };
+
   
   const handleSaveExternalMatch = async () => {
     const { player1Id, tournamentName, date, isWin, externalMatchScore, opponentSchool, opponentPlayerName } = newExternalMatch;
@@ -2416,6 +2455,9 @@ const myDashboardData = useMemo(() => {
                   currentUserInfo={currentUserInfo}
                   role={role}
                   handleCheerMatch={handleCheerMatch}
+                  playerJournals={playerJournals}
+                  handleAddJournalEntry={handleAddJournalEntry}
+                  handleReplyJournalEntry={handleReplyJournalEntry}
               />
           )}
 
@@ -2435,6 +2477,9 @@ const myDashboardData = useMemo(() => {
             setSelectedFeaturedBadges={setSelectedFeaturedBadges}
             handleSaveFeaturedBadges={handleSaveFeaturedBadges}
             isUpdating={isUpdating}
+            playerJournals={playerJournals}
+            handleAddJournalEntry={handleAddJournalEntry}
+            handleReplyJournalEntry={handleReplyJournalEntry}
         />
     )}
         
