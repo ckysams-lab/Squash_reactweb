@@ -20,6 +20,7 @@ export const useFirebaseData = () => {
     const [awards, setAwards] = useState([]);
     const [trophies, setTrophies] = useState([]);
     const [alumni, setAlumni] = useState([]);
+    const [playerJournals, setPlayerJournals] = useState([]);
     const [achievements, setAchievements] = useState([]);
     const [externalTournaments, setExternalTournaments] = useState([]);
     const [assessments, setAssessments] = useState([]);
@@ -62,6 +63,7 @@ export const useFirebaseData = () => {
                 bindListener(getCollectionPath('gallery'), setGalleryItems, 'galleryItems');
                 bindListener(query(getCollectionPath('trophies'), orderBy("year", "desc")), setTrophies, 'trophies');
                 bindListener(query(getCollectionPath('alumni'), orderBy("graduationYear", "desc")), setAlumni, 'alumni');
+                bindListener(query(getCollectionPath('player_journals'), orderBy("createdAt", "asc")), setPlayerJournals, 'playerJournals');
                 
                 // 注意：帶有排序的查詢
                 bindListener(query(getCollectionPath('awards'), orderBy("date", "desc")), setAwards, 'awards');
@@ -97,6 +99,7 @@ export const useFirebaseData = () => {
         awards, achievements, externalTournaments, assessments, tacticalShots,
         feedPosts,
         trophies,
-        alumni
+        alumni,
+        playerJournals
     }; 
 };
