@@ -4,7 +4,6 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// 你的校徽網址
 const logoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
 
 export default defineConfig({
@@ -12,17 +11,21 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate', 
-      injectRegister: 'auto', // 讓外掛自動在 index.html 注入 Service Worker 註冊代碼
+      
+      // 👇 修正：改用 script 模式，避免 registerSW.js 404 找不到 👇
+      injectRegister: 'script', 
+      
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png'], 
       manifest: {
         name: '正覺壁球管理系統', 
         short_name: '正覺壁球', 
         description: 'CHING KOK SQUASH ACADEMY',
-        theme_color: '#2563eb', // 與你 index.html 設定的藍色一致
+        theme_color: '#2563eb', 
         background_color: '#2563eb', 
         display: 'standalone', 
         icons: [
           {
-            src: logoUrl, // 直接使用你的線上校徽作為 App Icon
+            src: logoUrl, 
             sizes: '192x192',
             type: 'image/png'
           },
@@ -35,18 +38,18 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // 設定離線快取規則 (這裡設定快取所有圖片、JS 和 CSS 檔案)
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg}'],
+        // 增加一個設定：如果單一檔案超過 2MB 依然快取它 (解決你之前看到的 2.11MB 警告)
+        maximumFileSizeToCacheInBytes: 5000000, 
         runtimeCaching: [
           {
-            // 將來自 cdn.jsdelivr.net 的外部圖片也快取起來，這樣離線時才能看到校徽！
             urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'external-image-cache',
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 30 // 快取 30 天
+                maxAgeSeconds: 60 * 60 * 24 * 30 
               },
             }
           }
