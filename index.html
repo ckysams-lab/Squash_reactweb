@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>正覺壁球管理系統</title>
     
-    <link rel="manifest" href="/manifest.json">
+    <!-- 刪除了舊的 <link rel="manifest" href="/manifest.json">，交給外掛處理 -->
+    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#2563eb">
     <link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png">
-
+    
     <style>
+      /* 你的 Splash Screen CSS 完全保留不變 */
       #pwa-splash {
         position: fixed;
         top: 0;
@@ -55,16 +57,17 @@
     </style>
   </head>
   <body>
+    <!-- 你的 Splash Screen HTML 完全保留不變 -->
     <div id="pwa-splash">
       <img src="https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png" class="splash-logo" alt="Logo">
       <div class="splash-title">正覺壁球</div>
       <div class="splash-subtitle">CHING KOK SQUASH ACADEMY</div>
     </div>
-
+    
     <div id="root"></div>
-
+    
     <script>
-      // 控制 Splash Screen 消失
+      // 你的 Splash Screen 動畫控制邏輯完全保留
       window.addEventListener('load', () => {
         const splash = document.getElementById('pwa-splash');
         if (splash) {
@@ -75,12 +78,8 @@
         }
       });
 
-      // 註冊 PWA
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js');
-        });
-      }
+      // 🚨 刪除了原本手寫的 navigator.serviceWorker.register('/sw.js'); 🚨
+      // 接下來，Vite PWA 外掛會自動且更聰明地幫我們註冊它！
     </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
