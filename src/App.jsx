@@ -2163,12 +2163,12 @@ const myDashboardData = useMemo(() => {
 
       {/* 版本 12.0: 主題式動態登入頁面 */}
 {/* 主題式動態登入頁面 */}
-{showLoginModal && (
-    <LoginScreen 
-        onLogin={handleLogin} 
-        systemConfig={systemConfig} 
-    />
-)}
+{showLoginModal ? (
+          <div className="fixed inset-0 z-[9999] bg-slate-900">
+              <LoginScreen onLogin={handleLogin} systemConfig={systemConfig} />
+          </div>
+      ) : (
+          <>
       <aside 
         className={`fixed md:static inset-y-0 left-0 z-[60] w-80 border-r transition-transform duration-300 ease-in-out 
                    ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
@@ -2809,6 +2809,8 @@ const myDashboardData = useMemo(() => {
 )}        
         </div>
       </main>
-    </div>
+     </>
+   )}
+ </div> 
   );
 }
