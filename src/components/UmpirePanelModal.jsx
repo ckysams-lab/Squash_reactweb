@@ -1,7 +1,7 @@
-// src/components/UmpirePanelModal.jsx (Version 4.1 - Undo Feature Fixed)
+// src/components/UmpirePanelModal.jsx (Version 4.2 - Full Control Restored)
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Activity, Timer, AlertTriangle, ListChecks, RotateCcw } from 'lucide-react';
+import { X, Activity, Timer, AlertTriangle, ListChecks, RotateCcw, Swords, Play } from 'lucide-react';
 import { collection, doc, serverTimestamp, addDoc, updateDoc, writeBatch, increment } from 'firebase/firestore';
 
 const UmpirePanelModal = ({ 
@@ -12,7 +12,10 @@ const UmpirePanelModal = ({
     const [p2Name, setP2Name] = useState(activeLeagueMatch ? activeLeagueMatch.player2Name : '');
     const [matchFormat, setMatchFormat] = useState('11'); 
     const [bestOf, setBestOf] = useState('3');           
+    // 👇 找回來的：開賽發球員選擇 (1 代表球員1, 2 代表球員2)
+    const [startingServer, setStartingServer] = useState(1);
 
+    // --- 計時器邏輯 ---
     const [timeLeft, setTimeLeft] = useState(0); 
     const [isTimerRunning, setIsTimerRunning] = useState(false);
     const timerRef = useRef(null);
@@ -35,14 +38,19 @@ const UmpirePanelModal = ({
         setIsTimerRunning(true);
     };
 
+    // --- 正式開賽邏輯 ---
     const startLiveMatch = async () => {
         if (!p1Name || !p2Name) return alert("請確認雙方球員姓名");
         try {
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'live_matches'), {
-                player1: p1Name, player2: p2Name,
-                score1: 0, score2: 0,
-                games1: 0, games2: 0,
-                server: 1, serveSide: 'R',
+                player1: p1Name, 
+                player2: p2Name,
+                score1: 0, 
+                score2: 0,
+                games1: 0, 
+                games2: 0,
+                server: startingServer, // 使用我們選擇的起始發球員
+                serveSide: 'R', // 預設從右邊開始
                 status: 'live',
                 format: parseInt(matchFormat), 
                 bestOf: parseInt(bestOf),      
@@ -51,72 +59,64 @@ const UmpirePanelModal = ({
                 pointLog: [], 
                 updatedAt: serverTimestamp()
             });
+            // 成功開賽後，如果不是連動賽事，清空暫存名字
+            if(!activeLeagueMatch) { setP1Name(''); setP2Name(''); }
         } catch(e) { console.error(e); }
     };
 
-    // 👇 --- 核心邏輯：復原上一球 (Undo) --- 👇
+    // --- 撤銷上一分 (Undo) ---
     const handleUndoAction = async (match) => {
         const currentLog = match.pointLog || [];
         if (currentLog.length === 0) return; 
-
         const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'live_matches', match.id);
         const lastAction = currentLog[currentLog.length - 1];
         
-        if (window.confirm(`確定要撤銷上一球的紀錄嗎？\n(將還原比分至上一球前)`)) {
+        if (window.confirm(`確定要撤銷上一球 (${lastAction.p1Score}-${lastAction.p2Score}) 的紀錄嗎？`)) {
             const newLog = [...currentLog];
-            newLog.pop(); // 移除最後一筆
-
+            newLog.pop();
             const prevAction = newLog.length > 0 ? newLog[newLog.length - 1] : null;
-
             const updateData = {
                 score1: prevAction ? prevAction.p1Score : 0,
                 score2: prevAction ? prevAction.p2Score : 0,
-                server: prevAction ? prevAction.actionBy : 1,
+                server: prevAction ? prevAction.actionBy : match.server, // 盡量還原發球權
                 serveSide: 'R', 
                 pointLog: newLog,
                 updatedAt: serverTimestamp()
             };
-
-            // 安全檢查：暫不支援跨局 Undo
             if (lastAction.p1Score === 0 && lastAction.p2Score === 0 && (match.games1 > 0 || match.games2 > 0)) {
-                alert("⚠️ 此分涉及跨局結算，無法直接撤銷。");
+                alert("⚠️ 注意：此分涉及跨局結算，請直接手動修正下一局比分。");
                 return;
             }
             await updateDoc(matchRef, updateData);
         }
     };
 
+    // --- 加分與判決 ---
     const handleAction = async (match, playerNum, actionType) => {
         if (match.matchWinner) return alert("比賽已經結束！");
         const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'live_matches', match.id);
-        
         let newScore1 = match.score1;
         let newScore2 = match.score2;
         let newServer = match.server;
         let newServeSide = match.serveSide;
         let isGameWon = false;
-        const currentLog = match.pointLog || [];
-
+        
         if (actionType === 'normal_win' || actionType === 'stroke') {
             if (playerNum === 1) newScore1 += 1;
             if (playerNum === 2) newScore2 += 1;
-
             if (match.server === playerNum) {
                 newServeSide = match.serveSide === 'R' ? 'L' : 'R';
             } else {
                 newServer = playerNum;
                 newServeSide = 'R'; 
             }
-
             const targetScore = match.format; 
             const diff = Math.abs(newScore1 - newScore2);
-            const maxScore = Math.max(newScore1, newScore2);
-            if (maxScore >= targetScore && diff >= 2) { isGameWon = true; }
+            if (Math.max(newScore1, newScore2) >= targetScore && diff >= 2) { isGameWon = true; }
         } 
 
-        const currentGameIndex = match.games1 + match.games2 + 1;
         const newLogEntry = {
-            id: Date.now(), game: currentGameIndex,
+            id: Date.now(), game: match.games1 + match.games2 + 1,
             p1Score: newScore1, p2Score: newScore2,
             actionBy: playerNum, type: actionType, timestamp: new Date().toISOString()
         };
@@ -124,21 +124,22 @@ const UmpirePanelModal = ({
         let updateData = {
             score1: newScore1, score2: newScore2,
             server: newServer, serveSide: newServeSide,
-            pointLog: [...currentLog, newLogEntry],
+            pointLog: [...(match.pointLog || []), newLogEntry],
             updatedAt: serverTimestamp()
         };
 
         if (isGameWon) {
-            if (window.confirm(`【第 ${currentGameIndex} 局結束】\n${playerNum === 1 ? match.player1 : match.player2} 贏得此局！`)) {
+            if (window.confirm(`【第 ${match.games1 + match.games2 + 1} 局結束】\n${playerNum === 1 ? match.player1 : match.player2} 贏得此局！`)) {
                 const newGames1 = playerNum === 1 ? match.games1 + 1 : match.games1;
                 const newGames2 = playerNum === 2 ? match.games2 + 1 : match.games2;
-                const gamesNeededToWin = match.bestOf === 3 ? 2 : 3;
+                const gamesNeededToWin = match.bestOf === 1 ? 1 : (match.bestOf === 3 ? 2 : 3);
 
                 updateData = { ...updateData, score1: 0, score2: 0, games1: newGames1, games2: newGames2, server: playerNum, serveSide: 'R' };
 
                 if (newGames1 === gamesNeededToWin || newGames2 === gamesNeededToWin) {
                     const winnerNum = newGames1 === gamesNeededToWin ? 1 : 2;
                     updateData.matchWinner = winnerNum;
+                    // 同步到 LeaguePage 的邏輯保持不變...
                     if (match.leagueMatchId) {
                         const lMatch = leagueMatches.find(m => m.id === match.leagueMatchId);
                         if (lMatch) {
@@ -152,7 +153,7 @@ const UmpirePanelModal = ({
                                 const batch = writeBatch(db);
                                 batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', lMatch.id), { score1: newGames1, score2: newGames2, winnerId: winnerId, status: 'completed', updatedAt: serverTimestamp() });
                                 batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'students', winnerStudent.id), { points: increment(pointsToAdd), lastUpdated: serverTimestamp() });
-                                await batch.commit();
+                                batch.commit();
                             }
                         }
                     }
@@ -185,19 +186,70 @@ const UmpirePanelModal = ({
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6">
-                    {liveMatches.filter(m => m.status === 'live').length === 0 && (
-                        <div className="mb-6 p-6 bg-white rounded-3xl border border-slate-200 shadow-sm max-w-2xl mx-auto space-y-5">
-                            <h4 className="font-black text-slate-700 border-b pb-2">新賽事設定</h4>
-                            <button onClick={startLiveMatch} className="w-full bg-red-600 text-white py-4 rounded-xl font-black text-lg hover:bg-red-700 shadow-lg transition-all active:scale-95">開始轉播</button>
+                    
+                    {/* 👇 --- 1. 恢復並優化的【新賽事設定區】 --- 👇 */}
+                    <div className="mb-8 p-8 bg-white rounded-[2.5rem] border-2 border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
+                        <div className="flex items-center gap-3 border-b pb-4">
+                            <Play className="text-red-600 fill-red-600" size={24}/>
+                            <h4 className="text-2xl font-black text-slate-800">Match Setup</h4>
                         </div>
-                    )}
 
+                        {activeLeagueMatch && (
+                            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex items-center justify-between">
+                                <span className="text-xs font-black text-blue-600 uppercase tracking-widest ml-2">連動賽事：</span>
+                                <div className="flex gap-4 items-center font-black text-blue-900 text-lg mr-2">
+                                    <span>{activeLeagueMatch.player1Name}</span> <span className="text-blue-300">VS</span> <span>{activeLeagueMatch.player2Name}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">分數制 (Format)</label>
+                                <select value={matchFormat} onChange={e=>setMatchFormat(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 outline-none font-black text-slate-700 focus:border-blue-500 transition-all">
+                                    <option value="11">11 分制 (Standard)</option>
+                                    <option value="9">9 分制 (Classic)</option>
+                                    <option value="15">15 分制 (Club)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">局數制 (Best of)</label>
+                                <select value={bestOf} onChange={e=>setBestOf(e.target.value)} className="w-full p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 outline-none font-black text-slate-700 focus:border-blue-500 transition-all">
+                                    <option value="1">1 局定勝負</option>
+                                    <option value="3">3 局 2 勝</option>
+                                    <option value="5">5 局 3 勝</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">先發球員 (Start Server)</label>
+                                <div className="flex bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-100">
+                                    <button onClick={()=>setStartingServer(1)} className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${startingServer === 1 ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>P1</button>
+                                    <button onClick={()=>setStartingServer(2)} className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${startingServer === 2 ? 'bg-rose-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>P2</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {!activeLeagueMatch && (
+                            <div className="flex gap-4">
+                                <input value={p1Name} onChange={e=>setP1Name(e.target.value)} placeholder="Player 1 Name" className="flex-1 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 outline-none font-black text-blue-600 placeholder:text-slate-300 focus:border-blue-500 transition-all"/>
+                                <div className="self-center font-black text-slate-300 italic">VS</div>
+                                <input value={p2Name} onChange={e=>setP2Name(e.target.value)} placeholder="Player 2 Name" className="flex-1 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 outline-none font-black text-rose-600 placeholder:text-slate-300 focus:border-rose-500 transition-all text-right"/>
+                            </div>
+                        )}
+
+                        <button onClick={startLiveMatch} className="w-full bg-red-600 text-white px-4 py-5 rounded-[1.5rem] font-black text-xl hover:bg-red-700 shadow-xl shadow-red-200 transition-all active:scale-[0.98] flex items-center justify-center gap-3">
+                            <Activity size={24}/> 開始即時轉播 (Launch Arena)
+                        </button>
+                    </div>
+
+                    {/* 進行中的比賽面板 (與原本相同) */}
                     {liveMatches.filter(m => m.status === 'live').map(match => (
-                        <div key={match.id} className="flex flex-col lg:flex-row gap-6 relative">
+                        <div key={match.id} className="flex flex-col lg:flex-row gap-6 relative animate-in zoom-in-95">
+                            {/* ... (其餘控制面板內容與 4.1 版一致，保留 Undo 與 逐分紀錄表) ... */}
                             {match.matchWinner && (
                                 <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-sm rounded-[2rem] flex flex-col items-center justify-center border-4 border-yellow-400 shadow-2xl">
                                     <h4 className="text-4xl font-black text-yellow-500 mb-2">🏆 比賽結束</h4>
-                                    <button onClick={() => endMatch(match.id)} className="px-10 py-4 bg-slate-900 text-white font-black rounded-full text-lg shadow-xl hover:bg-slate-800 transition-all">關閉</button>
+                                    <button onClick={() => endMatch(match.id)} className="px-10 py-4 bg-slate-900 text-white font-black rounded-full text-lg shadow-xl hover:bg-slate-800 transition-all">關閉裁判台</button>
                                 </div>
                             )}
 
@@ -236,15 +288,8 @@ const UmpirePanelModal = ({
                                     </div>
                                 </div>
 
-                                {/* 👇 --- Undo 按鈕位置 --- 👇 */}
                                 <div className="flex justify-center my-4">
-                                    <button 
-                                        onClick={() => handleUndoAction(match)}
-                                        disabled={!match.pointLog || match.pointLog.length === 0}
-                                        className="flex items-center gap-2 px-8 py-3 bg-amber-50 text-amber-600 border border-amber-200 rounded-full font-black text-sm hover:bg-amber-100 transition-all disabled:opacity-30 shadow-sm active:scale-95"
-                                    >
-                                        <RotateCcw size={16}/> 撤銷上一分 (Undo)
-                                    </button>
+                                    <button onClick={() => handleUndoAction(match)} disabled={!match.pointLog || match.pointLog.length === 0} className="flex items-center gap-2 px-8 py-3 bg-amber-50 text-amber-600 border border-amber-200 rounded-full font-black text-sm hover:bg-amber-100 transition-all disabled:opacity-30 shadow-sm active:scale-95"><RotateCcw size={16}/> 撤銷上一分 (Undo)</button>
                                 </div>
 
                                 <div className={`p-6 rounded-[2rem] mt-4 border-4 transition-all flex flex-col md:flex-row justify-between items-center gap-4 ${match.server === 2 ? 'border-rose-500 bg-rose-50 shadow-lg' : 'border-slate-100 bg-white'}`}>
@@ -292,12 +337,12 @@ const UmpirePanelModal = ({
                                     ))}
                                 </div>
                             </div>
-
                         </div>
                     ))}
                 </div>
             </div>
         </div>
     );
-}
+};
+
 export default UmpirePanelModal;
