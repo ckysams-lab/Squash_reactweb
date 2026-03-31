@@ -2834,8 +2834,11 @@ const myDashboardData = useMemo(() => {
 )}        
         </div>
       </main>
-        );
-}
- </div> 
+
+      {/* 這裡補上剛才在第二處修改中開啟的括號結尾 */}
+    </>
+)}
+
+    </div> 
   );
 }
