@@ -300,3 +300,4 @@ const UmpirePanelModal = ({
         </div>
     );
 }
+export default UmpirePanelModal;
