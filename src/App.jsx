@@ -944,13 +944,13 @@ const handleLogin = async (type, credentials) => {
             alert(errorMessage);
         }
     } else { // 學生登入邏輯保持不變
-        const { classStr, classNo, password } = credentials;
-        if (!classStr || !classNo || !password) {
+        // **注意**: 為了確保學生也只能登入自己學校的網站，學生登入的 email 後綴也應使用 tenantAppId
+        const studentAuthEmail = `${credentials.classStr.toLowerCase().trim()}${credentials.classNo.trim()}@${tenantAppId}`;
+
+        if (!credentials.classStr || !credentials.classNo || !credentials.password) {
             alert('請輸入班別、班號和密碼');
             return;
         }
-        
-        const studentAuthEmail = `${classStr.toLowerCase().trim()}${classNo.trim()}@${tenantAppId}`;
 
         try {
             await signInWithEmailAndPassword(auth, studentAuthEmail, password);
@@ -966,12 +966,11 @@ const handleLogin = async (type, credentials) => {
             setShowLoginModal(false); 
             setActiveTab('myDashboard');
         } catch (error) {
-            console.error("Student Login failed", error);
+            console.error("Student Login failed:", error);
             alert('登入失敗：\n(請確認班別、班號和密碼是否正確)');
         }
     }
 };
-
 
     
   const handleLogout = async () => { 
