@@ -65,10 +65,10 @@ const CURRENT_VERSION = "1.0";
 
 // Calendar Localizer
 const localizer = momentLocalizer(moment);
-const appId = 'bcklas-squash-core-v1'; 
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const appId = localStorage.getItem('tenant_app_id') || 'bcklas-squash-core-v1';
   // 在 App.jsx 頂部附近
 const { 
     students, 
