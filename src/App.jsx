@@ -902,8 +902,9 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(false);
   };
 
+// --- 修正後的 handleLogin (相容原始密碼版本) ---
 const handleLogin = async (type, credentials) => {
-    // 從 localStorage 獲取學校專屬 ID，如果沒有則使用預設值
+    // 獲取目前學校 ID
     const tenantAppId = localStorage.getItem('tenant_app_id') || 'bcklas-squash-core-v1';
 
     if (type === 'admin') {
@@ -914,41 +915,35 @@ const handleLogin = async (type, credentials) => {
         }
 
         try {
-            // 1. 正常登入
+            // 1. 執行登入
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
 
-            // 2. 【核心安全檢查】登入後，立刻檢查該用戶是否屬於本校
-            //    我們假設每個學校的管理員文檔都存放在對應 appId 的 'admins' 集合中
-            const adminDocRef = doc(db, 'artifacts', tenantAppId, 'private', 'admins', user.uid);
-            const adminDocSnap = await getDoc(adminDocRef);
-
-            if (adminDocSnap.exists()) {
-                // 3. 檢查通過，是本校管理員，允許登入
+            // 2. 【教練安全檢查】
+            // 如果您還沒設定 Firestore 管理員文件，請暫時使用 Email 域名檢查
+            // 這裡確保只有 @bcklas.edu.hk 的電郵能登入管理後台
+            if (user.email.endsWith('@bcklas.edu.hk')) {
                 setRole('admin');
                 setShowLoginModal(false);
                 setActiveTab('dashboard');
             } else {
-                // 4. 檢查失敗，不是本校管理員，強制登出
-                await signOut(auth); // 立刻將這個不相關的使用者登出
-                alert('登入失敗：此管理員帳號不屬於本校系統。');
+                await signOut(auth);
+                alert('登入失敗：此帳號不具備本校管理員權限。');
             }
         } catch (error) {
             console.error("Admin Login failed:", error);
-            let errorMessage = '登入失敗，請確認教練帳號密碼是否正確。';
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                errorMessage = '登入失敗：電郵或密碼錯誤。';
-            }
-            alert(errorMessage);
+            alert('登入失敗：電郵或密碼錯誤。');
         }
-    } else { // 學生登入邏輯保持不變
-        // **注意**: 為了確保學生也只能登入自己學校的網站，學生登入的 email 後綴也應使用 tenantAppId
-        const studentAuthEmail = `${credentials.classStr.toLowerCase().trim()}${credentials.classNo.trim()}@${tenantAppId}`;
-
-        if (!credentials.classStr || !credentials.classNo || !credentials.password) {
+    } else {
+        // --- 學生登入修正區 ---
+        const { classStr, classNo, password } = credentials;
+        if (!classStr || !classNo || !password) {
             alert('請輸入班別、班號和密碼');
             return;
         }
+
+        // 重要：將後綴改回您的原始域名 @bcklas.squash，以匹配舊帳號
+        const studentAuthEmail = `${classStr.toLowerCase().trim()}${classNo.trim()}@bcklas.squash`;
 
         try {
             await signInWithEmailAndPassword(auth, studentAuthEmail, password);
@@ -956,7 +951,6 @@ const handleLogin = async (type, credentials) => {
             
             if (matchedStudent) {
                 setCurrentUserInfo(matchedStudent);
-                // requestNotificationPermission(matchedStudent); // 如有需要可取消註解
             } else {
                 setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail });
             }
@@ -965,10 +959,11 @@ const handleLogin = async (type, credentials) => {
             setActiveTab('myDashboard');
         } catch (error) {
             console.error("Student Login failed:", error);
-            alert('登入失敗：\n(請確認班別、班號和密碼是否正確)');
+            alert('登入失敗：班別、班號或密碼不正確。');
         }
     }
 };
+
 
     
   const handleLogout = async () => { 
