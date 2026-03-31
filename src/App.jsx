@@ -65,10 +65,10 @@ const CURRENT_VERSION = "1.0";
 
 // Calendar Localizer
 const localizer = momentLocalizer(moment);
+const appId = 'bcklas-squash-core-v1'; 
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const appId = localStorage.getItem('tenant_app_id') || 'bcklas-squash-core-v1';
   // 在 App.jsx 頂部附近
 const { 
     students, 
@@ -902,68 +902,50 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(false);
   };
 
-// --- 修正後的 handleLogin (相容原始密碼版本) ---
-const handleLogin = async (type, credentials) => {
-    // 獲取目前學校 ID
-    const tenantAppId = localStorage.getItem('tenant_app_id') || 'bcklas-squash-core-v1';
-
+  const handleLogin = async (type, credentials) => {
     if (type === 'admin') {
-        const { email, password } = credentials;
-        if (!email || !password) {
-            alert('請輸入教練電郵和密碼');
-            return;
-        }
-
-        try {
-            // 1. 執行登入
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-
-            // 2. 【教練安全檢查】
-            // 如果您還沒設定 Firestore 管理員文件，請暫時使用 Email 域名檢查
-            // 這裡確保只有 @bcklas.edu.hk 的電郵能登入管理後台
-            if (user.email.endsWith('@bcklas.edu.hk')) {
-                setRole('admin');
-                setShowLoginModal(false);
-                setActiveTab('dashboard');
-            } else {
-                await signOut(auth);
-                alert('登入失敗：此帳號不具備本校管理員權限。');
-            }
-        } catch (error) {
-            console.error("Admin Login failed:", error);
-            alert('登入失敗：電郵或密碼錯誤。');
-        }
+      const { email, password } = credentials;
+      if (!email || !password) {
+        alert('請輸入教練電郵和密碼');
+        return;
+      }
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        setRole('admin'); 
+        setShowLoginModal(false); 
+        setActiveTab('dashboard');
+      } catch (error) {
+        console.error("Admin Login failed", error);
+        alert('登入失敗：' + error.message + '\n(請確認教練帳號密碼是否正確)');
+      }
     } else {
-        // --- 學生登入修正區 ---
-        const { classStr, classNo, password } = credentials;
-        if (!classStr || !classNo || !password) {
-            alert('請輸入班別、班號和密碼');
-            return;
-        }
+      const { classStr, classNo, password } = credentials;
+      if (!classStr || !classNo || !password) {
+        alert('請輸入班別、班號和密碼');
+        return;
+      }
+      
+      const studentAuthEmail = `${classStr.toLowerCase().trim()}${classNo.trim()}@bcklas.squash`;
 
-        // 重要：將後綴改回您的原始域名 @bcklas.squash，以匹配舊帳號
-        const studentAuthEmail = `${classStr.toLowerCase().trim()}${classNo.trim()}@bcklas.squash`;
-
-        try {
-            await signInWithEmailAndPassword(auth, studentAuthEmail, password);
-            const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
-            
-            if (matchedStudent) {
-                setCurrentUserInfo(matchedStudent);
-            } else {
-                setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail });
-            }
-            setRole('student'); 
-            setShowLoginModal(false); 
-            setActiveTab('myDashboard');
-        } catch (error) {
-            console.error("Student Login failed:", error);
-            alert('登入失敗：班別、班號或密碼不正確。');
+      try {
+        await signInWithEmailAndPassword(auth, studentAuthEmail, password);
+        const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
+        
+        if (matchedStudent) {
+            setCurrentUserInfo(matchedStudent);
+            requestNotificationPermission(matchedStudent);
+        } else {
+            setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail });
         }
+        setRole('student'); 
+        setShowLoginModal(false); 
+        setActiveTab('myDashboard');
+      } catch (error) {
+        console.error("Student Login failed", error);
+        alert('登入失敗：\n(請確認班別、班號和密碼是否正確)');
+      }
     }
-};
-
+  };
 
     
   const handleLogout = async () => { 
@@ -2181,20 +2163,18 @@ const myDashboardData = useMemo(() => {
 
       {/* 版本 12.0: 主題式動態登入頁面 */}
 {/* 主題式動態登入頁面 */}
-{showLoginModal ? (
+{showLoginModal && (
     <LoginScreen 
         onLogin={handleLogin} 
         systemConfig={systemConfig} 
     />
-) : (
-    <>
+)}
       <aside 
         className={`fixed md:static inset-y-0 left-0 z-[60] w-80 border-r transition-transform duration-300 ease-in-out 
                    ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
                    md:translate-x-0`}
         style={{ backgroundColor: 'var(--theme-sidebar-bg)' }}
       >
-
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
             <div className="flex items-center justify-center"><SchoolLogo size={32} /></div>
@@ -2829,11 +2809,6 @@ const myDashboardData = useMemo(() => {
 )}        
         </div>
       </main>
-
-      {/* 這裡補上剛才在第二處修改中開啟的括號結尾 */}
-    </>
-)}
-
-    </div> 
+    </div>
   );
 }
