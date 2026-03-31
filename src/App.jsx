@@ -902,50 +902,76 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(false);
   };
 
-  const handleLogin = async (type, credentials) => {
-    if (type === 'admin') {
-      const { email, password } = credentials;
-      if (!email || !password) {
-        alert('請輸入教練電郵和密碼');
-        return;
-      }
-      try {
-        await signInWithEmailAndPassword(auth, email, password);
-        setRole('admin'); 
-        setShowLoginModal(false); 
-        setActiveTab('dashboard');
-      } catch (error) {
-        console.error("Admin Login failed", error);
-        alert('登入失敗：' + error.message + '\n(請確認教練帳號密碼是否正確)');
-      }
-    } else {
-      const { classStr, classNo, password } = credentials;
-      if (!classStr || !classNo || !password) {
-        alert('請輸入班別、班號和密碼');
-        return;
-      }
-      
-      const studentAuthEmail = `${classStr.toLowerCase().trim()}${classNo.trim()}@bcklas.squash`;
+  # 版本 1.1: 增強管理員登入安全性，防止跨站登入
 
-      try {
-        await signInWithEmailAndPassword(auth, studentAuthEmail, password);
-        const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
-        
-        if (matchedStudent) {
-            setCurrentUserInfo(matchedStudent);
-            requestNotificationPermission(matchedStudent);
-        } else {
-            setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail });
+const handleLogin = async (type, credentials) => {
+    // 從 localStorage 獲取學校專屬 ID，如果沒有則使用預設值
+    const tenantAppId = localStorage.getItem('tenant_app_id') || 'bcklas-squash-core-v1';
+
+    if (type === 'admin') {
+        const { email, password } = credentials;
+        if (!email || !password) {
+            alert('請輸入教練電郵和密碼');
+            return;
         }
-        setRole('student'); 
-        setShowLoginModal(false); 
-        setActiveTab('myDashboard');
-      } catch (error) {
-        console.error("Student Login failed", error);
-        alert('登入失敗：\n(請確認班別、班號和密碼是否正確)');
-      }
+
+        try {
+            // 1. 正常登入
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+
+            // 2. 【核心安全檢查】登入後，立刻檢查該用戶是否屬於本校
+            //    我們假設每個學校的管理員文檔都存放在對應 appId 的 'admins' 集合中
+            const adminDocRef = doc(db, 'artifacts', tenantAppId, 'private', 'admins', user.uid);
+            const adminDocSnap = await getDoc(adminDocRef);
+
+            if (adminDocSnap.exists()) {
+                // 3. 檢查通過，是本校管理員，允許登入
+                setRole('admin');
+                setShowLoginModal(false);
+                setActiveTab('dashboard');
+            } else {
+                // 4. 檢查失敗，不是本校管理員，強制登出
+                await signOut(auth); // 立刻將這個不相關的使用者登出
+                alert('登入失敗：此管理員帳號不屬於本校系統。');
+            }
+        } catch (error) {
+            console.error("Admin Login failed:", error);
+            let errorMessage = '登入失敗，請確認教練帳號密碼是否正確。';
+            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                errorMessage = '登入失敗：電郵或密碼錯誤。';
+            }
+            alert(errorMessage);
+        }
+    } else { // 學生登入邏輯保持不變
+        const { classStr, classNo, password } = credentials;
+        if (!classStr || !classNo || !password) {
+            alert('請輸入班別、班號和密碼');
+            return;
+        }
+        
+        const studentAuthEmail = `${classStr.toLowerCase().trim()}${classNo.trim()}@${tenantAppId}`;
+
+        try {
+            await signInWithEmailAndPassword(auth, studentAuthEmail, password);
+            const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
+            
+            if (matchedStudent) {
+                setCurrentUserInfo(matchedStudent);
+                // requestNotificationPermission(matchedStudent); // 如有需要可取消註解
+            } else {
+                setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail });
+            }
+            setRole('student'); 
+            setShowLoginModal(false); 
+            setActiveTab('myDashboard');
+        } catch (error) {
+            console.error("Student Login failed", error);
+            alert('登入失敗：\n(請確認班別、班號和密碼是否正確)');
+        }
     }
-  };
+};
+
 
     
   const handleLogout = async () => { 
@@ -2163,12 +2189,12 @@ const myDashboardData = useMemo(() => {
 
       {/* 版本 12.0: 主題式動態登入頁面 */}
 {/* 主題式動態登入頁面 */}
-{showLoginModal ? (
-          <div className="fixed inset-0 z-[9999] bg-slate-900">
-              <LoginScreen onLogin={handleLogin} systemConfig={systemConfig} />
-          </div>
-      ) : (
-          <>
+{showLoginModal && (
+    <LoginScreen 
+        onLogin={handleLogin} 
+        systemConfig={systemConfig} 
+    />
+)}
       <aside 
         className={`fixed md:static inset-y-0 left-0 z-[60] w-80 border-r transition-transform duration-300 ease-in-out 
                    ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
