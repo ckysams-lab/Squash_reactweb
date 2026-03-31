@@ -134,6 +134,47 @@ export default function UmpirePanelModal({
                     server: playerNum, serveSide: 'R' // 贏家下一局先發球
                 };
 
+                const handleUndoAction = async (match) => {
+        const currentLog = match.pointLog || [];
+        if (currentLog.length === 0) return; // 沒有紀錄可退
+
+        const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'live_matches', match.id);
+        
+        // 1. 取得最後一筆紀錄
+        const lastAction = currentLog[currentLog.length - 1];
+        
+        if (window.confirm(`確定要撤銷上一球的紀錄嗎？\n(將還原比分至上一球前)`)) {
+            
+            // 2. 準備新的 Log (刪除最後一筆)
+            const newLog = [...currentLog];
+            newLog.pop();
+
+            // 3. 找出「更前一筆」的狀態，用來還原發球權
+            const prevAction = newLog.length > 0 ? newLog[newLog.length - 1] : null;
+
+            // 4. 還原數據
+            const updateData = {
+                // 如果沒有更前一筆，就回到 0:0 狀態
+                score1: prevAction ? prevAction.p1Score : 0,
+                score2: prevAction ? prevAction.p2Score : 0,
+                // 還原發球權 (這裡我們簡單處理，設回原本得分的人發球，或回到 R 區)
+                server: prevAction ? prevAction.actionBy : 1,
+                serveSide: 'R', 
+                pointLog: newLog,
+                updatedAt: serverTimestamp()
+            };
+
+            // 注意：如果該分已經導致「贏得該局」，為了資料安全，我們暫不支援「跨局 Undo」
+            // 系統會提示教練直接去 LeaguePage 修改最終結果。
+            if (lastAction.p1Score === 0 && lastAction.p2Score === 0 && (match.games1 > 0 || match.games2 > 0)) {
+                alert("⚠️ 注意：此分涉及跨局結算，無法直接撤銷。如需修正請直接手動調整比分。");
+                return;
+            }
+
+            await updateDoc(matchRef, updateData);
+        }
+    };
+
                 // 檢查是否整場獲勝
                 if (newGames1 === gamesNeededToWin || newGames2 === gamesNeededToWin) {
                     const winnerNum = newGames1 === gamesNeededToWin ? 1 : 2;
@@ -350,6 +391,17 @@ export default function UmpirePanelModal({
                                         </button>
                                     </div>
                                 </div>
+{/* 👇 新增：中間的操作列，放 Undo 按鈕 👇 */}
+                                <div className="flex justify-center my-4">
+                                    <button 
+                                        onClick={() => handleUndoAction(match)}
+                                        disabled={!match.pointLog || match.pointLog.length === 0}
+                                        className="flex items-center gap-2 px-6 py-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-full font-black text-xs hover:bg-amber-100 transition-all disabled:opacity-30"
+                                    >
+                                        <RotateCcw size={14}/> 撤銷上一分 (Undo)
+                                    </button>
+                                </div>
+
                                 
                                 {/* 底部危險操作區 */}
                                 <div className="mt-auto pt-6 flex justify-between items-center">
