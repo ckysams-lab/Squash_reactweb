@@ -902,8 +902,6 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(false);
   };
 
-  # 版本 1.1: 增強管理員登入安全性，防止跨站登入
-
 const handleLogin = async (type, credentials) => {
     // 從 localStorage 獲取學校專屬 ID，如果沒有則使用預設值
     const tenantAppId = localStorage.getItem('tenant_app_id') || 'bcklas-squash-core-v1';
@@ -2834,8 +2832,6 @@ const myDashboardData = useMemo(() => {
 )}        
         </div>
       </main>
-     </>
-   )}
  </div> 
   );
 }
