@@ -2,10 +2,14 @@
 
 import React, { useState } from 'react';
 import { FileText, Loader2, CheckCircle2, Calendar, Search } from 'lucide-react';
+// 👇 1. 引入 pdfjs
 import * as pdfjs from 'pdfjs-dist';
+// 👇 2. 使用 Vite 的特殊語法 '?url'，直接從我們自己的 node_modules 抓取引擎
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 
-// 設定 pdf.js 的 Worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+// 👇 3. 把引擎的網址設定為我們自己網站內部的網址，徹底解決跨網域問題
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
 
 export default function PDFScheduleUploader({ onImport }) {
     const [isProcessing, setIsUpdating] = useState(false);
