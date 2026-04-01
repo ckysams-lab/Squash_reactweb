@@ -2372,19 +2372,54 @@ const myDashboardData = useMemo(() => {
               /> 
           )}  
           {selectedSchedule && (
-            <div className="fixed inset-0 z-[250] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelectedSchedule(null)}>
-              <div className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl animate-in fade-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
-                <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3"><div className="w-3 h-3 rounded-full bg-blue-500"></div>{selectedSchedule.resource.trainingClass} 訓練詳情</h3>
+            <div className="fixed inset-0 z-[250] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={() => setSelectedSchedule(null)}>
+              <div className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+                
+                <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    {selectedSchedule.trainingClass} 訓練詳情
+                </h3>
+                
                 <div className="space-y-4 text-lg">
-                  <div className="flex items-center gap-4"><CalendarIcon size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.resource.date}</span></div>
-                  <div className="flex items-center gap-4"><Clock size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.resource.time || 'N/A'}</span></div>
-                  <div className="flex items-center gap-4"><MapPin size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.resource.location}</span></div>
+                  <div className="flex items-center gap-4"><CalendarIcon size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.date}</span></div>
+                  <div className="flex items-center gap-4"><Clock size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.time || 'N/A'}</span></div>
+                  <div className="flex items-center gap-4"><MapPin size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.location}</span></div>
+                  {selectedSchedule.coach && (
+                      <div className="flex items-center gap-4"><User size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.coach}</span></div>
+                  )}
+                  {selectedSchedule.notes && (
+                      <div className="flex items-center gap-4 mt-4 pt-4 border-t border-slate-100">
+                          <span className="text-sm font-medium text-slate-600 bg-slate-50 p-3 rounded-xl w-full">{selectedSchedule.notes}</span>
+                      </div>
+                  )}
                 </div>
-                {role === 'admin' && moment(selectedSchedule.start).isSame(new Date(), 'day') && (
-                  <div className="mt-8 pt-6 border-t">
-                    <button onClick={() => { setActiveTab('attendance'); setSelectedSchedule(null); }} className="w-full text-center py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all">前往點名</button>
+
+                {role === 'admin' && (
+                  <div className="mt-8 pt-6 border-t border-slate-100 flex gap-4">
+                    {/* 👇 新增：刪除按鈕 👇 */}
+                    <button 
+                        onClick={() => {
+                            // 呼叫刪除功能，並在刪除後關閉視窗
+                            deleteItem('schedules', selectedSchedule.id);
+                            setSelectedSchedule(null);
+                        }} 
+                        className="flex-1 text-center py-4 bg-rose-50 text-rose-600 font-black rounded-2xl hover:bg-rose-500 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2"
+                    >
+                        <Trash2 size={18}/> 刪除此課程
+                    </button>
+                    
+                    {/* 原本的前往點名按鈕 (只在今天顯示) */}
+                    {moment(selectedSchedule.date).isSame(new Date(), 'day') && (
+                        <button 
+                            onClick={() => { setActiveTab('attendance'); setSelectedSchedule(null); }} 
+                            className="flex-1 text-center py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all shadow-md"
+                        >
+                            前往點名
+                        </button>
+                    )}
                   </div>
                 )}
+
               </div>
             </div>
           )}
@@ -2648,6 +2683,7 @@ const myDashboardData = useMemo(() => {
                   calendarEvents={calendarEvents}
                   setSelectedSchedule={setSelectedSchedule}
                   handleCSVImportSchedules={handleCSVImportSchedules}
+                  deleteItem={deleteItem}
               />
           )}
 
