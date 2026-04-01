@@ -5,6 +5,7 @@ import { Calendar as CalendarIcon, Clock, MapPin, Upload, Filter, ChevronDown, P
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import PDFScheduleUploader from '../components/PDFScheduleUploader.jsx'; 
 
 // 引入 UI 元件
 import { PageHeader, Card } from '../components/ui.jsx';
@@ -60,8 +61,6 @@ export default function CalendarPage({
                 subtitle="查看所有訓練班的上課時間與地點" 
                 icon={CalendarIcon} 
             />
-
-    import PDFScheduleUploader from '../components/PDFScheduleUploader.jsx'; 
             <Card className="flex flex-col lg:flex-row items-center justify-between gap-6 overflow-visible">
                 <div className="flex-1 w-full flex flex-col sm:flex-row gap-4">
                     <div className="relative flex-1 sm:flex-none sm:w-64">
