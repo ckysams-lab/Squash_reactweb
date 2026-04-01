@@ -1280,36 +1280,51 @@ const handleSaveFeaturedBadges = async () => {
       return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
   };
 
-  const handleCSVImportSchedules = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+   const handleCSVImportSchedules = async (e, manualData = null) => {
+    
+    // 如果有手動傳入資料 (來自 PDF 掃描器)，就不需要讀取檔案
+    let finalRows = [];
+
+    if (manualData) {
+        finalRows = manualData;
+    } else {
+        const file = e.target?.files?.[0];
+        if (!file) return;
+        setIsUpdating(true);
+        try {
+            const text = await readCSVFile(file, importEncoding);
+            const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
+            finalRows = rows.map(row => {
+                const [className, date, location, coach, notes] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
+                return { trainingClass: className, date, location, coach, notes };
+            });
+        } catch (err) { alert('CSV 讀取失敗'); setIsUpdating(false); return; }
+    }
+
+    // --- 下面這段邏輯現在共用了：無論是來自 CSV 還是 PDF ---
     setIsUpdating(true);
     try {
-      const text = await readCSVFile(file, importEncoding);
-      const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
       const batch = writeBatch(db);
       const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
       
-      rows.forEach(row => {
-        const [className, date, location, coach, notes] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
-        if (date && date !== "日期") {
+      finalRows.forEach(item => {
+        if (item.date) {
           batch.set(doc(colRef), { 
-            trainingClass: className || '通用訓練班',
-            date, 
-            location: location || '學校壁球場', 
-            coach: coach || '待定', 
-            notes: notes || '', 
+            trainingClass: item.trainingClass || '通用訓練班',
+            date: item.date, 
+            location: item.location || '學校壁球場', 
+            coach: item.coach || '待定', 
+            notes: item.notes || '', 
             createdAt: serverTimestamp() 
           });
         }
       });
       await batch.commit();
-      alert('訓練班日程匯入成功！');
-    } catch (err) { alert('匯入失敗，請確認 CSV 格式'); }
+      alert(`✅ 成功匯入 ${finalRows.length} 筆訓練日程！`);
+    } catch (err) { alert('資料庫寫入失敗'); }
     setIsUpdating(false);
-    e.target.value = null;
+    if (e.target) e.target.value = null;
   };
-
   const handleCSVImportStudents = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
