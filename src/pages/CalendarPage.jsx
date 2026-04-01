@@ -79,7 +79,6 @@ export default function CalendarPage({
 
                 {role === 'admin' && (
                     <div className="flex w-full lg:w-auto flex-col sm:flex-row gap-4">
-                        <PDFScheduleUploader onImport={handleCSVImportSchedules} />
                         <TemplateDownloader type="schedule" />
                         <label className="bg-slate-800 text-white px-8 py-4 rounded-2xl cursor-pointer hover:bg-slate-700 shadow-lg flex items-center justify-center gap-2 transition-all font-bold active:scale-95">
                             <Upload size={18}/> 批量匯入日程
