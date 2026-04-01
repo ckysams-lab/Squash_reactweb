@@ -1,15 +1,14 @@
-// src/pages/CalendarPage.jsx (Version 3.1 - UI Standardized & Bug Fix)
+// src/pages/CalendarPage.jsx (Version 3.2 - Added Delete Button)
 
 import React from 'react';
-import { Calendar as CalendarIcon, Clock, MapPin, Upload, Filter, ChevronDown, Plus } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, MapPin, Upload, Filter, ChevronDown, Trash2 } from 'lucide-react'; // 👈 引入 Trash2
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
-// 引入 UI 元件
 import { PageHeader, Card } from '../components/ui.jsx';
-// 引入獨立的下載器
 import TemplateDownloader from '../components/TemplateDownloader.jsx';
+import PDFScheduleUploader from '../components/PDFScheduleUploader.jsx'; 
 
 const localizer = momentLocalizer(moment);
 
@@ -20,11 +19,11 @@ export default function CalendarPage({
     setSelectedClassFilter,
     calendarEvents,
     setSelectedSchedule,
-    // downloadTemplate, <--- 確認已移除
-    handleCSVImportSchedules
+    handleCSVImportSchedules,
+    // 👇 確保這裡有接收 deleteItem
+    deleteItem 
 }) {
 
-    // 客製化日曆的工具列
     const CustomToolbar = (toolbar) => {
         const goToBack = () => toolbar.onNavigate('PREV');
         const goToNext = () => toolbar.onNavigate('NEXT');
@@ -81,9 +80,8 @@ export default function CalendarPage({
 
                 {role === 'admin' && (
                     <div className="flex w-full lg:w-auto flex-col sm:flex-row gap-4">
-                        {/* 使用新的下載器 */}
+                        <PDFScheduleUploader onImport={handleCSVImportSchedules} />
                         <TemplateDownloader type="schedule" />
-                        
                         <label className="bg-slate-800 text-white px-8 py-4 rounded-2xl cursor-pointer hover:bg-slate-700 shadow-lg flex items-center justify-center gap-2 transition-all font-bold active:scale-95">
                             <Upload size={18}/> 批量匯入日程
                             <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportSchedules}/>
@@ -102,40 +100,21 @@ export default function CalendarPage({
                         style={{ height: '100%' }}
                         views={['month', 'week', 'agenda']}
                         components={{ toolbar: CustomToolbar }}
-                        onSelectEvent={(event) => setSelectedSchedule(event)}
+                        // 當點擊日曆上的事件時，將整包資料存入 selectedSchedule
+                        onSelectEvent={(event) => setSelectedSchedule(event.resource)} 
                         eventPropGetter={(event) => {
-                            // 簡單的顏色區分邏輯 (可根據需求擴充)
-                            let bgColor = '#3b82f6'; // 預設藍色
-                            if(event.resource.trainingClass.includes('精英') || event.resource.trainingClass.includes('校隊')) bgColor = '#f59e0b'; // 琥珀色
-                            if(event.resource.trainingClass.includes('興趣') || event.resource.trainingClass.includes('初班')) bgColor = '#10b981'; // 翠綠色
+                            let bgColor = '#3b82f6'; 
+                            if(event.resource.trainingClass.includes('精英') || event.resource.trainingClass.includes('校隊')) bgColor = '#f59e0b'; 
+                            if(event.resource.trainingClass.includes('興趣') || event.resource.trainingClass.includes('初班')) bgColor = '#10b981'; 
                             
                             return {
                                 style: {
-                                    backgroundColor: bgColor,
-                                    borderRadius: '8px',
-                                    opacity: 0.9,
-                                    color: 'white',
-                                    border: 'none',
-                                    display: 'block',
-                                    fontWeight: 'bold',
-                                    fontSize: '12px',
-                                    padding: '2px 6px',
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                    backgroundColor: bgColor, borderRadius: '8px', opacity: 0.9, color: 'white', border: 'none',
+                                    display: 'block', fontWeight: 'bold', fontSize: '12px', padding: '2px 6px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                                 }
                             };
                         }}
-                        messages={{
-                            next: "下一個",
-                            previous: "上一個",
-                            today: "今天",
-                            month: "月",
-                            week: "週",
-                            day: "日",
-                            agenda: "列表",
-                            date: "日期",
-                            time: "時間",
-                            event: "訓練班"
-                        }}
+                        messages={{ next: "下一個", previous: "上一個", today: "今天", month: "月", week: "週", day: "日", agenda: "列表", date: "日期", time: "時間", event: "訓練班" }}
                     />
                 </div>
             </Card>
