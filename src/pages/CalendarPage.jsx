@@ -8,7 +8,6 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 import { PageHeader, Card } from '../components/ui.jsx';
 import TemplateDownloader from '../components/TemplateDownloader.jsx';
-import PDFScheduleUploader from '../components/PDFScheduleUploader.jsx'; 
 
 const localizer = momentLocalizer(moment);
 
