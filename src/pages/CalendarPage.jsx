@@ -20,7 +20,6 @@ export default function CalendarPage({
     setSelectedClassFilter,
     calendarEvents,
     setSelectedSchedule,
-    // downloadTemplate, <--- 確認已移除
     handleCSVImportSchedules
 }) {
 
@@ -62,6 +61,7 @@ export default function CalendarPage({
                 icon={CalendarIcon} 
             />
 
+    import PDFScheduleUploader from '../components/PDFScheduleUploader.jsx'; 
             <Card className="flex flex-col lg:flex-row items-center justify-between gap-6 overflow-visible">
                 <div className="flex-1 w-full flex flex-col sm:flex-row gap-4">
                     <div className="relative flex-1 sm:flex-none sm:w-64">
@@ -82,6 +82,7 @@ export default function CalendarPage({
                 {role === 'admin' && (
                     <div className="flex w-full lg:w-auto flex-col sm:flex-row gap-4">
                         {/* 使用新的下載器 */}
+                        <PDFScheduleUploader onImport={handleCSVImportSchedules} />
                         <TemplateDownloader type="schedule" />
                         
                         <label className="bg-slate-800 text-white px-8 py-4 rounded-2xl cursor-pointer hover:bg-slate-700 shadow-lg flex items-center justify-center gap-2 transition-all font-bold active:scale-95">
