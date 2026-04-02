@@ -1,4 +1,4 @@
-// .eslintrc.cjs
+// File: .eslintrc.cjs
 
 module.exports = {
   root: true,
@@ -8,25 +8,36 @@ module.exports = {
     'plugin:react/recommended',
     'plugin:react/jsx-runtime',
     'plugin:react-hooks/recommended',
-    'prettier', // 關鍵！與 Prettier 整合
   ],
   ignorePatterns: ['dist', '.eslintrc.cjs'],
   parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
   settings: { react: { version: '18.2' } },
   plugins: ['react-refresh'],
   rules: {
+    'react/jsx-no-target-blank': 'off',
     'react-refresh/only-export-components': [
       'warn',
       { allowConstantExport: true },
     ],
+    'no-unused-vars': [
+      'warn',
+      { 
+        args: 'after-used', 
+        varsIgnorePattern: '^_',
+        argsIgnorePattern: '^_',
+      }
+    ],
+    'react/prop-types': 'off'
   },
-};
-
-"overrides": [
-  {
-    "files": ["firebase-messaging-sw.js"],
-    "env": {
-      "serviceworker": true
+  overrides: [
+    {
+      files: ['firebase-messaging-sw.js'],
+      env: {
+        serviceworker: true,
+      },
+      globals: {
+        firebase: 'readonly',
+      }
     }
-  }
-]
+  ]
+};
