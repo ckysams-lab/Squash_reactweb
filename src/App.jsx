@@ -2272,25 +2272,25 @@ const handleUpdateLeagueMatchScore = async (match) => {
 
           {/* FIX: MyDashboardPage now correctly receives myDashboardData instead of playerDashboardData */}
           {!viewingStudent && activeTab === 'myDashboard' && role === 'student' && (
-              <MyDashboardPage 
-                  currentUserInfo={currentUserInfo}
-                  rankedStudents={rankedStudents}
-                  playerDashboardData={myDashboardData}
-                  setViewingBadge={setViewingBadge}
-                  tacticalShots={tacticalShots}
-                  role={role}
-                  handleCheerMatch={handleCheerMatch}
-                  showcaseEditorOpen={showcaseEditorOpen}
-                  setShowcaseEditorOpen={setShowcaseEditorOpen}
-                  selectedFeaturedBadges={selectedFeaturedBadges}
-                  setSelectedFeaturedBadges={setSelectedFeaturedBadges}
-                  handleSaveFeaturedBadges={handleSaveFeaturedBadges}
-                  isUpdating={isUpdating}
-                  playerJournals={playerJournals}
-                  handleAddJournalEntry={handleAddJournalEntry}
-                  handleReplyJournalEntry={handleReplyJournalEntry}
-              />
-          )}
+    <MyDashboardPage 
+        currentUserInfo={currentUserInfo}
+        rankedStudents={rankedStudents}
+        myDashboardData={myDashboardData} // Corrected prop name
+        setViewingBadge={setViewingBadge}
+        tacticalShots={tacticalShots}
+        role={role}
+        handleCheerMatch={handleCheerMatch}
+        showcaseEditorOpen={showcaseEditorOpen}
+        setShowcaseEditorOpen={setShowcaseEditorOpen}
+        selectedFeaturedBadges={selectedFeaturedBadges}
+        setSelectedFeaturedBadges={setSelectedFeaturedBadges}
+        handleSaveFeaturedBadges={handleSaveFeaturedBadges}
+        isUpdating={isUpdating}
+        playerJournals={playerJournals}
+        handleAddJournalEntry={handleAddJournalEntry}
+        handleReplyJournalEntry={handleReplyJournalEntry}
+    />
+)}
         
           {!viewingStudent && activeTab === 'dashboard' && role === 'admin' && (
             <DashboardPage 
