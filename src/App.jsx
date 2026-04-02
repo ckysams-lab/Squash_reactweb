@@ -1427,88 +1427,78 @@ export default function App() {
     return result;
   }, [filteredMatches]);
 
-  // ADD THIS
-const handleCheerMatch = async (matchId, e) => {
-    if (e) e.stopPropagation();
-    if (!currentUserInfo && role !== 'admin') {
-        alert("請先登入才能為隊友打氣喔！");
-        return;
-    }
+  const handleCheerMatch = async (matchId, e) => {
+      e.stopPropagation();
+      if (!currentUserInfo && role !== 'admin') {
+          alert("請先登入才能為隊友打氣喔！");
+          return;
+      }
 
-    const userId = currentUserInfo?.id || 'admin';
-    const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', matchId);
+      const userId = currentUserInfo?.id || 'admin';
+      const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', matchId);
 
-    try {
-        const currentMatch = leagueMatches.find(m => m.id === matchId);
-        if (!currentMatch) return;
-        const currentCheers = currentMatch.cheers || [];
+      try {
+          const currentMatch = leagueMatches.find(m => m.id === matchId);
+          const currentCheers = currentMatch?.cheers || [];
 
-        // v1.1 FIX: Use arrayUnion and arrayRemove for atomic updates
-        if (currentCheers.includes(userId)) {
-            await updateDoc(matchRef, { cheers: arrayRemove(userId) });
-        } else {
-            await updateDoc(matchRef, { cheers: arrayUnion(userId) });
-        }
-    } catch (error) {
-        console.error("Cheer failed:", error);
-    }
-};
+          if (currentCheers.includes(userId)) {
+              await updateDoc(matchRef, { cheers: currentCheers.filter(id => id !== userId) });
+          } else {
+              await updateDoc(matchRef, { cheers: [...currentCheers, userId] });
+          }
+      } catch (error) {
+          console.error("Cheer failed:", error);
+      }
+  };
 
+  const handleUpdateLeagueMatchScore = async (match) => {
+      const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
+      if (score1_str === null) return;
+      const score2_str = prompt(`請輸入 ${match.player2Name} 的分數:`);
+      if (score2_str === null) return;
+      
+      const score1 = parseInt(score1_str, 10);
+      const score2 = parseInt(score2_str, 10);
 
-  // ADD THIS
-const handleUpdateLeagueMatchScore = async (match) => {
-    const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
-    if (score1_str === null) return;
-    const score2_str = prompt(`請輸入 ${match.player2Name || '對手'} 的分數:`);
-    if (score2_str === null) return;
-    
-    const score1 = parseInt(score1_str, 10);
-    const score2 = parseInt(score2_str, 10);
+      if (isNaN(score1) || isNaN(score2)) { alert("分數必須是數字！"); return; }
+      if (score1 === score2) { alert("比分不能相同，必須有勝負之分。"); return; }
 
-    if (isNaN(score1) || isNaN(score2)) { alert("分數必須是數字！"); return; }
-    if (score1 === score2) { alert("比分不能相同，必須有勝負之分。"); return; }
+      const winnerId = score1 > score2 ? match.player1Id : match.player2Id;
+      const winner = students.find(s => s.id === winnerId);
+      const loser = students.find(s => s.id === (winnerId === match.player1Id ? match.player2Id : match.player1Id));
+      
+      if (!winner || !loser) { alert("找不到球員資料，無法更新積分。"); return; }
 
-    const winnerId = score1 > score2 ? match.player1Id : match.player2Id;
-    const winner = students.find(s => s.id === winnerId);
-    
-    // v1.1 FIX: Support Bye matches where player2Id might be null
-    const loserId = (winnerId === match.player1Id ? match.player2Id : match.player1Id);
-    const loser = loserId ? students.find(s => s.id === loserId) : null;
-    
-    if (!winner) { alert("找不到獲勝球員資料，無法更新積分。"); return; }
-    
-    const winnerRank = rankedStudents.findIndex(s => s.id === winner.id) + 1;
-    const loserRank = loser ? (rankedStudents.findIndex(s => s.id === loser.id) + 1) : 0;
-    
-    const winnerBadgeLevel = BADGE_DATA[winner.badge]?.level || 0;
-    const loserBadgeLevel = loser ? (BADGE_DATA[loser.badge]?.level || 0) : 0;
-    
-    const isRankGiantKiller = winnerRank > 0 && loserRank > 0 && (winnerRank - loserRank) >= 5;
-    const isBadgeGiantKiller = loser && winnerBadgeLevel < loserBadgeLevel;
-    const isGiantKiller = isRankGiantKiller || isBadgeGiantKiller;
-    const pointsToAdd = isGiantKiller ? 20 : 10;
-    
-    const confirmMsg = `✍️ 確認賽果？\n\n${match.player1Name} vs ${match.player2Name || 'BYE'}\n比分: ${score1} - ${score2}\n\n🏆 勝方: ${winner.name} (+${pointsToAdd} 分 ${isGiantKiller ? '🔥巨人殺手' : ''})`;
+      const winnerRank = rankedStudents.findIndex(s => s.id === winner.id) + 1;
+      const loserRank = rankedStudents.findIndex(s => s.id === loser.id) + 1;
+      const winnerBadgeLevel = BADGE_DATA[winner.badge]?.level || 0;
+      const loserBadgeLevel = BADGE_DATA[loser.badge]?.level || 0;
+      const isRankGiantKiller = winnerRank > 0 && loserRank > 0 && (winnerRank - loserRank) >= 5;
+      const isBadgeGiantKiller = winnerBadgeLevel < loserBadgeLevel;
+      const isGiantKiller = isRankGiantKiller || isBadgeGiantKiller;
+      const pointsToAdd = isGiantKiller ? 20 : 10;
+      
+      const confirmMsg = `✍️ 確認賽果？\n\n${match.player1Name} vs ${match.player2Name}\n比分: ${score1} - ${score2}\n\n🏆 勝方: ${winner.name} (+${pointsToAdd} 分 ${isGiantKiller ? '🔥巨人殺手' : ''})\n負方: ${loser.name} (+0 分)`;
 
-    if (confirm(confirmMsg)) {
-        setIsUpdating(true);
-        try {
-            const batch = writeBatch(db);
-            const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
-            batch.update(matchRef, { score1, score2, winnerId, status: 'completed', updatedAt: serverTimestamp() });
+      if (confirm(confirmMsg)) {
+          setIsUpdating(true);
+          try {
+              const batch = writeBatch(db);
+              const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
+              batch.update(matchRef, { score1, score2, winnerId, status: 'completed', updatedAt: serverTimestamp() });
 
-            const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id);
-            batch.update(winnerRef, { points: increment(pointsToAdd), lastUpdated: serverTimestamp() });
-            
-            await batch.commit();
-            alert("✅ 賽果已成功儲存並更新積分！");
-        } catch (e) {
-            console.error("Update match score failed", e);
-            alert("儲存失敗，請檢查網絡連線。");
-        }
-        setIsUpdating(false);
-    }
-};
+              const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id);
+              batch.update(winnerRef, { points: increment(pointsToAdd), lastUpdated: serverTimestamp() });
+              
+              await batch.commit();
+              alert("✅ 賽果已成功儲存並更新積分！");
+          } catch (e) {
+              console.error("Update match score failed", e);
+              alert("儲存失敗，請檢查網絡連線。");
+          }
+          setIsUpdating(false);
+      }
+  };
 
   const handleEditLeagueMatch = async (match) => {
       const newDate = prompt(`請輸入新的比賽日期 (YYYY-MM-DD):`, match.date);
@@ -1987,67 +1977,68 @@ const handleUpdateLeagueMatchScore = async (match) => {
           
           <nav className="space-y-2 flex-1 overflow-y-auto">
               {(() => {
-                
-          const NavButton = ({ tabName, activeTab, setActiveTab, setSidebarOpen, icon, children }) => {
-    const [isHovered, setIsHovered] = useState(false);
-    const isActive = activeTab === tabName;
-    
-    const activeStyle = {
-      backgroundColor: 'var(--theme-sidebar-active-bg)',
-      color: 'var(--theme-sidebar-active-text)',
-      boxShadow: '0 10px 15px -3px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.2)'
-    };
-    const inactiveStyle = { color: 'var(--theme-sidebar-text)', backgroundColor: 'transparent' };
-    const hoverStyle = { backgroundColor: 'rgba(128, 128, 128, 0.05)' };
+                const baseButtonClass = "w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all text-left font-bold";
+                const activeStyle = {
+                  backgroundColor: 'var(--theme-sidebar-active-bg)',
+                  color: 'var(--theme-sidebar-active-text)',
+                  boxShadow: '0 10px 15px -3px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.2), 0 4px 6px -2px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.1)'
+                };
+                const inactiveStyle = { color: 'var(--theme-sidebar-text)', backgroundColor: 'transparent' };
+                const hoverStyle = { backgroundColor: 'rgba(128, 128, 128, 0.05)' };
 
-    let style = isActive ? activeStyle : inactiveStyle;
-    if (!isActive && isHovered) style = {...style, ...hoverStyle};
-    
-    return (
-        <button
-          onClick={() => { setActiveTab(tabName); setSidebarOpen(false); }}
-          className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all text-left font-bold"
-          style={style}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-        >
-          {icon} {children}
-        </button>
-    );
-};
-        
-               <nav className="space-y-2 flex-1 overflow-y-auto">
-  <>
-    {(role === 'admin' || role === 'student') && (
-      <>
-        <div className="text-[10px] uppercase tracking-widest mb-4 px-6" style={{ color: 'var(--theme-text-faint)' }}>主選單</div>
-        <NavButton tabName="myDashboard" icon={<UserCheck size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>我的表現</NavButton>
-        <NavButton tabName="monthlyStars" icon={<Star size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>每月之星</NavButton>
-        <NavButton tabName="rankings" icon={<Trophy size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>積分排行</NavButton>
-        <NavButton tabName="league" icon={<Swords size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>聯賽專區</NavButton>
-        <NavButton tabName="socialFeed" icon={<MessageSquare size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>球隊動態</NavButton>
-        <NavButton tabName="gallery" icon={<ImageIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>精彩花絮</NavButton>
-        <NavButton tabName="wallOfFame" icon={<Trophy size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>榮譽殿堂</NavButton>
-        <NavButton tabName="awards" icon={<Award size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>獎項成就</NavButton>
-        <NavButton tabName="schedules" icon={<CalendarIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>訓練日程</NavButton>
-        <NavButton tabName="competitions" icon={<Megaphone size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>比賽與公告</NavButton>
-      </>
-    )}
-    {role === 'admin' && (
-      <>
-        <div className="text-[10px] uppercase tracking-widest my-6 px-6 pt-6 border-t" style={{ color: 'var(--theme-text-faint)', borderColor: 'var(--theme-border)' }}>教練工具</div>
-        <NavButton tabName="dashboard" icon={<LayoutDashboard size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>管理概況</NavButton>
-        <NavButton tabName="assessments" icon={<Activity size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>綜合能力評估</NavButton>
-        <NavButton tabName="monthlyStarsAdmin" icon={<Crown size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>每月之星管理</NavButton>
-        <NavButton tabName="students" icon={<Users size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>隊員管理</NavButton>
-        <NavButton tabName="externalMatches" icon={<BookMarked size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>校外賽管理</NavButton>
-        <NavButton tabName="attendance" icon={<ClipboardCheck size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>快速點名</NavButton>
-        <NavButton tabName="financial" icon={<DollarSign size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>財務收支</NavButton>
-        <NavButton tabName="settings" icon={<Settings2 size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>系統設定</NavButton>
-      </>
-    )}
-  </>
-</nav>
+                const NavButton = ({ tabName, icon, children }) => {
+                    const [isHovered, setIsHovered] = useState(false);
+                    const isActive = activeTab === tabName;
+                    let style = isActive ? activeStyle : inactiveStyle;
+                    if (!isActive && isHovered) style = {...style, ...hoverStyle};
+                    
+                    return (
+                        <button
+                          onClick={() => { setActiveTab(tabName); setSidebarOpen(false); }}
+                          className={baseButtonClass}
+                          style={style}
+                          onMouseEnter={() => setIsHovered(true)}
+                          onMouseLeave={() => setIsHovered(false)}
+                        >
+                          {icon} {children}
+                        </button>
+                    );
+                };
+
+                return (
+                  <>
+                    {(role === 'admin' || role === 'student') && (
+                      <>
+                        <div className="text-[10px] uppercase tracking-widest mb-4 px-6" style={{ color: 'var(--theme-text-faint)' }}>主選單</div>
+                        <NavButton tabName="myDashboard" icon={<UserCheck size={20} />}>我的表現</NavButton>
+                        <NavButton tabName="monthlyStars" icon={<Star size={20} />}>每月之星</NavButton>
+                        <NavButton tabName="rankings" icon={<Trophy size={20} />}>積分排行</NavButton>
+                        <NavButton tabName="league" icon={<Swords size={20} />}>聯賽專區</NavButton>
+                        <NavButton tabName="socialFeed" icon={<MessageSquare size={20} />}>球隊動態</NavButton>
+                        <NavButton tabName="gallery" icon={<ImageIcon size={20} />}>精彩花絮</NavButton>
+                        <NavButton tabName="wallOfFame" icon={<Trophy size={20} />}>榮譽殿堂</NavButton>
+                        <NavButton tabName="awards" icon={<Award size={20} />}>獎項成就</NavButton>
+                        <NavButton tabName="schedules" icon={<CalendarIcon size={20} />}>訓練日程</NavButton>
+                        <NavButton tabName="competitions" icon={<Megaphone size={20} />}>比賽與公告</NavButton>
+                      </>
+                    )}
+                    {role === 'admin' && (
+                      <>
+                        <div className="text-[10px] uppercase tracking-widest my-6 px-6 pt-6 border-t" style={{ color: 'var(--theme-text-faint)', borderColor: 'var(--theme-border)' }}>教練工具</div>
+                        <NavButton tabName="dashboard" icon={<LayoutDashboard size={20} />}>管理概況</NavButton>
+                        <NavButton tabName="assessments" icon={<Activity size={20} />}>綜合能力評估</NavButton>
+                        <NavButton tabName="monthlyStarsAdmin" icon={<Crown size={20} />}>每月之星管理</NavButton>
+                        <NavButton tabName="students" icon={<Users size={20} />}>隊員管理</NavButton>
+                        <NavButton tabName="externalMatches" icon={<BookMarked size={20} />}>校外賽管理</NavButton>
+                        <NavButton tabName="attendance" icon={<ClipboardCheck size={20} />}>快速點名</NavButton>
+                        <NavButton tabName="financial" icon={<DollarSign size={20} />}>財務收支</NavButton>
+                        <NavButton tabName="settings" icon={<Settings2 size={20} />}>系統設定</NavButton>
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+            </nav>
           
           <div className="pt-10 border-t">
             <div className="bg-slate-50 rounded-3xl p-6 mb-4">
@@ -2070,9 +2061,7 @@ const handleUpdateLeagueMatchScore = async (match) => {
 
       <main className="flex-1 h-screen overflow-y-auto relative" style={{ backgroundColor: 'var(--theme-bg)' }}>
         {/* FIX: removed the trailing "..." from the className string */}
-        // ADD THIS CORRECTED LINE
-<header className="px-10 py-8 sticky top-0 backdrop-blur-xl z-40 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--theme-header-bg)', borderColor: 'var(--theme-border)' }}>
-
+        <header className="px-10 py-8 sticky top-0 backdrop-blur-xl z-40 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--theme-header-bg)', borderColor: 'var(--theme-border)' }}>
           <div className="flex items-center gap-6">
             <button onClick={()=>setSidebarOpen(true)} className="md:hidden p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-blue-600 transition-all">
               <Menu size={24}/>
@@ -2274,25 +2263,25 @@ const handleUpdateLeagueMatchScore = async (match) => {
 
           {/* FIX: MyDashboardPage now correctly receives myDashboardData instead of playerDashboardData */}
           {!viewingStudent && activeTab === 'myDashboard' && role === 'student' && (
-    <MyDashboardPage 
-        currentUserInfo={currentUserInfo}
-        rankedStudents={rankedStudents}
-        myDashboardData={myDashboardData} // Corrected prop name
-        setViewingBadge={setViewingBadge}
-        tacticalShots={tacticalShots}
-        role={role}
-        handleCheerMatch={handleCheerMatch}
-        showcaseEditorOpen={showcaseEditorOpen}
-        setShowcaseEditorOpen={setShowcaseEditorOpen}
-        selectedFeaturedBadges={selectedFeaturedBadges}
-        setSelectedFeaturedBadges={setSelectedFeaturedBadges}
-        handleSaveFeaturedBadges={handleSaveFeaturedBadges}
-        isUpdating={isUpdating}
-        playerJournals={playerJournals}
-        handleAddJournalEntry={handleAddJournalEntry}
-        handleReplyJournalEntry={handleReplyJournalEntry}
-    />
-)}
+              <MyDashboardPage 
+                  currentUserInfo={currentUserInfo}
+                  rankedStudents={rankedStudents}
+                  playerDashboardData={myDashboardData}
+                  setViewingBadge={setViewingBadge}
+                  tacticalShots={tacticalShots}
+                  role={role}
+                  handleCheerMatch={handleCheerMatch}
+                  showcaseEditorOpen={showcaseEditorOpen}
+                  setShowcaseEditorOpen={setShowcaseEditorOpen}
+                  selectedFeaturedBadges={selectedFeaturedBadges}
+                  setSelectedFeaturedBadges={setSelectedFeaturedBadges}
+                  handleSaveFeaturedBadges={handleSaveFeaturedBadges}
+                  isUpdating={isUpdating}
+                  playerJournals={playerJournals}
+                  handleAddJournalEntry={handleAddJournalEntry}
+                  handleReplyJournalEntry={handleReplyJournalEntry}
+              />
+          )}
         
           {!viewingStudent && activeTab === 'dashboard' && role === 'admin' && (
             <DashboardPage 
