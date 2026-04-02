@@ -1,6 +1,6 @@
 // src/pages/ExternalMatchesPage.jsx (Version 2.1 - Batch Input)
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BookMarked, Save, Globe, Trophy, User, X, PlusCircle, Trash2 } from 'lucide-react';
 import { writeBatch, collection, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
