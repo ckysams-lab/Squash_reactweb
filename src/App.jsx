@@ -60,17 +60,48 @@ import {
 import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from './firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+
 // --- 版本控制 ---
 const CURRENT_VERSION = "1.0";
 
 // Calendar Localizer
 const localizer = momentLocalizer(moment);
-const appId = 'bcklas-squash-core-v1'; 
+const appId = 'bcklas-squash-core-v1';
+
+// =============================================================================
+// FIX #1 — SchoolLogo moved OUTSIDE App() so React treats it as a real
+// component and the useState call inside it follows the Rules of Hooks.
+// Previously it was defined as a plain nested function inside App(), which
+// caused "rendered more hooks than previous render" crashes on re-renders.
+// =============================================================================
+const SchoolLogo = ({ size = 48, className = "", systemConfig }) => {
+  const [error, setError] = useState(false);
+  const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+  const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
+
+  if (error) {
+    return <ShieldCheck className={`${className}`} size={size} />;
+  }
+  return (
+    <img
+      src={logoUrl}
+      alt="BCKLAS Logo"
+      className={`object-contain ${className}`}
+      style={{ width: size * 2, height: size * 2 }}
+      loading="eager"
+      crossOrigin="anonymous"
+      onError={(e) => {
+        console.error("Logo load failed", e);
+        setError(true);
+      }}
+    />
+  );
+};
 
 export default function App() {
   const [user, setUser] = useState(null);
-  // 在 App.jsx 頂部附近
-const { 
+
+  const { 
     students, 
     competitions, 
     monthlyStars, 
@@ -98,38 +129,45 @@ const {
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
-  const [activeLeagueMatch, setActiveLeagueMatch] = useState(null); // 👉 新增這行：記錄正在轉播的聯賽
+  const [activeLeagueMatch, setActiveLeagueMatch] = useState(null);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
+
+  // =============================================================================
+  // FIX #2 — Declare the missing state variables consumed by handleTacticalClick
+  // and saveTacticalShots. Previously these were referenced but never declared,
+  // causing ReferenceErrors at runtime whenever the tactical board was used.
+  // =============================================================================
+  const [tacticalData, setTacticalData] = useState({ p1: '', p2: '' });
+  const [activePlayer, setActivePlayer] = useState(1);
+  const [lastRecorded, setLastRecorded] = useState(null);
+  const [pendingTacticalShots, setPendingTacticalShots] = useState([]);
+
   const syncGoogleDriveGallery = async () => {
     setIsSyncingDrive(true);
     try {
-        // 👇 這個 Google Apps Script 的網址保持不變 👇
         const gasUrl = "https://script.google.com/macros/s/AKfycby_ynudWf8U11QIpm5SdVJgFvFoOM4yVZzw_b-VrT5f6t2BnVavzYjdDBUMP3JIg91zfw/exec"; 
         
         const response = await fetch(gasUrl);
         const result = await response.json();
         
         if (result.status === 'success' && Array.isArray(result.data)) {
-            // --- Version 1.2: 將 Drive 資料寫入 Firestore ---
             const batch = writeBatch(db);
             const galleryColRef = collection(db, 'artifacts', appId, 'public', 'data', 'gallery');
             let itemsToSyncCount = 0;
 
-            // 檢查已存在的 Drive 圖片 URL，避免重複寫入
             const existingDriveImageUrls = new Set(galleryItems.filter(item => item.isDrive).map(item => item.url));
 
             result.data.forEach(album => {
                 if (album.photos && Array.isArray(album.photos)) {
                     album.photos.forEach(photo => {
-                        // 如果這張照片的 URL 尚未存在於資料庫，才進行寫入
                         if (!existingDriveImageUrls.has(photo.url)) {
-                            const newDocRef = doc(galleryColRef); // 建立一個新的文件參照
+                            const newDocRef = doc(galleryColRef);
                             batch.set(newDocRef, {
                                 type: 'image',
                                 url: photo.url,
-                                title: album.album, // 使用 Google Drive 的相簿名稱作為標題
-                                description: photo.name || `來自 ${album.album}`, // 使用照片檔名作為描述
-                                isDrive: true, // 標記此項目來自 Google Drive
+                                title: album.album,
+                                description: photo.name || `來自 ${album.album}`,
+                                isDrive: true,
                                 timestamp: serverTimestamp()
                             });
                             itemsToSyncCount++;
@@ -144,10 +182,6 @@ const {
             } else {
                 alert("ℹ️ Google Drive 中沒有找到新的照片可以同步。所有項目都已是最新狀態。");
             }
-            // --- End of Version 1.2 ---
-            
-            // 我們不再需要 setDriveAlbums(result.data) 這一行，因為頁面會自動從 Firestore 更新
-            
         } else {
             alert("同步失敗：" + (result.message || '無法解析來自 Google Drive 的資料。'));
         }
@@ -156,50 +190,35 @@ const {
         alert("網路錯誤，無法連接 Google Drive。");
     }
     setIsSyncingDrive(false);
-};
+  };
 
- //處理按讚/收回讚的邏輯
   const handleLikePost = async (postId) => {
-      // 確保使用者有登入
       if (!user) {
           alert("請先登入才能按讚喔！");
           return;
       }
 
-      // 取得當前使用者的 ID，如果是 admin 就用 'admin'，否則用 currentUserInfo.id
       const userId = role === 'admin' ? 'admin' : currentUserInfo?.id;
-      
       if (!userId) return;
 
       try {
-          // 找到這篇貼文目前的資料
           const post = feedPosts.find(p => p.id === postId);
           if (!post) return;
 
-          // 判斷使用者是否已經按過讚了
           const isLiked = post.likes && post.likes.includes(userId);
-
-          // 準備指向 Firestore 中該篇貼文的參考路徑
           const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'feed_posts', postId);
 
-          // 根據是否已按讚，執行加入或移除的操作
           if (isLiked) {
-              // 收回讚：從 likes 陣列中移除 userId
-              await updateDoc(postRef, {
-                  likes: arrayRemove(userId)
-              });
+              await updateDoc(postRef, { likes: arrayRemove(userId) });
           } else {
-              // 給讚：將 userId 加入 likes 陣列
-              await updateDoc(postRef, {
-                  likes: arrayUnion(userId)
-              });
+              await updateDoc(postRef, { likes: arrayUnion(userId) });
           }
       } catch (error) {
           console.error("按讚失敗:", error);
-          // 可以在這裡加入一個小小的錯誤提示，如果需要的話
       }
   };
-const parseCsvRow = (row) => {
+
+  const parseCsvRow = (row) => {
     const result = [];
     let current = '';
     let inQuotes = false;
@@ -216,7 +235,8 @@ const parseCsvRow = (row) => {
     }
     result.push(current.trim());
     return result;
-};
+  };
+
   const handleAddComment = async (postId, commentText) => {
       if (!user) {
           alert("請先登入才能留言喔！");
@@ -231,28 +251,24 @@ const parseCsvRow = (row) => {
       try {
           const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'feed_posts', postId);
           
-          // 建立留言物件
           const newComment = {
-              id: Date.now().toString(), // 給留言一個簡單的唯一 ID
+              id: Date.now().toString(),
               userId: userId,
               authorName: authorName,
               authorRole: role,
               authorPhotoUrl: authorPhotoUrl,
               text: commentText.trim(),
-              createdAt: new Date().toISOString() // 使用 ISO 字串儲存時間
+              createdAt: new Date().toISOString()
           };
 
-          // 將新留言加入到該貼文的 comments 陣列中
-          await updateDoc(postRef, {
-              comments: arrayUnion(newComment)
-          });
-          
+          await updateDoc(postRef, { comments: arrayUnion(newComment) });
       } catch (error) {
           console.error("留言失敗:", error);
           alert("留言失敗，請稍後再試。");
       }
   };
-  const [newAssessment, setNewAssessment] = useState({  // <- 新增
+
+  const [newAssessment, setNewAssessment] = useState({
     studentId: '',
     date: new Date().toISOString().split('T')[0],
     situps: '',
@@ -280,12 +296,9 @@ const parseCsvRow = (row) => {
   const [showAwardModal, setShowAwardModal] = useState(false);
   const [studentToAward, setStudentToAward] = useState(null);
 
-
-  {/* --- START: 版本 12.6 修正 - 補上遺漏的函式 --- */}
-const handleSaveFeaturedBadges = async () => {
+  const handleSaveFeaturedBadges = async () => {
     if (!currentUserInfo) return;
     
-    // 確保從最新的 students 陣列中抓取到正確的學生文檔 ID
     const studentData = students.find(s => s.authEmail === currentUserInfo.authEmail || s.id === currentUserInfo.id);
     
     if (!studentData || !studentData.id) {
@@ -298,12 +311,10 @@ const handleSaveFeaturedBadges = async () => {
         const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', studentData.id);
         await updateDoc(studentRef, {
             featuredBadges: selectedFeaturedBadges,
-            lastUpdated: serverTimestamp() // 順便更新最後修改時間
+            lastUpdated: serverTimestamp()
         });
         
-        // 更新當前的 currentUserInfo 狀態，讓畫面能即時反應
         setCurrentUserInfo(prev => ({ ...prev, featuredBadges: selectedFeaturedBadges }));
-        
         alert('✅ 你的勳章展示牆已成功更新！');
         setShowcaseEditorOpen(false);
     } catch (e) {
@@ -311,7 +322,7 @@ const handleSaveFeaturedBadges = async () => {
         alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網絡。`);
     }
     setIsUpdating(false);
-};
+  };
 
   const [showTacticalBoard, setShowTacticalBoard] = useState(false);
   const [systemConfig, setSystemConfig] = useState({ 
@@ -385,7 +396,7 @@ const handleSaveFeaturedBadges = async () => {
 
   useEffect(() => {
     const theme = systemConfig?.theme || 'default';
-    document.body.className = `theme-${theme}`; // 移除舊的，設置新的
+    document.body.className = `theme-${theme}`;
   }, [systemConfig?.theme]);
   
   useEffect(() => {
@@ -393,7 +404,6 @@ const handleSaveFeaturedBadges = async () => {
     
     try {
       const listeners = [];
-      // 版本 11.4: 修正因遺漏 `assessments` 集合定義而導致的 Firestore 初始化錯誤
       const collections = {
         attendance_logs: collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'),
         schedules: collection(db, 'artifacts', appId, 'public', 'data', 'schedules'),
@@ -405,7 +415,6 @@ const handleSaveFeaturedBadges = async () => {
         assessments: collection(db, 'artifacts', appId, 'public', 'data', 'assessments'), 
         tactical_shots: collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots')
       };
-
 
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
       const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
@@ -422,7 +431,7 @@ const handleSaveFeaturedBadges = async () => {
 
       listeners.push(onSnapshot(financeConfigRef, (docSnap) => {
         if (docSnap.exists()) setFinanceConfig(prev => ({...prev, ...docSnap.data()}));
-        else setDoc(financeConfigRef, financeConfig);
+        else setDoc(financeConfigRef, { nTeam: 1, costTeam: 2750, nTrain: 3, costTrain: 1350, nHobby: 4, costHobby: 1200, totalStudents: 50, feePerStudent: 250 });
       }, (e) => console.error("Finance err", e)));
     
       return () => listeners.forEach(unsub => unsub());
@@ -469,7 +478,7 @@ const handleSaveFeaturedBadges = async () => {
       setShowAwardModal(true);
   };
 
-   const togglePendingAttendance = (studentId) => { 
+  const togglePendingAttendance = (studentId) => { 
       setPendingAttendance(prev => 
       prev.includes(studentId) 
         ? prev.filter(id => id !== studentId)
@@ -564,30 +573,21 @@ const handleSaveFeaturedBadges = async () => {
       if (!a.date) return false;
       const d = new Date(a.date);
       if (isNaN(d)) return false;
-      
       const awardAcademicYear = getAcademicYear(d);
-      
       return awardAcademicYear === currentAcademicYear;
     }).length;
     
-    return {
-      thisMonthTrainings,
-      daysToNextMatch,
-      awardsThisYear
-    };
+    return { thisMonthTrainings, daysToNextMatch, awardsThisYear };
   }, [schedules, competitions, awards]);
 
-    const galleryAlbums = useMemo(() => {
+  const galleryAlbums = useMemo(() => {
     const albums = {};
     const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
     
-    // 統一處理所有從 Firebase 來的照片 (包含手動上傳和從 Drive 同步寫入的)
     safeGallery.forEach(item => {
-      // 確保即使沒有標題也有個預設值
       const title = item.title || "未分類相簿"; 
 
       if (!albums[title]) {
-        // 如果是新相簿，建立初始化結構
         albums[title] = { 
             title, 
             cover: item.url, 
@@ -595,7 +595,6 @@ const handleSaveFeaturedBadges = async () => {
             items: [], 
             type: item.type, 
             lastUpdated: item.timestamp?.seconds || 0,
-            // 如果這張照片有 isDrive 標記，代表這個相簿是 Drive 來的
             isDrive: item.isDrive || false 
         };
       }
@@ -603,16 +602,13 @@ const handleSaveFeaturedBadges = async () => {
       albums[title].count += 1;
       albums[title].items.push(item);
       
-      // 更新封面為最新的一張照片
       if (item.timestamp?.seconds && item.timestamp.seconds > albums[title].lastUpdated) {
          albums[title].cover = item.url;
          albums[title].lastUpdated = item.timestamp.seconds;
       }
     });
 
-    // 將整理好的相簿物件轉換成陣列，並依照最後更新時間排序
     return Object.values(albums).sort((a,b) => b.lastUpdated - a.lastUpdated);
-
   }, [galleryItems]);
 
   useEffect(() => {
@@ -655,8 +651,7 @@ const handleSaveFeaturedBadges = async () => {
     e.target.value = null;
   };
 
-    const handleSaveAssessment = async () => {
-    // 1. 安全解構所有欄位，賦予空字串或 0 作為預設值
+  const handleSaveAssessment = async () => {
     const { 
         studentId, 
         date, 
@@ -685,10 +680,8 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(true);
 
     try {
-      // 2. 建立乾淨的資料物件
       const cleanDataToSave = {
-        studentId: studentId,
-        date: date,
+        studentId, date,
         notes: notes || '', 
         situps: Number(situps) || 0,
         shuttleRun: Number(shuttleRun) || 0,
@@ -708,13 +701,11 @@ const handleSaveFeaturedBadges = async () => {
         timestamp: serverTimestamp()
       };
 
-      // 3. 🚨 關鍵點：使用 addDoc 與 collection 來【新增】一筆無名的獨立紀錄 🚨
       const assessmentsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'assessments');
       await addDoc(assessmentsColRef, cleanDataToSave);
 
       alert('✅ 綜合能力評估儲存成功！');
       
-      // 4. 清空表單
       setNewAssessment({
         studentId: '', date: new Date().toISOString().split('T')[0], 
         situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', 
@@ -730,17 +721,16 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(false);
   };
 
-    // 👇 --- 新增：處理教練發佈日誌 --- 👇
   const handleAddJournalEntry = async (studentId, content) => {
       if (!content.trim()) return;
       setIsUpdating(true);
       try {
           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'player_journals'), {
-              studentId: studentId,
+              studentId,
               coachContent: content,
               coachId: currentUserInfo?.id || 'admin',
               coachName: currentUserInfo?.name || '教練',
-              studentReply: null, // 學生還沒回覆
+              studentReply: null,
               createdAt: serverTimestamp()
           });
       } catch (e) {
@@ -750,7 +740,6 @@ const handleSaveFeaturedBadges = async () => {
       setIsUpdating(false);
   };
 
-  // 👇 --- 新增：處理學生回覆日誌 --- 👇
   const handleReplyJournalEntry = async (journalId, replyContent) => {
       if (!replyContent.trim()) return;
       setIsUpdating(true);
@@ -767,30 +756,24 @@ const handleSaveFeaturedBadges = async () => {
       setIsUpdating(false);
   };
 
-  
   const handleSaveExternalMatch = async () => {
     const { player1Id, tournamentName, date, isWin, externalMatchScore, opponentSchool, opponentPlayerName } = newExternalMatch;
     if (!player1Id || !tournamentName || !date || isWin === null) {
       alert('請填寫所有必填欄位：賽事、日期、我方隊員及本場結果。');
       return;
-    };
+    }
 
     const player = students.find(s => s.id === player1Id);
     if (!player) {
       alert('找不到指定的學生資料！');
       return;
-    };
+    }
 
     setIsUpdating(true);
     try {
       const matchData = {
-        tournamentName,
-        date,
-        player1Id,
-        isWin,
-        externalMatchScore,
-        opponentSchool,
-        opponentPlayerName,
+        tournamentName, date, player1Id, isWin, externalMatchScore,
+        opponentSchool, opponentPlayerName,
         matchType: 'external',
         player1Name: player.name,
         player2Id: null, 
@@ -801,7 +784,6 @@ const handleSaveFeaturedBadges = async () => {
       };
       
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'), matchData);
-      
       alert('✅ 校外賽記錄已成功儲存！');
       setNewExternalMatch({
         tournamentName: '',
@@ -812,7 +794,6 @@ const handleSaveFeaturedBadges = async () => {
         externalMatchScore: '',
         isWin: null,
       });
-
     } catch (e) {
       console.error("Failed to save external match:", e);
       alert('儲存失敗，請檢查網絡連線。');
@@ -820,40 +801,6 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(false);
   };
 
-    // 👉 貼在這裡：請求推播通知並儲存 Token
-  const requestNotificationPermission = async (studentData) => {
-    // 確保 app 已經初始化，且有找到學生資料才執行
-    if (!app || !studentData || !studentData.id) return;
-
-    try {
-      const messaging = getMessaging(app);
-      // 請求瀏覽器通知權限
-      const permission = await Notification.requestPermission();
-      
-      if (permission === 'granted') {
-        // 替換成您在 Firebase 後台拿到的 VAPID Key
-        const currentToken = await getToken(messaging, { 
-            vapidKey: 'lr72oncIjjBhzK77g6RLbmCp9IS_JdufjdNWELE0tN4' 
-        });
-        
-        if (currentToken) {
-          // 將 Token 寫入該名學生的 Firestore 資料中
-          const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', studentData.id);
-          await updateDoc(userRef, {
-            fcmToken: currentToken,
-            lastTokenUpdate: serverTimestamp() // 記錄最後更新時間
-          });
-          console.log("✅ 推播通知設定成功！Token已儲存。");
-        }
-      } else {
-        console.log("🚫 使用者拒絕了推播通知。");
-      }
-    } catch (error) {
-      console.error("⚠️ 無法獲取推播 Token:", error);
-    }
-  };
-
-  
   const deleteItem = async (col, id) => {
     if (role !== 'admin') return;
     if (window.confirm('確定要永久刪除這個項目嗎？')) {
@@ -861,33 +808,27 @@ const handleSaveFeaturedBadges = async () => {
     }
   };
 
-    const handleSetupStudentAuth = async (student) => {
-    // 1. 彈出視窗讓教練直接輸入密碼
+  const handleSetupStudentAuth = async (student) => {
     const password = prompt(`請為 ${student.name} 設定登入密碼 (最少 6 位數):`);
     if (!password || password.length < 6) {
         alert("密碼無效或太短 (Firebase 規定最少 6 位數)！已取消操作。");
         return;
     }
 
-    // 2. 自動組合專屬信箱格式：班別+班號@bcklas.squash (例如 6a01@bcklas.squash)
     const studentAuthEmail = `${student.class.toLowerCase().trim()}${student.classNo.trim()}@bcklas.squash`;
 
     setIsUpdating(true);
     try {
-        // 3. 【核心技巧】建立一個「暫時的」Firebase實例，避免教練被強制登出
         const tempApp = initializeApp(firebaseConfig, "TempApp");
         const tempAuth = getAuth(tempApp);
 
-        // 4. 在暫時的實例中建立學生帳號
         await createUserWithEmailAndPassword(tempAuth, studentAuthEmail, password);
 
-        // 5. 更新 Firestore 中的學生資料，綁定 authEmail 作為紀錄
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
             authEmail: studentAuthEmail,
             lastUpdated: serverTimestamp()
         });
 
-        // 6. 刪除暫時的實例，釋放系統資源
         await deleteApp(tempApp);
 
         alert(`✅ 成功為 ${student.name} 建立登入帳號！\n\n請通知學生：\n登入班別：${student.class}\n登入學號：${student.classNo}\n登入密碼：${password}`);
@@ -933,7 +874,6 @@ const handleSaveFeaturedBadges = async () => {
         
         if (matchedStudent) {
             setCurrentUserInfo(matchedStudent);
-            requestNotificationPermission(matchedStudent);
         } else {
             setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail });
         }
@@ -947,7 +887,6 @@ const handleSaveFeaturedBadges = async () => {
     }
   };
 
-    
   const handleLogout = async () => { 
     try {
       await signOut(auth);
@@ -965,46 +904,33 @@ const handleSaveFeaturedBadges = async () => {
     
     const uniqueMap = new Map();
     
-    // 步驟 1：去重並確保取最高分
     students.forEach(s => {
       const key = `${s.class}-${s.classNo}`;
-      // 強制轉換為數字，如果轉換失敗 (NaN) 則預設為 0
       const currentPoints = Number(s.points) || 0; 
       
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, { ...s, totalPoints: currentPoints });
       } else {
         const existing = uniqueMap.get(key);
-        // 嚴格的數字比較
         if (currentPoints > existing.totalPoints) {
             uniqueMap.set(key, { ...s, totalPoints: currentPoints });
         }
       }
     });
 
-    // 步驟 2：轉換為陣列並進行排序
     return Array.from(uniqueMap.values()).sort((a, b) => {
-      // 確保 a 和 b 的 totalPoints 都是數字
       const pointsA = Number(a.totalPoints) || 0;
       const pointsB = Number(b.totalPoints) || 0;
 
-      // 主要排序：根據總分降冪排列 (高分在上面)
-      if (pointsB !== pointsA) {
-          return pointsB - pointsA; 
-      }
+      if (pointsB !== pointsA) return pointsB - pointsA; 
       
-      // 次要排序：如果同分，則比較最後更新時間 (較新的在上面)
       const timeA = a.lastUpdated?.seconds || 0;
       const timeB = b.lastUpdated?.seconds || 0;
-      if (timeB !== timeA) {
-          return timeB - timeA;
-      }
+      if (timeB !== timeA) return timeB - timeA;
       
-      // 再次要排序：如果同分且時間一樣，根據班別和班號排序，確保每次渲染順序穩定
       const classCompare = (a.class || '').localeCompare(b.class || '');
       if (classCompare !== 0) return classCompare;
       return (a.classNo || '').localeCompare(b.classNo || '');
-
     });
   }, [students]);
 
@@ -1065,7 +991,7 @@ const handleSaveFeaturedBadges = async () => {
     setIsUpdating(false);
   };
 
-    const handleUpdateDOB = async (student) => {
+  const handleUpdateDOB = async (student) => {
     const currentDob = student.dob || "";
     const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
     
@@ -1192,7 +1118,6 @@ const handleSaveFeaturedBadges = async () => {
       const scheduleInfo = schedules.find(s => s.trainingClass === targetClass) || {};
 
       let csvContent = "\uFEFF"; 
-
       csvContent += `${targetClass},,${scheduleInfo.day || ' '},${scheduleInfo.time || ' '},${','.repeat(uniqueDates.length)}\n`;
       csvContent += `${scheduleInfo.location || ' '},,,,${uniqueDates.join(',')}\n`;
 
@@ -1259,7 +1184,7 @@ const handleSaveFeaturedBadges = async () => {
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
                 type: 'image',
                 url: compressedBase64,
-                title: title,
+                title,
                 description: desc,
                 timestamp: serverTimestamp()
             });
@@ -1272,12 +1197,6 @@ const handleSaveFeaturedBadges = async () => {
     setIsUploading(false);
     alert(`成功上傳 ${successCount} 張照片至「${title}」相簿！`);
     setCurrentAlbum(null);
-  };
-
-  const getYouTubeEmbedUrl = (url) => {
-      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-      const match = url.match(regExp);
-      return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
   };
 
   const handleCSVImportSchedules = async (e) => {
@@ -1343,103 +1262,91 @@ const handleSaveFeaturedBadges = async () => {
     e.target.value = null;
   };
 
-// --- START: Version 1.0 (榮譽殿堂) - CSV Importer Logic ---
+  const handleCSVImportTrophies = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsUpdating(true);
+    try {
+      const text = await readCSVFile(file, importEncoding);
+      const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
+      const batch = writeBatch(db);
+      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'trophies');
+      let count = 0;
 
-// 處理 trophies.csv (團隊獎項) 的匯入
-const handleCSVImportTrophies = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  setIsUpdating(true);
-  try {
-    const text = await readCSVFile(file, importEncoding);
-    const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-    const batch = writeBatch(db);
-    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'trophies');
-    let count = 0;
-
-    rows.forEach(row => {
-      // 👇 使用我們新的、更強大的解析器
-      const cols = parseCsvRow(row);
-      
-      if (cols.length >= 4) {
-        const [year, tournamentName, award, roster] = cols;
-        if (year && tournamentName && award) {
-          const newDocRef = doc(colRef);
-          batch.set(newDocRef, {
-            year: Number(year) || 0,
-            tournamentName: tournamentName,
-            award: award,
-            roster: roster ? roster.split(',').map(name => name.trim()) : [],
-            createdAt: serverTimestamp()
-          });
-          count++;
+      rows.forEach(row => {
+        const cols = parseCsvRow(row);
+        if (cols.length >= 4) {
+          const [year, tournamentName, award, roster] = cols;
+          if (year && tournamentName && award) {
+            const newDocRef = doc(colRef);
+            batch.set(newDocRef, {
+              year: Number(year) || 0,
+              tournamentName,
+              award,
+              roster: roster ? roster.split(',').map(name => name.trim()) : [],
+              createdAt: serverTimestamp()
+            });
+            count++;
+          }
         }
+      });
+
+      if (count > 0) {
+          await batch.commit();
+          alert(`✅ 成功匯入 ${count} 筆團隊獎項紀錄！`);
+      } else {
+          alert("⚠️ 匯入 0 筆紀錄。請檢查您的 CSV 檔案內容是否為空，或格式是否完全符合範本要求 (包含標題行)。");
       }
-    });
-
-    if (count > 0) {
-        await batch.commit();
-        alert(`✅ 成功匯入 ${count} 筆團隊獎項紀錄！`);
-    } else {
-        alert("⚠️ 匯入 0 筆紀錄。請檢查您的 CSV 檔案內容是否為空，或格式是否完全符合範本要求 (包含標題行)。");
+    } catch (err) {
+      console.error("Trophy import failed:", err);
+      alert('獎項紀錄匯入失敗，請檢查檔案格式或內容。');
     }
+    setIsUpdating(false);
+    if (e.target) e.target.value = null;
+  };
 
-  } catch (err) {
-    console.error("Trophy import failed:", err);
-    alert('獎項紀錄匯入失敗，請檢查檔案格式或內容。');
-  }
-  setIsUpdating(false);
-  if (e.target) e.target.value = null;
-};
+  const handleCSVImportAlumni = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsUpdating(true);
+    try {
+      const text = await readCSVFile(file, importEncoding);
+      const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
+      const batch = writeBatch(db);
+      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'alumni');
+      let count = 0;
 
-// 升級版的 handleCSVImportAlumni
-const handleCSVImportAlumni = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  setIsUpdating(true);
-  try {
-    const text = await readCSVFile(file, importEncoding);
-    const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-    const batch = writeBatch(db);
-    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'alumni');
-    let count = 0;
-
-    rows.forEach(row => {
-      // 👇 使用我們新的、更強大的解析器
-      const cols = parseCsvRow(row);
-
-      if (cols.length >= 3) {
-        const [name, graduationYear, achievement] = cols;
-        if (name && graduationYear) {
-          const newDocRef = doc(colRef);
-          batch.set(newDocRef, {
-            name: name,
-            graduationYear: Number(graduationYear) || 0,
-            achievement: achievement,
-            createdAt: serverTimestamp()
-          });
-          count++;
+      rows.forEach(row => {
+        const cols = parseCsvRow(row);
+        if (cols.length >= 3) {
+          const [name, graduationYear, achievement] = cols;
+          if (name && graduationYear) {
+            const newDocRef = doc(colRef);
+            batch.set(newDocRef, {
+              name,
+              graduationYear: Number(graduationYear) || 0,
+              achievement,
+              createdAt: serverTimestamp()
+            });
+            count++;
+          }
         }
+      });
+
+      if (count > 0) {
+          await batch.commit();
+          alert(`✅ 成功匯入 ${count} 筆傳奇校友紀錄！`);
+      } else {
+          alert("⚠️ 匯入 0 筆紀錄。請檢查您的 CSV 檔案內容是否為空，或格式是否完全符合範本要求 (包含標題行)。");
       }
-    });
-
-    if (count > 0) {
-        await batch.commit();
-        alert(`✅ 成功匯入 ${count} 筆傳奇校友紀錄！`);
-    } else {
-        alert("⚠️ 匯入 0 筆紀錄。請檢查您的 CSV 檔案內容是否為空，或格式是否完全符合範本要求 (包含標題行)。");
+    } catch (err) {
+      console.error("Alumni import failed:", err);
+      alert('傳奇校友匯入失敗，請檢查檔案格式或內容。');
     }
+    setIsUpdating(false);
+    if (e.target) e.target.value = null;
+  };
 
-  } catch (err) {
-    console.error("Alumni import failed:", err);
-    alert('傳奇校友匯入失敗，請檢查檔案格式或內容。');
-  }
-  setIsUpdating(false);
-  if (e.target) e.target.value = null;
-};
-// --- END: Version 1.0 (榮譽殿堂) ---
-
-  
   const todaySchedule = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return schedules.find(s => s.date === today);
@@ -1477,30 +1384,34 @@ const handleCSVImportAlumni = async (e) => {
     });
   }, [students, attendanceClassFilter]);
 
-    const tournamentList = useMemo(() => {
-      if (leagueMatches.length === 0) return [];
-      const uniqueNames = [...new Set(leagueMatches.map(m => m.tournamentName).filter(Boolean))];
-      return uniqueNames.sort((a, b) => b.localeCompare(a));
-    }, [leagueMatches]);
-    
-    const filteredMatches = useMemo(() => {
-      if (!selectedTournament) {
-        if (tournamentList.length > 0) {
-          setSelectedTournament(tournamentList[0]);
-        }
-        return [];
-      }
-      return leagueMatches.filter(m => m.tournamentName === selectedTournament);
-    }, [leagueMatches, selectedTournament, tournamentList]);
+  const tournamentList = useMemo(() => {
+    if (leagueMatches.length === 0) return [];
+    const uniqueNames = [...new Set(leagueMatches.map(m => m.tournamentName).filter(Boolean))];
+    return uniqueNames.sort((a, b) => b.localeCompare(a));
+  }, [leagueMatches]);
+
+  // FIX: removed setSelectedTournament() side-effect from this memo.
+  // That call was illegal inside useMemo — it caused extra render cycles and
+  // potential infinite loops in StrictMode. The default tournament selection
+  // is now handled in the useEffect below.
+  const filteredMatches = useMemo(() => {
+    if (!selectedTournament) return [];
+    return leagueMatches.filter(m => m.tournamentName === selectedTournament);
+  }, [leagueMatches, selectedTournament]);
+
+  // Set a default tournament when the list first loads
+  useEffect(() => {
+    if (tournamentList.length > 0 && !selectedTournament) {
+      setSelectedTournament(tournamentList[0]);
+    }
+  }, [tournamentList, selectedTournament]);
 
   const groupedMatches = useMemo(() => {
-    const groups = {}; // 先宣告
-    if (filteredMatches.length > 0) { // 將邏輯包在條件內
+    const groups = {};
+    if (filteredMatches.length > 0) {
         filteredMatches.forEach(match => {
             const groupKey = match.groupName || '所有比賽';
-            if (!groups[groupKey]) {
-                groups[groupKey] = [];
-            }
+            if (!groups[groupKey]) groups[groupKey] = [];
             groups[groupKey].push(match);
         });
     }
@@ -1512,164 +1423,115 @@ const handleCSVImportAlumni = async (e) => {
     });
 
     const result = {};
-    sortedGroupKeys.forEach(key => {
-        result[key] = groups[key];
-    });
-
-    return result; // 最後返回結果
+    sortedGroupKeys.forEach(key => { result[key] = groups[key]; });
+    return result;
   }, [filteredMatches]);
 
-    // --- 新增：為比賽打氣 (Team Cheers) ---
-    const handleCheerMatch = async (matchId, e) => {
-        e.stopPropagation(); // 防止點擊按鈕時觸發外層的點擊事件
-        // 如果沒有登入（防呆），就不給點
-        if (!currentUserInfo && role !== 'admin') {
-            alert("請先登入才能為隊友打氣喔！");
-            return;
-        }
+  const handleCheerMatch = async (matchId, e) => {
+      e.stopPropagation();
+      if (!currentUserInfo && role !== 'admin') {
+          alert("請先登入才能為隊友打氣喔！");
+          return;
+      }
 
-        // 使用學生ID或教練身分作為唯一識別碼，防止狂點
-        const userId = currentUserInfo?.id || 'admin';
-        const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', matchId);
+      const userId = currentUserInfo?.id || 'admin';
+      const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', matchId);
 
-        try {
-            // 從目前的比賽列表中找到這場比賽
-            const currentMatch = leagueMatches.find(m => m.id === matchId);
-            const currentCheers = currentMatch?.cheers || [];
+      try {
+          const currentMatch = leagueMatches.find(m => m.id === matchId);
+          const currentCheers = currentMatch?.cheers || [];
 
-            // 如果這個人已經打過氣了，就幫他取消 (收回 🔥)
-            if (currentCheers.includes(userId)) {
-                await updateDoc(matchRef, {
-                    cheers: currentCheers.filter(id => id !== userId)
-                });
-            } else {
-                // 如果還沒打過氣，就加進去
-                await updateDoc(matchRef, {
-                    cheers: [...currentCheers, userId]
-                });
-            }
-        } catch (error) {
-            console.error("Cheer failed:", error);
-        }
-    };
+          if (currentCheers.includes(userId)) {
+              await updateDoc(matchRef, { cheers: currentCheers.filter(id => id !== userId) });
+          } else {
+              await updateDoc(matchRef, { cheers: [...currentCheers, userId] });
+          }
+      } catch (error) {
+          console.error("Cheer failed:", error);
+      }
+  };
 
-  
-    const handleUpdateLeagueMatchScore = async (match) => {
-        const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
-        if (score1_str === null) return;
-        const score2_str = prompt(`請輸入 ${match.player2Name} 的分數:`);
-        if (score2_str === null) return;
-        
-        const score1 = parseInt(score1_str, 10);
-        const score2 = parseInt(score2_str, 10);
+  const handleUpdateLeagueMatchScore = async (match) => {
+      const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
+      if (score1_str === null) return;
+      const score2_str = prompt(`請輸入 ${match.player2Name} 的分數:`);
+      if (score2_str === null) return;
+      
+      const score1 = parseInt(score1_str, 10);
+      const score2 = parseInt(score2_str, 10);
 
-        if (isNaN(score1) || isNaN(score2)) {
-            alert("分數必須是數字！");
-            return;
-        }
+      if (isNaN(score1) || isNaN(score2)) { alert("分數必須是數字！"); return; }
+      if (score1 === score2) { alert("比分不能相同，必須有勝負之分。"); return; }
 
-        if (score1 === score2) {
-            alert("比分不能相同，必須有勝負之分。");
-            return;
-        }
+      const winnerId = score1 > score2 ? match.player1Id : match.player2Id;
+      const winner = students.find(s => s.id === winnerId);
+      const loser = students.find(s => s.id === (winnerId === match.player1Id ? match.player2Id : match.player1Id));
+      
+      if (!winner || !loser) { alert("找不到球員資料，無法更新積分。"); return; }
 
-        const winnerId = score1 > score2 ? match.player1Id : match.player2Id;
-        const winner = students.find(s => s.id === winnerId);
-        const loser = students.find(s => s.id === (winnerId === match.player1Id ? match.player2Id : match.player1Id));
-        
-        if (!winner || !loser) {
-            alert("找不到球員資料，無法更新積分。");
-            return;
-        }
+      const winnerRank = rankedStudents.findIndex(s => s.id === winner.id) + 1;
+      const loserRank = rankedStudents.findIndex(s => s.id === loser.id) + 1;
+      const winnerBadgeLevel = BADGE_DATA[winner.badge]?.level || 0;
+      const loserBadgeLevel = BADGE_DATA[loser.badge]?.level || 0;
+      const isRankGiantKiller = winnerRank > 0 && loserRank > 0 && (winnerRank - loserRank) >= 5;
+      const isBadgeGiantKiller = winnerBadgeLevel < loserBadgeLevel;
+      const isGiantKiller = isRankGiantKiller || isBadgeGiantKiller;
+      const pointsToAdd = isGiantKiller ? 20 : 10;
+      
+      const confirmMsg = `✍️ 確認賽果？\n\n${match.player1Name} vs ${match.player2Name}\n比分: ${score1} - ${score2}\n\n🏆 勝方: ${winner.name} (+${pointsToAdd} 分 ${isGiantKiller ? '🔥巨人殺手' : ''})\n負方: ${loser.name} (+0 分)`;
 
-        const winnerRank = rankedStudents.findIndex(s => s.id === winner.id) + 1;
-        const loserRank = rankedStudents.findIndex(s => s.id === loser.id) + 1;
-        const winnerBadgeLevel = BADGE_DATA[winner.badge]?.level || 0;
-        const loserBadgeLevel = BADGE_DATA[loser.badge]?.level || 0;
-        const isRankGiantKiller = winnerRank > 0 && loserRank > 0 && (winnerRank - loserRank) >= 5;
-        const isBadgeGiantKiller = winnerBadgeLevel < loserBadgeLevel;
-        const isGiantKiller = isRankGiantKiller || isBadgeGiantKiller;
-        const pointsToAdd = isGiantKiller ? 20 : 10;
-        
-        const confirmMsg = `✍️ 確認賽果？\n\n` +
-                         `${match.player1Name} vs ${match.player2Name}\n` +
-                         `比分: ${score1} - ${score2}\n\n` +
-                         `🏆 勝方: ${winner.name} (+${pointsToAdd} 分 ${isGiantKiller ? '🔥巨人殺手' : ''})\n` +
-                         `負方: ${loser.name} (+0 分)`;
+      if (confirm(confirmMsg)) {
+          setIsUpdating(true);
+          try {
+              const batch = writeBatch(db);
+              const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
+              batch.update(matchRef, { score1, score2, winnerId, status: 'completed', updatedAt: serverTimestamp() });
 
-        if (confirm(confirmMsg)) {
-            setIsUpdating(true);
-            try {
-                const batch = writeBatch(db);
-                
-                const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
-                batch.update(matchRef, {
-                    score1,
-                    score2,
-                    winnerId,
-                    status: 'completed',
-                    updatedAt: serverTimestamp()
-                });
+              const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id);
+              batch.update(winnerRef, { points: increment(pointsToAdd), lastUpdated: serverTimestamp() });
+              
+              await batch.commit();
+              alert("✅ 賽果已成功儲存並更新積分！");
+          } catch (e) {
+              console.error("Update match score failed", e);
+              alert("儲存失敗，請檢查網絡連線。");
+          }
+          setIsUpdating(false);
+      }
+  };
 
-                const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id);
-                batch.update(winnerRef, {
-                    points: increment(pointsToAdd),
-                    lastUpdated: serverTimestamp()
-                });
-                
-                await batch.commit();
-                alert("✅ 賽果已成功儲存並更新積分！");
-            } catch (e) {
-                console.error("Update match score failed", e);
-                alert("儲存失敗，請檢查網絡連線。");
-            }
-            setIsUpdating(false);
-        }
-    };
+  const handleEditLeagueMatch = async (match) => {
+      const newDate = prompt(`請輸入新的比賽日期 (YYYY-MM-DD):`, match.date);
+      if (newDate === null) return;
+      
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(newDate)) { alert("日期格式錯誤！請使用 YYYY-MM-DD 格式。"); return; }
 
-    const handleEditLeagueMatch = async (match) => {
-        const newDate = prompt(`請輸入新的比賽日期 (YYYY-MM-DD):`, match.date);
-        if (newDate === null) return;
-        
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(newDate)) {
-            alert("日期格式錯誤！請使用 YYYY-MM-DD 格式。");
-            return;
-        }
+      const newTime = prompt(`請輸入新的比賽時間 (HH:MM):`, match.time);
+      if (newTime === null) return;
+      
+      const timeRegex = /^\d{2}:\d{2}$/;
+      if (!timeRegex.test(newTime) && newTime !== 'N/A') { alert("時間格式錯誤！請使用 HH:MM 格式。"); return; }
+      
+      setIsUpdating(true);
+      try {
+          const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
+          await updateDoc(matchRef, { date: newDate, time: newTime });
+          alert('比賽時間已更新！');
+      } catch (e) {
+          console.error("Failed to update match time:", e);
+          alert("更新失敗，請稍後再試。");
+      }
+      setIsUpdating(false);
+  };
 
-        const newTime = prompt(`請輸入新的比賽時間 (HH:MM):`, match.time);
-        if (newTime === null) return;
-        
-        const timeRegex = /^\d{2}:\d{2}$/;
-        if (!timeRegex.test(newTime) && newTime !== 'N/A') {
-            alert("時間格式錯誤！請使用 HH:MM 格式。");
-            return;
-        }
-        
-        setIsUpdating(true);
-        try {
-            const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
-            await updateDoc(matchRef, {
-                date: newDate,
-                time: newTime,
-            });
-            alert('比賽時間已更新！');
-        } catch (e) {
-            console.error("Failed to update match time:", e);
-            alert("更新失敗，請稍後再試。");
-        }
-        setIsUpdating(false);
-    };
-
-   const trulyFilteredMatches = useMemo(() => {
+  const trulyFilteredMatches = useMemo(() => {
     if (!selectedTournament) return [];
     return leagueMatches.filter(match => match.tournamentName === selectedTournament);
   }, [leagueMatches, selectedTournament]);
+
   const tournamentStandings = useMemo(() => {
-    // 安全檢查：使用純淨的數據源
-    if (!trulyFilteredMatches || trulyFilteredMatches.length === 0 || !students || students.length === 0) {
-      return {};
-    }
+    if (!trulyFilteredMatches || trulyFilteredMatches.length === 0 || !students || students.length === 0) return {};
     
     const standingsData = {};
 
@@ -1687,29 +1549,21 @@ const handleCSVImportAlumni = async (e) => {
         return standingsData[groupKey][playerId];
     };
 
-    // --- 主計算迴圈：現在運行在一個純淨的數據環境中 ---
     trulyFilteredMatches.forEach(match => {
-        // 只處理已完賽的比賽
         if (match.status !== 'completed') return;
-
         const { player1Id, player2Id, groupName } = match;
         const groupKey = groupName || '所有比賽';
-        
         const p1Score = parseInt(match.score1, 10) || 0;
         const p2Score = parseInt(match.score2, 10) || 0;
 
         const player1Standing = getOrCreateStanding(player1Id, groupKey);
         if (!player1Standing) return;
-
         player1Standing.played += 1;
 
         if (player2Id) {
             const player2Standing = getOrCreateStanding(player2Id, groupKey);
             if (!player2Standing) return;
-
-            if (player1Id !== player2Id) {
-                player2Standing.played += 1;
-            }
+            if (player1Id !== player2Id) player2Standing.played += 1;
 
             player1Standing.pointsFor += p1Score;
             player1Standing.pointsAgainst += p2Score;
@@ -1717,28 +1571,20 @@ const handleCSVImportAlumni = async (e) => {
             player2Standing.pointsAgainst += p1Score;
 
             if (p1Score > p2Score) {
-                player1Standing.wins += 1;
-                player1Standing.leaguePoints += 3;
-                player2Standing.losses += 1;
+                player1Standing.wins += 1; player1Standing.leaguePoints += 3; player2Standing.losses += 1;
             } else if (p2Score > p1Score) {
-                player2Standing.wins += 1;
-                player2Standing.leaguePoints += 3;
-                player1Standing.losses += 1;
+                player2Standing.wins += 1; player2Standing.leaguePoints += 3; player1Standing.losses += 1;
             } else { 
-                player1Standing.leaguePoints += 1;
-                player2Standing.leaguePoints += 1;
+                player1Standing.leaguePoints += 1; player2Standing.leaguePoints += 1;
             }
         } else {
-            player1Standing.wins += 1;
-            player1Standing.leaguePoints += 3;
+            player1Standing.wins += 1; player1Standing.leaguePoints += 3;
         }
     });
 
-    // --- 排序步驟 ---
     const finalSortedResult = {};
     Object.keys(standingsData).forEach(groupKey => {
-        const groupStandings = standingsData[groupKey];
-        const sortedPlayers = Object.values(groupStandings).map(player => {
+        finalSortedResult[groupKey] = Object.values(standingsData[groupKey]).map(player => {
             player.pointsDiff = player.pointsFor - player.pointsAgainst;
             return player;
         }).sort((a, b) => {
@@ -1746,12 +1592,10 @@ const handleCSVImportAlumni = async (e) => {
             if (b.pointsDiff !== a.pointsDiff) return b.pointsDiff - a.pointsDiff;
             return b.pointsFor - a.pointsFor;
         });
-        finalSortedResult[groupKey] = sortedPlayers;
     });
 
     return finalSortedResult;
-  }, [trulyFilteredMatches, students]); // <-- 確保依賴純淨的數據
-
+  }, [trulyFilteredMatches, students]);
 
   const myUpcomingMatches = useMemo(() => {
     if (role !== 'student' || !currentUserInfo) return [];
@@ -1768,7 +1612,11 @@ const handleCSVImportAlumni = async (e) => {
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
-    const handleTacticalClick = (zone) => { // 移除 async
+  // =============================================================================
+  // FIX #2 (continued) — handleTacticalClick and saveTacticalShots now use the
+  // state variables declared above. No more ReferenceErrors.
+  // =============================================================================
+  const handleTacticalClick = (zone) => {
       if (!tacticalData.p1) {
           alert("請至少輸入一位我方球員的姓名！");
           return;
@@ -1777,16 +1625,13 @@ const handleCSVImportAlumni = async (e) => {
       const playerName = activePlayer === 1 ? tacticalData.p1 : tacticalData.p2;
       const opponentName = activePlayer === 1 ? tacticalData.p2 : tacticalData.p1;
       
-      // 視覺回饋
       setLastRecorded({ player: playerName, zone: zone });
       setTimeout(() => setLastRecorded(null), 800);
 
-      // 自動切換到另一個人
       if (tacticalData.p2) {
           setActivePlayer(activePlayer === 1 ? 2 : 1);
       }
 
-      // 取代原本的 addDoc：將落點紀錄暫存到陣列中
       setPendingTacticalShots(prev => [
           ...prev, 
           {
@@ -1798,30 +1643,27 @@ const handleCSVImportAlumni = async (e) => {
       ]);
   };
 
-    const saveTacticalShots = async () => {
+  const saveTacticalShots = async () => {
       if (pendingTacticalShots.length === 0) return;
       
       try {
-          const batch = writeBatch(db); // 使用 Firebase 批次寫入
+          const batch = writeBatch(db);
           const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots');
           
           pendingTacticalShots.forEach(shot => {
-              batch.set(doc(colRef), {
-                  ...shot,
-                  timestamp: serverTimestamp()
-              });
+              batch.set(doc(colRef), { ...shot, timestamp: serverTimestamp() });
           });
           
-          await batch.commit(); // 一次性發送所有累積的資料
+          await batch.commit();
           alert(`✅ 成功批次儲存 ${pendingTacticalShots.length} 筆戰術紀錄！`);
-          setPendingTacticalShots([]); // 儲存後清空暫存區
+          setPendingTacticalShots([]);
       } catch(e) {
           console.error("批次戰術紀錄失敗", e);
           alert("儲存失敗，請檢查網路連線。");
       }
   };
 
-const playerDashboardData = useMemo(() => {
+  const playerDashboardData = useMemo(() => {
     const targetStudentInfo = viewingStudent || (role === 'student' ? currentUserInfo : null);
     if (!targetStudentInfo) return null;
 
@@ -1858,16 +1700,13 @@ const playerDashboardData = useMemo(() => {
     let radarData = [];
     if (latestAssessment) {
         const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
-        
         const calculateShotScore = (driveHitsRaw, volleyHitsRaw) => {
             const driveHits = Math.min(10, Number(driveHitsRaw) || 0);
             const volleyHits = Math.min(7, Number(volleyHitsRaw) || 0);
             return Math.floor((driveHits * 4) + (volleyHits * (60 / 7)));
         };
-
         const fhTotalScore = calculateShotScore(latestAssessment.fhDrive, latestAssessment.fhVolley);
         const bhTotalScore = calculateShotScore(latestAssessment.bhDrive, latestAssessment.bhVolley);
-
         radarData = [
             { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 25), fullMark: 10 },
             { subject: '力量 (握力)', A: calcScore(latestAssessment.gripStrength, 70), fullMark: 10 },
@@ -1877,11 +1716,7 @@ const playerDashboardData = useMemo(() => {
         ];
     }
 
-    const recentMatches = studentMatches.sort((a, b) => {
-    const dateA = a.date || '';
-    const dateB = b.date || '';
-    return dateB.localeCompare(dateA);
-}).slice(0, 5);
+    const recentMatches = studentMatches.sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
 
     return {
         winRate, wins, totalPlayed,
@@ -1890,14 +1725,9 @@ const playerDashboardData = useMemo(() => {
         recentMatches, latestAssessment, radarData,
         achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
-}, [viewingStudent, currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
+  }, [viewingStudent, currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
 
-
-// ========================================================================
-// Hook 2: myDashboardData (供學生登入後查看自己)
-// ========================================================================
-const myDashboardData = useMemo(() => {
-    // 新邏輯：依賴 currentUserInfo
+  const myDashboardData = useMemo(() => {
     if (role !== 'student' || !currentUserInfo) return null;
     
     const studentData = rankedStudents.find(s => s.id === currentUserInfo.id);
@@ -1920,7 +1750,7 @@ const myDashboardData = useMemo(() => {
         { date: '初始積分', points: BADGE_DATA[studentData.badge]?.basePoints || 0 },
         { date: '目前', points: studentData.totalPoints }
     ];
-   const studentAssessments = (assessments || []).filter(a => a.studentId === studentData.id);
+    const studentAssessments = (assessments || []).filter(a => a.studentId === studentData.id);
     let latestAssessment = null;
     if (studentAssessments.length > 0) {
         latestAssessment = studentAssessments.reduce((latest, current) => {
@@ -1941,11 +1771,7 @@ const myDashboardData = useMemo(() => {
         ];
     }
 
-   const recentMatches = studentMatches.sort((a, b) => {
-    const dateA = a.date || '';
-    const dateB = b.date || '';
-    return dateB.localeCompare(dateA);
-}).slice(0, 5);
+    const recentMatches = studentMatches.sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
 
     return {
         winRate, wins, totalPlayed,
@@ -1954,30 +1780,8 @@ const myDashboardData = useMemo(() => {
         recentMatches, latestAssessment, radarData,
         achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
     };
-}, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, students]);
+  }, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, students]);
 
-  const SchoolLogo = ({ size = 48, className = "" }) => {
-    const [error, setError] = useState(false);
-    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
-    if (error) {
-      return <ShieldCheck className={`${className}`} size={size} />;
-    }
-    return (
-      <img 
-        src={logoUrl} 
-        alt="BCKLAS Logo" 
-        className={`object-contain ${className}`}
-        style={{ width: size * 2, height: size * 2 }}
-        loading="eager"
-        crossOrigin="anonymous" 
-        onError={(e) => {
-          console.error("Logo load failed", e);
-          setError(true);
-        }}
-      />
-    );
-  };
   const handleMonthlyStarFieldChange = (gender, field, value) => {
     setMonthlyStarEditData(prev => ({
         ...prev,
@@ -1990,12 +1794,7 @@ const myDashboardData = useMemo(() => {
     if (student) {
         setMonthlyStarEditData(prev => ({
             ...prev,
-            [gender]: {
-                ...prev[gender],
-                studentId: student.id,
-                studentName: student.name,
-                studentClass: student.class,
-            }
+            [gender]: { ...prev[gender], studentId: student.id, studentName: student.name, studentClass: student.class }
         }));
     }
   };
@@ -2023,11 +1822,7 @@ const myDashboardData = useMemo(() => {
       setIsUpdating(true);
       try {
           const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'monthly_stars', selectedMonthForAdmin);
-          await setDoc(docRef, {
-              ...monthlyStarEditData,
-              month: selectedMonthForAdmin,
-              publishedAt: serverTimestamp()
-          });
+          await setDoc(docRef, { ...monthlyStarEditData, month: selectedMonthForAdmin, publishedAt: serverTimestamp() });
           alert(`✅ 成功發佈/更新 ${selectedMonthForAdmin} 的每月之星！`);
       } catch (e) {
           console.error("Failed to save monthly star:", e);
@@ -2070,11 +1865,7 @@ const myDashboardData = useMemo(() => {
         
         setTimeout(async () => {
             const posterElement = posterRef.current;
-            if (!posterElement) {
-                alert("海報模板加載失敗。");
-                setIsGeneratingPoster(false);
-                return;
-            }
+            if (!posterElement) { alert("海報模板加載失敗。"); setIsGeneratingPoster(false); return; }
             try {
                 const canvas = await html2canvas(posterElement, { scale: 2, useCORS: true });
                 const image = canvas.toDataURL('image/png', 1.0);
@@ -2092,7 +1883,6 @@ const myDashboardData = useMemo(() => {
                 setPosterData(null);
             }
         }, 500);
-
     } catch (preloadError) {
         console.error('海報圖片預加載或轉換失敗:', preloadError);
         alert('海報圖片處理失敗，請檢查網絡連線。');
@@ -2103,7 +1893,8 @@ const myDashboardData = useMemo(() => {
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
       <div className="mb-8 animate-pulse">
-        <SchoolLogo size={96} />
+        {/* Now passing systemConfig as a prop since SchoolLogo is outside App() */}
+        <SchoolLogo size={96} systemConfig={systemConfig} />
       </div>
       <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
       <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
@@ -2120,22 +1911,23 @@ const myDashboardData = useMemo(() => {
       </div>
 
       <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" multiple onChange={handleGalleryImageUpload} />
-      {showTacticalBoard && (
-   <TacticalBoardModal 
-       onClose={() => setShowTacticalBoard(false)} 
-       db={db} 
-       appId={appId} 
-   />
-)}
 
-{showAddAwardModal && (
-    <AddAwardModal 
-        onClose={() => setShowAddAwardModal(false)}
-        db={db}
-        appId={appId}
-        compressImage={compressImage}
-    />
-)}
+      {showTacticalBoard && (
+        <TacticalBoardModal 
+            onClose={() => setShowTacticalBoard(false)} 
+            db={db} 
+            appId={appId} 
+        />
+      )}
+
+      {showAddAwardModal && (
+        <AddAwardModal 
+            onClose={() => setShowAddAwardModal(false)}
+            db={db}
+            appId={appId}
+            compressImage={compressImage}
+        />
+      )}
 
       {showTournamentModal && (
           <AddTournamentModal 
@@ -2147,7 +1939,6 @@ const myDashboardData = useMemo(() => {
           />
       )}
 
-      
       {viewingImage && (
         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setViewingImage(null)}>
           <button onClick={() => setViewingImage(null)} className="absolute top-6 right-6 p-2 bg-white/10 rounded-full text-white/70 hover:bg-white/20 hover:text-white transition-all z-50"><X size={32} /></button>
@@ -2161,14 +1952,13 @@ const myDashboardData = useMemo(() => {
         </div>
       )}
 
-      {/* 版本 12.0: 主題式動態登入頁面 */}
-{/* 主題式動態登入頁面 */}
-{showLoginModal && (
-    <LoginScreen 
-        onLogin={handleLogin} 
-        systemConfig={systemConfig} 
-    />
-)}
+      {showLoginModal && (
+        <LoginScreen 
+            onLogin={handleLogin} 
+            systemConfig={systemConfig} 
+        />
+      )}
+
       <aside 
         className={`fixed md:static inset-y-0 left-0 z-[60] w-80 border-r transition-transform duration-300 ease-in-out 
                    ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
@@ -2177,7 +1967,8 @@ const myDashboardData = useMemo(() => {
       >
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
-            <div className="flex items-center justify-center"><SchoolLogo size={32} /></div>
+            {/* Pass systemConfig as prop */}
+            <div className="flex items-center justify-center"><SchoolLogo size={32} systemConfig={systemConfig} /></div>
             <div>
               <h2 className="text-2xl font-black tracking-tighter">正覺壁球</h2>
               <p className="text-[10px] text-slate-300 uppercase tracking-[0.2em] -mt-1">BCKLAS SYSTEM v{CURRENT_VERSION}</p>
@@ -2185,31 +1976,21 @@ const myDashboardData = useMemo(() => {
           </div>
           
           <nav className="space-y-2 flex-1 overflow-y-auto">
-              {/***** START: 版本 12.1 - 側邊欄按鈕樣式更新 (修正版) *****/}
               {(() => {
-                // --- Helper Component & Styles ---
                 const baseButtonClass = "w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all text-left font-bold";
                 const activeStyle = {
                   backgroundColor: 'var(--theme-sidebar-active-bg)',
                   color: 'var(--theme-sidebar-active-text)',
                   boxShadow: '0 10px 15px -3px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.2), 0 4px 6px -2px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.1)'
                 };
-                const inactiveStyle = {
-                  color: 'var(--theme-sidebar-text)',
-                  backgroundColor: 'transparent'
-                };
-                const hoverStyle = { // For inactive buttons
-                    backgroundColor: 'rgba(128, 128, 128, 0.05)'
-                };
+                const inactiveStyle = { color: 'var(--theme-sidebar-text)', backgroundColor: 'transparent' };
+                const hoverStyle = { backgroundColor: 'rgba(128, 128, 128, 0.05)' };
 
                 const NavButton = ({ tabName, icon, children }) => {
                     const [isHovered, setIsHovered] = useState(false);
                     const isActive = activeTab === tabName;
-
                     let style = isActive ? activeStyle : inactiveStyle;
-                    if (!isActive && isHovered) {
-                        style = {...style, ...hoverStyle};
-                    }
+                    if (!isActive && isHovered) style = {...style, ...hoverStyle};
                     
                     return (
                         <button
@@ -2224,7 +2005,6 @@ const myDashboardData = useMemo(() => {
                     );
                 };
 
-                // --- Main Navigation Structure ---
                 return (
                   <>
                     {(role === 'admin' || role === 'student') && (
@@ -2258,7 +2038,6 @@ const myDashboardData = useMemo(() => {
                   </>
                 );
               })()}
-              {/***** END: 版本 12.1 - 側邊欄按鈕樣式更新 (修正版) *****/}
             </nav>
           
           <div className="pt-10 border-t">
@@ -2281,7 +2060,8 @@ const myDashboardData = useMemo(() => {
       </aside>
 
       <main className="flex-1 h-screen overflow-y-auto relative" style={{ backgroundColor: 'var(--theme-bg)' }}>
-        <header className="px-10 py-8 sticky top-0 backdrop-blur-xl z-40 border-b flex ..." style={{ backgroundColor: 'var(--theme-header-bg)', borderColor: 'var(--theme-border)' }}>
+        {/* FIX: removed the trailing "..." from the className string */}
+        <header className="px-10 py-8 sticky top-0 backdrop-blur-xl z-40 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--theme-header-bg)', borderColor: 'var(--theme-border)' }}>
           <div className="flex items-center gap-6">
             <button onClick={()=>setSidebarOpen(true)} className="md:hidden p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-blue-600 transition-all">
               <Menu size={24}/>
@@ -2305,8 +2085,8 @@ const myDashboardData = useMemo(() => {
                  activeTab === 'settings' ? "⚙️ 系統核心設定" :
                  activeTab === 'monthlyStarsAdmin' ? "🌟 每月之星管理" :
                  activeTab === 'monthlyStars' ? "🌟 每月之星" :
-                 activeTab === 'externalMatches' ? "📝 校外賽記錄管理" : ""}
-
+                 activeTab === 'externalMatches' ? "📝 校外賽記錄管理" :
+                 activeTab === 'assessments' ? "📋 綜合能力評估" : ""}
               </h1>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
@@ -2329,32 +2109,26 @@ const myDashboardData = useMemo(() => {
 
         <div className="p-10 max-w-7xl mx-auto pb-40">
 
-                {/* 👉 放在畫面最上層，如果有直播賽事就會自動顯示大螢幕 */}
-       <LiveScoreboardDisplay 
-            liveMatches={liveMatches} 
-            TrophyIcon={TrophyIcon} 
-            // 👇 新增這行，傳遞排名資料
-            rankedStudents={rankedStudents} 
-        />
+          <LiveScoreboardDisplay 
+              liveMatches={liveMatches} 
+              TrophyIcon={TrophyIcon} 
+              rankedStudents={rankedStudents} 
+          />
         
-        {showUmpirePanel && (
-    <UmpirePanelModal 
-        onClose={() => {
-            setShowUmpirePanel(false); 
-            setActiveLeagueMatch(null);
-        }} 
-        activeLeagueMatch={activeLeagueMatch}
-        setActiveLeagueMatch={setActiveLeagueMatch}
-        liveMatches={liveMatches}
-        leagueMatches={leagueMatches}
-        students={students}
-        rankedStudents={rankedStudents}
-        BADGE_DATA={BADGE_DATA}
-        db={db}
-        appId={appId}
-    />
-)}
-
+          {showUmpirePanel && (
+            <UmpirePanelModal 
+                onClose={() => { setShowUmpirePanel(false); setActiveLeagueMatch(null); }} 
+                activeLeagueMatch={activeLeagueMatch}
+                setActiveLeagueMatch={setActiveLeagueMatch}
+                liveMatches={liveMatches}
+                leagueMatches={leagueMatches}
+                students={students}
+                rankedStudents={rankedStudents}
+                BADGE_DATA={BADGE_DATA}
+                db={db}
+                appId={appId}
+            />
+          )}
 
           {showPlayerCard && ( 
               <PlayerCardModal 
@@ -2371,15 +2145,14 @@ const myDashboardData = useMemo(() => {
                   attendanceLogs={attendanceLogs}
               /> 
           )}  
+
           {selectedSchedule && (
             <div className="fixed inset-0 z-[250] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={() => setSelectedSchedule(null)}>
               <div className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
-                
                 <h3 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">
                     <div className="w-3 h-3 rounded-full bg-blue-500"></div>
                     {selectedSchedule.trainingClass} 訓練詳情
                 </h3>
-                
                 <div className="space-y-4 text-lg">
                   <div className="flex items-center gap-4"><CalendarIcon size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.date}</span></div>
                   <div className="flex items-center gap-4"><Clock size={20} className="text-slate-400"/><span className="font-bold">{selectedSchedule.time || 'N/A'}</span></div>
@@ -2393,22 +2166,14 @@ const myDashboardData = useMemo(() => {
                       </div>
                   )}
                 </div>
-
                 {role === 'admin' && (
                   <div className="mt-8 pt-6 border-t border-slate-100 flex gap-4">
-                    {/* 👇 新增：刪除按鈕 👇 */}
                     <button 
-                        onClick={() => {
-                            // 呼叫刪除功能，並在刪除後關閉視窗
-                            deleteItem('schedules', selectedSchedule.id);
-                            setSelectedSchedule(null);
-                        }} 
+                        onClick={() => { deleteItem('schedules', selectedSchedule.id); setSelectedSchedule(null); }} 
                         className="flex-1 text-center py-4 bg-rose-50 text-rose-600 font-black rounded-2xl hover:bg-rose-500 hover:text-white transition-all shadow-sm flex items-center justify-center gap-2"
                     >
                         <Trash2 size={18}/> 刪除此課程
                     </button>
-                    
-                    {/* 原本的前往點名按鈕 (只在今天顯示) */}
                     {moment(selectedSchedule.date).isSame(new Date(), 'day') && (
                         <button 
                             onClick={() => { setActiveTab('attendance'); setSelectedSchedule(null); }} 
@@ -2419,20 +2184,18 @@ const myDashboardData = useMemo(() => {
                     )}
                   </div>
                 )}
-
               </div>
             </div>
           )}
 
-                    {/* 在此渲染彈窗 */}
           {viewingBadge && (
-    <BadgeInfoModal 
-        badge={viewingBadge} 
-        onClose={() => setViewingBadge(null)} 
-        ACHIEVEMENT_DATA={ACHIEVEMENT_DATA}
-      />
-  )}
-          {/* --- 全新：授予勳章選擇視窗 --- */}
+            <BadgeInfoModal 
+                badge={viewingBadge} 
+                onClose={() => setViewingBadge(null)} 
+                ACHIEVEMENT_DATA={ACHIEVEMENT_DATA}
+            />
+          )}
+
           {showAwardModal && studentToAward && (
               <div className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setShowAwardModal(false)}>
                   <div className="bg-white rounded-[2rem] w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
@@ -2443,7 +2206,6 @@ const myDashboardData = useMemo(() => {
                           </div>
                           <button onClick={() => setShowAwardModal(false)} className="p-2 bg-white rounded-full text-slate-400 hover:text-slate-800 shadow-sm transition-colors"><X size={20} /></button>
                       </div>
-                      
                       <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {Object.entries(ACHIEVEMENT_DATA).map(([badgeId, badgeData]) => (
                               <div key={badgeId} className="bg-white border rounded-2xl p-4 shadow-sm hover:shadow-md transition-all">
@@ -2473,7 +2235,7 @@ const myDashboardData = useMemo(() => {
                                                   <span className="font-bold text-slate-700 group-hover:text-blue-700">{levelData.name}</span>
                                                   <span className="text-[10px] text-slate-400 line-clamp-1">{levelData.desc}</span>
                                               </button>
-                                          )
+                                          );
                                       })}
                                   </div>
                               </div>
@@ -2482,9 +2244,7 @@ const myDashboardData = useMemo(() => {
                   </div>
               </div>
           )}
-          {/* --------------------------------- */}
 
-          
           {viewingStudent && (
               <PlayerDashboard 
                   student={viewingStudent} 
@@ -2501,92 +2261,83 @@ const myDashboardData = useMemo(() => {
               />
           )}
 
-    {/* 我的表現 (學生專屬 Dashboard) */}
-    {!viewingStudent && activeTab === 'myDashboard' && role === 'student' && (
-        <MyDashboardPage 
-            currentUserInfo={currentUserInfo}
-            rankedStudents={rankedStudents}
-            playerDashboardData={playerDashboardData}
-            setViewingBadge={setViewingBadge}
-            tacticalShots={tacticalShots}
-            role={role}
-            handleCheerMatch={handleCheerMatch}
-            showcaseEditorOpen={showcaseEditorOpen}
-            setShowcaseEditorOpen={setShowcaseEditorOpen}
-            selectedFeaturedBadges={selectedFeaturedBadges}
-            setSelectedFeaturedBadges={setSelectedFeaturedBadges}
-            handleSaveFeaturedBadges={handleSaveFeaturedBadges}
-            isUpdating={isUpdating}
-            playerJournals={playerJournals}
-            handleAddJournalEntry={handleAddJournalEntry}
-            handleReplyJournalEntry={handleReplyJournalEntry}
-        />
-    )}
+          {/* FIX: MyDashboardPage now correctly receives myDashboardData instead of playerDashboardData */}
+          {!viewingStudent && activeTab === 'myDashboard' && role === 'student' && (
+              <MyDashboardPage 
+                  currentUserInfo={currentUserInfo}
+                  rankedStudents={rankedStudents}
+                  playerDashboardData={myDashboardData}
+                  setViewingBadge={setViewingBadge}
+                  tacticalShots={tacticalShots}
+                  role={role}
+                  handleCheerMatch={handleCheerMatch}
+                  showcaseEditorOpen={showcaseEditorOpen}
+                  setShowcaseEditorOpen={setShowcaseEditorOpen}
+                  selectedFeaturedBadges={selectedFeaturedBadges}
+                  setSelectedFeaturedBadges={setSelectedFeaturedBadges}
+                  handleSaveFeaturedBadges={handleSaveFeaturedBadges}
+                  isUpdating={isUpdating}
+                  playerJournals={playerJournals}
+                  handleAddJournalEntry={handleAddJournalEntry}
+                  handleReplyJournalEntry={handleReplyJournalEntry}
+              />
+          )}
         
           {!viewingStudent && activeTab === 'dashboard' && role === 'admin' && (
             <DashboardPage 
-                  competitions={competitions}
-                  schedules={schedules}
-                  students={students}
-                  dashboardStats={dashboardStats}
-                  assessments={assessments}
-              />
+                competitions={competitions}
+                schedules={schedules}
+                students={students}
+                dashboardStats={dashboardStats}
+                assessments={assessments}
+            />
           )}
+
           {!viewingStudent && activeTab === 'monthlyStars' && (<MonthlyStarsPage monthlyStarsData={monthlyStars} />)}
 
-          {/* ASSESSMENTS TAB (NEW) */}
-            {!viewingStudent && activeTab === 'assessments' && role === 'admin' && (
-                <AssessmentsPage 
-                    students={students}
-                    assessments={assessments}
-                    newAssessment={newAssessment}
-                    setNewAssessment={setNewAssessment}
-                    handleSaveAssessment={handleSaveAssessment}
-                    isUpdating={isUpdating}
-                />
-            )}
-
-          {!viewingStudent && activeTab === 'videoAnalysis' && (role === 'admin' || role === 'student') && (
-              <VideoAnalysisPage 
-                  role={role} // 👈 傳遞 role
-                  currentUserInfo={currentUserInfo} // 👈 傳遞 currentUserInfo
+          {!viewingStudent && activeTab === 'assessments' && role === 'admin' && (
+              <AssessmentsPage 
+                  students={students}
+                  assessments={assessments}
+                  newAssessment={newAssessment}
+                  setNewAssessment={setNewAssessment}
+                  handleSaveAssessment={handleSaveAssessment}
+                  isUpdating={isUpdating}
               />
           )}
-          
-          {/* RANKINGS TAB */}
-      {!viewingStudent && activeTab === 'rankings' && (
-          <RankingPage 
-              role={role}
-              rankedStudents={rankedStudents}
-              filteredStudents={filteredStudents}
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              setShowPlayerCard={setShowPlayerCard}
-              adjustPoints={adjustPoints}
-              handleExternalComp={handleExternalComp}
-              deleteItem={deleteItem}
-          />
-      )}
 
-          {/* STUDENTS TAB */}
+          {!viewingStudent && activeTab === 'rankings' && (
+              <RankingPage 
+                  role={role}
+                  rankedStudents={rankedStudents}
+                  filteredStudents={filteredStudents}
+                  searchTerm={searchTerm}
+                  setSearchTerm={setSearchTerm}
+                  setShowPlayerCard={setShowPlayerCard}
+                  adjustPoints={adjustPoints}
+                  handleExternalComp={handleExternalComp}
+                  deleteItem={deleteItem}
+              />
+          )}
+
           {!viewingStudent && activeTab === 'students' && role === 'admin' && (
-    <RosterPage 
-        students={students}
-        filteredStudents={filteredStudents}
-        birthYearStats={birthYearStats}
-        selectedYearFilter={selectedYearFilter}
-        setSelectedYearFilter={setSelectedYearFilter}
-        handleCSVImportStudents={handleCSVImportStudents}
-        setViewingStudent={setViewingStudent}
-        handleManualAward={handleManualAward}
-        handleUpdateSquashClass={handleUpdateSquashClass}
-        handleSetupStudentAuth={handleSetupStudentAuth}
-        setEditingStudent={setEditingStudent}
-        deleteItem={deleteItem}
-        setShowAddPlayerModal={setShowAddPlayerModal}
-    />
-)}               
-          {/* 球隊動態牆 */}
+            <RosterPage 
+                students={students}
+                filteredStudents={filteredStudents}
+                birthYearStats={birthYearStats}
+                selectedYearFilter={selectedYearFilter}
+                setSelectedYearFilter={setSelectedYearFilter}
+                handleCSVImportStudents={handleCSVImportStudents}
+                setViewingStudent={setViewingStudent}
+                handleManualAward={handleManualAward}
+                handleUpdateSquashClass={handleUpdateSquashClass}
+                handleSetupStudentAuth={handleSetupStudentAuth}
+                setEditingStudent={setEditingStudent}
+                deleteItem={deleteItem}
+                setShowAddPlayerModal={setShowAddPlayerModal}
+            />
+          )}
+
           {!viewingStudent && activeTab === 'socialFeed' && (
               <SocialFeedPage 
                   role={role}
@@ -2598,8 +2349,6 @@ const myDashboardData = useMemo(() => {
               />
           )}
 
-
-          {/* MONTHLY STARS ADMIN */}
           {!viewingStudent && activeTab === 'monthlyStarsAdmin' && role === 'admin' && (
               <div className="animate-in fade-in duration-500 font-bold">
                   <div className="bg-white p-10 rounded-[3rem] border shadow-sm mb-8">
@@ -2608,7 +2357,6 @@ const myDashboardData = useMemo(() => {
                         <input type="month" value={selectedMonthForAdmin} onChange={e => setSelectedMonthForAdmin(e.target.value)} className="bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg font-bold"/>
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                      {/* Male Winner Form */}
                       <div className="bg-slate-50/70 p-8 rounded-3xl border space-y-4">
                         <h4 className="text-xl font-black text-blue-600">每月之星 (男)</h4>
                         <div>
@@ -2634,7 +2382,6 @@ const myDashboardData = useMemo(() => {
                           <input type="file" accept="image/*" onChange={e => handleMonthlyStarPhotoUpload('maleWinner', e.target.files[0])} className="mt-2 text-xs"/>
                         </div>
                       </div>
-                      {/* Female Winner Form */}
                       <div className="bg-slate-50/70 p-8 rounded-3xl border space-y-4">
                         <h4 className="text-xl font-black text-pink-500">每月之星 (女)</h4>
                         <div>
@@ -2673,7 +2420,6 @@ const myDashboardData = useMemo(() => {
               </div>
           )}
 
-          {/* SCHEDULES TAB */}
           {!viewingStudent && activeTab === 'schedules' && (
               <CalendarPage 
                   role={role}
@@ -2687,7 +2433,6 @@ const myDashboardData = useMemo(() => {
               />
           )}
 
-          {/* ATTENDANCE TAB */}
           {!viewingStudent && activeTab === 'attendance' && role === 'admin' && (
               <AttendancePage 
                   todaySchedule={todaySchedule}
@@ -2703,7 +2448,7 @@ const myDashboardData = useMemo(() => {
                   togglePendingAttendance={togglePendingAttendance}
               />
           )}
-          {/* FINANCIAL TAB */}
+
           {!viewingStudent && activeTab === 'financial' && role === 'admin' && (
               <FinancialPage 
                   financeConfig={financeConfig}
@@ -2713,7 +2458,6 @@ const myDashboardData = useMemo(() => {
               />
           )}
 
-          {/* COMPETITIONS TAB */}
           {!viewingStudent && activeTab === 'competitions' && (
               <CompetitionsPage 
                   role={role}
@@ -2725,7 +2469,6 @@ const myDashboardData = useMemo(() => {
               />
           )}
 
-          {/* Gallery TAB */}
           {!viewingStudent && activeTab === 'gallery' && (
                 <GalleryPage 
                     role={role}
@@ -2740,13 +2483,12 @@ const myDashboardData = useMemo(() => {
                     getYouTubeEmbedUrl={getYouTubeEmbedUrl}
                     deleteItem={deleteItem}
                 />
-            )}
+          )}
 
-           {!viewingStudent && activeTab === 'wallOfFame' && (
+          {!viewingStudent && activeTab === 'wallOfFame' && (
               <WallOfFamePage trophies={trophies} alumni={alumni} />
           )}
                 
-          {/* AWARDS TAB */}
           {!viewingStudent && activeTab === 'awards' && (
               <AwardsPage 
                   role={role}
@@ -2759,45 +2501,41 @@ const myDashboardData = useMemo(() => {
               />
           )}
 
+          {!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
+              <LeaguePage 
+                  role={role}
+                  currentUserInfo={currentUserInfo}
+                  setShowTacticalBoard={setShowTacticalBoard}
+                  setShowUmpirePanel={setShowUmpirePanel}
+                  setActiveLeagueMatch={setActiveLeagueMatch}
+                  setShowTournamentModal={setShowTournamentModal}
+                  selectedTournament={selectedTournament}
+                  setSelectedTournament={setSelectedTournament}
+                  tournamentList={tournamentList}
+                  leagueMatches={leagueMatches}
+                  myTournamentStats={myTournamentStats}
+                  myUpcomingMatches={myUpcomingMatches}
+                  groupedMatches={groupedMatches}
+                  tournamentStandings={tournamentStandings}
+                  handleCheerMatch={handleCheerMatch}
+                  handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore}
+                  handleEditLeagueMatch={handleEditLeagueMatch}
+                  deleteItem={deleteItem}
+                  schoolLogo={systemConfig.schoolLogo}
+              />
+          )}
             
-          {/* LEAGUE TAB */}
-{!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
-    <LeaguePage 
-        role={role}
-        currentUserInfo={currentUserInfo}
-        setShowTacticalBoard={setShowTacticalBoard}
-        setShowUmpirePanel={setShowUmpirePanel}
-        setActiveLeagueMatch={setActiveLeagueMatch}
-        setShowTournamentModal={setShowTournamentModal}
-        selectedTournament={selectedTournament}
-        setSelectedTournament={setSelectedTournament}
-        tournamentList={tournamentList}
-        leagueMatches={leagueMatches}
-        myTournamentStats={myTournamentStats}
-        myUpcomingMatches={myUpcomingMatches}
-        groupedMatches={groupedMatches}
-        tournamentStandings={tournamentStandings}
-        handleCheerMatch={handleCheerMatch}
-        handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore}
-        handleEditLeagueMatch={handleEditLeagueMatch}
-        deleteItem={deleteItem}
-        schoolLogo={systemConfig.schoolLogo}
-    />
-)}
-            
-          {/* EXTERNAL MATCHES TAB */}
-{!viewingStudent && activeTab === 'externalMatches' && role === 'admin' && (
-    <ExternalMatchesPage 
-        newExternalMatch={newExternalMatch}
-        setNewExternalMatch={setNewExternalMatch}
-        externalTournaments={externalTournaments}
-        students={students}
-        handleSaveExternalMatch={handleSaveExternalMatch}
-        isUpdating={isUpdating}
-    />
-)}
+          {!viewingStudent && activeTab === 'externalMatches' && role === 'admin' && (
+              <ExternalMatchesPage 
+                  newExternalMatch={newExternalMatch}
+                  setNewExternalMatch={setNewExternalMatch}
+                  externalTournaments={externalTournaments}
+                  students={students}
+                  handleSaveExternalMatch={handleSaveExternalMatch}
+                  isUpdating={isUpdating}
+              />
+          )}
 
-          {/* SETTINGS TAB */}
           {!viewingStudent && activeTab === 'settings' && role === 'admin' && (
               <SettingsPage 
                   systemConfig={systemConfig}
@@ -2815,34 +2553,35 @@ const myDashboardData = useMemo(() => {
                   handleCSVImportAlumni={handleCSVImportAlumni}
               />
           )}
+
           {showAddPlayerModal && (
               <AddPlayerModal 
                   onClose={() => setShowAddPlayerModal(false)} 
                   db={db}
                   appId={appId}
                   compressImage={compressImage}
-    />
-)}
-          {/* 新增貼文彈跳視窗 */}
-      {showCreatePostModal && (
-          <CreatePostModal 
-              onClose={() => setShowCreatePostModal(false)}
-              currentUserInfo={currentUserInfo}
-              role={role}
-              appId={appId} // 傳入 appId 以便寫入正確的路徑
-          />
-      )}
-          {/* 我們將 editingStudent 傳給新的 EditPlayerModal，並把 compressImage 函數也傳進去 */}
-{editingStudent && (
-    <EditPlayerModal 
-        student={editingStudent}
-        onClose={() => setEditingStudent(null)} 
-        db={db}
-        appId={appId}
-        compressImage={compressImage}
-        handleSetupStudentAuth={handleSetupStudentAuth}
-    />
-)}        
+              />
+          )}
+
+          {showCreatePostModal && (
+              <CreatePostModal 
+                  onClose={() => setShowCreatePostModal(false)}
+                  currentUserInfo={currentUserInfo}
+                  role={role}
+                  appId={appId}
+              />
+          )}
+
+          {editingStudent && (
+              <EditPlayerModal 
+                  student={editingStudent}
+                  onClose={() => setEditingStudent(null)} 
+                  db={db}
+                  appId={appId}
+                  compressImage={compressImage}
+                  handleSetupStudentAuth={handleSetupStudentAuth}
+              />
+          )}        
         </div>
       </main>
     </div>
