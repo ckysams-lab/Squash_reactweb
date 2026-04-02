@@ -1,3 +1,6 @@
+// File: src/App.jsx
+// Version 1.6: Fixes all no-unused-vars ESLint errors and other warnings.
+
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
 import UmpirePanelModal from './components/UmpirePanelModal';
@@ -44,9 +47,8 @@ import {
 } from 'lucide-react';
 
 import { 
-  getFirestore, collection, doc, setDoc, getDoc, onSnapshot, arrayUnion, arrayRemove, 
-  addDoc, deleteDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, increment, where,
-  enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED
+  collection, doc, setDoc, onSnapshot, arrayUnion, arrayRemove, 
+  addDoc, deleteDoc, serverTimestamp, updateDoc, writeBatch, increment
 } from 'firebase/firestore';
 import html2canvas from 'html2canvas';
 import QRCode from 'qrcode.react';
@@ -61,12 +63,9 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-// --- 版本控制 ---
-// v1.5: Final consolidated code. Includes NavButton fix, atomic updates, unified radar logic, bye-match fix, and the critical build error syntax fix in the <header>.
-const CURRENT_VERSION = "1.5";
+const CURRENT_VERSION = "1.6";
 
-// Calendar Localizer
-const localizer = momentLocalizer(moment);
+momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
 
 const SchoolLogo = ({ size = 48, className = "", systemConfig }) => {
@@ -132,7 +131,7 @@ export default function App() {
     leagueMatches,
     attendanceLogs, 
     schedules, 
-    downloadFiles, 
+    // downloadFiles, // ESLINT: REMOVED
     galleryItems,
     awards, 
     achievements, 
@@ -156,10 +155,11 @@ export default function App() {
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   
-  const [tacticalData, setTacticalData] = useState({ p1: '', p2: '' });
-  const [activePlayer, setActivePlayer] = useState(1);
-  const [lastRecorded, setLastRecorded] = useState(null);
-  const [pendingTacticalShots, setPendingTacticalShots] = useState([]);
+  // ESLINT: REMOVED UNUSED STATE
+  // const [tacticalData, setTacticalData] = useState({ p1: '', p2: '' });
+  // const [activePlayer, setActivePlayer] = useState(1);
+  // const [lastRecorded, setLastRecorded] = useState(null);
+  // const [pendingTacticalShots, setPendingTacticalShots] = useState([]);
 
   const syncGoogleDriveGallery = async () => {
     setIsSyncingDrive(true);
@@ -423,18 +423,7 @@ export default function App() {
     
     try {
       const listeners = [];
-      const collections = {
-        attendance_logs: collection(db, 'artifacts', appId, 'public', 'data', 'attendance_logs'),
-        schedules: collection(db, 'artifacts', appId, 'public', 'data', 'schedules'),
-        downloadFiles: collection(db, 'artifacts', appId, 'public', 'data', 'downloadFiles'),
-        gallery: collection(db, 'artifacts', appId, 'public', 'data', 'gallery'),
-        awards: collection(db, 'artifacts', appId, 'public', 'data', 'awards'),
-        achievements: collection(db, 'artifacts', appId, 'public', 'data', 'achievements'),
-        external_tournaments: collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'),
-        assessments: collection(db, 'artifacts', appId, 'public', 'data', 'assessments'), 
-        tactical_shots: collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots')
-      };
-
+      // ESLINT: Removed unused 'collections' variable
       const systemConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system');
       const financeConfigRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance');
 
@@ -504,6 +493,11 @@ export default function App() {
         : [...prev, studentId]
     );
   };
+
+  const todaySchedule = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return schedules.find(s => s.date === today);
+  }, [schedules]);
 
   const savePendingAttendance = async () => {
     if (pendingAttendance.length === 0) {
@@ -998,7 +992,7 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  const adjustPoints = async (id, amount, reason = "教練調整") => {
+  const adjustPoints = async (id, amount, _reason = "教練調整") => { // ESLINT: Use _ to ignore unused var
     if (role !== 'admin' || !user) return;
     setIsUpdating(true);
     try {
@@ -1008,25 +1002,6 @@ export default function App() {
       });
     } catch (e) { console.error(e); }
     setIsUpdating(false);
-  };
-
-  const handleUpdateDOB = async (student) => {
-    const currentDob = student.dob || "";
-    const newDob = prompt(`請輸入 ${student.name} 的出生日期 (YYYY-MM-DD):`, currentDob);
-    
-    if (newDob !== null) { 
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(newDob) && newDob !== "") {
-            alert("格式錯誤！請使用 YYYY-MM-DD 格式 (例如: 2012-05-20)");
-            return;
-        }
-        try {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
-                dob: newDob,
-                lastUpdated: serverTimestamp()
-            });
-        } catch (e) { console.error("Update DOB failed", e); alert("更新失敗"); }
-    }
   };
 
   const handleUpdateSquashClass = async (student) => {
@@ -1069,7 +1044,7 @@ export default function App() {
         default: return; 
     }
     if(confirm(`確認給予 ${student.name} 「${reason}」獎勵 (總分 +${points})?`)) {
-        adjustPoints(student.id, points);
+        adjustPoints(student.id, points, reason); // ESLINT: Pass reason
     }
   };
 
@@ -1366,11 +1341,6 @@ export default function App() {
     if (e.target) e.target.value = null;
   };
 
-  const todaySchedule = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    return schedules.find(s => s.date === today);
-  }, [schedules]);
-
   const uniqueTrainingClasses = useMemo(() => {
     const classes = schedules.map(s => s.trainingClass).filter(Boolean);
     return ['ALL', ...new Set(classes)];
@@ -1453,7 +1423,8 @@ export default function App() {
 
       try {
           const currentMatch = leagueMatches.find(m => m.id === matchId);
-          const currentCheers = currentMatch?.cheers || [];
+          if (!currentMatch) return;
+          const currentCheers = currentMatch.cheers || [];
 
           if (currentCheers.includes(userId)) {
               await updateDoc(matchRef, { cheers: arrayRemove(userId) });
@@ -1627,53 +1598,6 @@ export default function App() {
     }
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
-
-  const handleTacticalClick = (zone) => {
-      if (!tacticalData.p1) {
-          alert("請至少輸入一位我方球員的姓名！");
-          return;
-      }
-      
-      const playerName = activePlayer === 1 ? tacticalData.p1 : tacticalData.p2;
-      const opponentName = activePlayer === 1 ? tacticalData.p2 : tacticalData.p1;
-      
-      setLastRecorded({ player: playerName, zone: zone });
-      setTimeout(() => setLastRecorded(null), 800);
-
-      if (tacticalData.p2) {
-          setActivePlayer(activePlayer === 1 ? 2 : 1);
-      }
-
-      setPendingTacticalShots(prev => [
-          ...prev, 
-          {
-              player: playerName,
-              opponent: opponentName || '未知對手',
-              zone: zone,
-              date: new Date().toISOString().split('T')[0]
-          }
-      ]);
-  };
-
-  const saveTacticalShots = async () => {
-      if (pendingTacticalShots.length === 0) return;
-      
-      try {
-          const batch = writeBatch(db);
-          const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'tactical_shots');
-          
-          pendingTacticalShots.forEach(shot => {
-              batch.set(doc(colRef), { ...shot, timestamp: serverTimestamp() });
-          });
-          
-          await batch.commit();
-          alert(`✅ 成功批次儲存 ${pendingTacticalShots.length} 筆戰術紀錄！`);
-          setPendingTacticalShots([]);
-      } catch(e) {
-          console.error("批次戰術紀錄失敗", e);
-          alert("儲存失敗，請檢查網路連線。");
-      }
-  };
 
   const playerDashboardData = useMemo(() => {
     const targetStudentInfo = viewingStudent || (role === 'student' ? currentUserInfo : null);
@@ -2122,7 +2046,6 @@ export default function App() {
                   leagueMatches={leagueMatches}
                   achievements={achievements}
                   systemConfig={systemConfig}
-                  BADGE_DATA={BADGE_DATA}
                   ACHIEVEMENT_DATA={ACHIEVEMENT_DATA}
                   assessments={assessments} 
                   attendanceLogs={attendanceLogs}
@@ -2267,9 +2190,6 @@ export default function App() {
         
           {!viewingStudent && activeTab === 'dashboard' && role === 'admin' && (
             <DashboardPage 
-                competitions={competitions}
-                schedules={schedules}
-                students={students}
                 dashboardStats={dashboardStats}
                 assessments={assessments}
             />
@@ -2313,7 +2233,6 @@ export default function App() {
                 setViewingStudent={setViewingStudent}
                 handleManualAward={handleManualAward}
                 handleUpdateSquashClass={handleUpdateSquashClass}
-                handleSetupStudentAuth={handleSetupStudentAuth}
                 setEditingStudent={setEditingStudent}
                 deleteItem={deleteItem}
                 setShowAddPlayerModal={setShowAddPlayerModal}
@@ -2411,7 +2330,6 @@ export default function App() {
                   calendarEvents={calendarEvents}
                   setSelectedSchedule={setSelectedSchedule}
                   handleCSVImportSchedules={handleCSVImportSchedules}
-                  deleteItem={deleteItem}
               />
           )}
 
@@ -2551,6 +2469,7 @@ export default function App() {
                   currentUserInfo={currentUserInfo}
                   role={role}
                   appId={appId}
+                  compressImage={compressImage}
               />
           )}
 
