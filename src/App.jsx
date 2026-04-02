@@ -2070,7 +2070,9 @@ const handleUpdateLeagueMatchScore = async (match) => {
 
       <main className="flex-1 h-screen overflow-y-auto relative" style={{ backgroundColor: 'var(--theme-bg)' }}>
         {/* FIX: removed the trailing "..." from the className string */}
-        <header className="px-10 py-8 sticky top-0 backdrop-blur-xl z-40 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--theme-header-bg)', borderColor: 'var(--theme-border)' }}>
+        // ADD THIS CORRECTED LINE
+<header className="px-10 py-8 sticky top-0 backdrop-blur-xl z-40 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--theme-header-bg)', borderColor: 'var(--theme-border)' }}>
+
           <div className="flex items-center gap-6">
             <button onClick={()=>setSidebarOpen(true)} className="md:hidden p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-blue-600 transition-all">
               <Menu size={24}/>
