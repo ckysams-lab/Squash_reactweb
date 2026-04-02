@@ -1,20 +1,31 @@
-// src/pages/FinancialPage.jsx (Version 1.8)
+// src/pages/FinancialPage.jsx (Version 1.9)
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { DollarSign, Wallet, TrendingUp, TrendingDown, PlusCircle, Trash2, Users, Target } from 'lucide-react';
-import { collection, onSnapshot, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase'; // 確保 db 已正確導出
+import { doc, collection, onSnapshot, addDoc, deleteDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { DollarSign, TrendingUp, TrendingDown, PlusCircle, Trash2, Users, Target } from 'lucide-react';
+import { db } from '../firebase';
 import { PageHeader, Card, PrimaryButton } from '../components/ui.jsx';
 import FinancialItemModal from '../components/FinancialItemModal.jsx';
 
-// 假設 appId 在一個可訪問的範圍內，如果不在，需要從 props 傳入
 const appId = 'bcklas-squash-core-v1'; 
 
-const FinancialItem = ({ item, onDelete }) => (
+// The FinancialItem component now includes a checkbox
+const FinancialItem = ({ item, onDelete, onToggleBillable }) => (
     <div className="bg-white p-4 rounded-2xl border border-slate-200 flex justify-between items-center group">
-        <div>
-            <p className="font-black text-slate-700">{item.name}</p>
-            {item.category && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 mt-1 inline-block">{item.category}</span>}
+        <div className="flex items-center gap-3">
+            {item.type === 'expenditure' && (
+                <input
+                    type="checkbox"
+                    checked={item.isBillable}
+                    onChange={() => onToggleBillable(item.id, !item.isBillable)}
+                    className="form-checkbox h-5 w-5 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
+                    title="是否計入學費攤分"
+                />
+            )}
+            <div>
+                <p className={`font-black ${item.isBillable === false ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{item.name}</p>
+                {item.category && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 mt-1 inline-block">{item.category}</span>}
+            </div>
         </div>
         <div className="flex items-center gap-4">
             <p className={`font-mono font-bold text-lg ${item.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -29,16 +40,15 @@ const FinancialItem = ({ item, onDelete }) => (
 
 export default function FinancialPage() {
     const [items, setItems] = useState([]);
-    const [totalStudents, setTotalStudents] = useState(50); // 預設50人
+    const [totalStudents, setTotalStudents] = useState(50);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [modalType, setModalType] = useState('expenditure'); // 'income' or 'expenditure'
+    const [modalType, setModalType] = useState('expenditure');
 
-    // 從 Firestore 實時讀取數據
     useEffect(() => {
         const itemsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'financial_items');
         const unsubscribe = onSnapshot(itemsColRef, (snapshot) => {
             const financialData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setItems(financialData.sort((a, b) => b.timestamp - a.timestamp));
+            setItems(financialData.sort((a, b) => (b.timestamp?.seconds ?? 0) - (a.timestamp?.seconds ?? 0)));
         });
         return () => unsubscribe();
     }, []);
@@ -53,12 +63,24 @@ export default function FinancialPage() {
             const itemsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'financial_items');
             await addDoc(itemsColRef, {
                 ...itemData,
+                // Default isBillable to true for new expenditures, irrelevant for income
+                isBillable: itemData.type === 'expenditure' ? true : null, 
                 timestamp: serverTimestamp()
             });
             setIsModalOpen(false);
         } catch (error) {
             console.error("Error adding document: ", error);
             alert('儲存項目失敗，請檢查網絡連線。');
+        }
+    };
+    
+    const handleToggleBillable = async (itemId, newIsBillable) => {
+        try {
+            const itemDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'financial_items', itemId);
+            await updateDoc(itemDocRef, { isBillable: newIsBillable });
+        } catch (error) {
+            console.error("Error updating document: ", error);
+            alert('更新狀態失敗，請檢查網絡連線。');
         }
     };
 
@@ -79,11 +101,15 @@ export default function FinancialPage() {
             .filter(item => item.type === 'expenditure')
             .reduce((sum, item) => sum + item.amount, 0);
         
+        const billableExpenditure = items
+            .filter(item => item.type === 'expenditure' && item.isBillable === true)
+            .reduce((sum, item) => sum + item.amount, 0);
+            
         const otherIncome = items
             .filter(item => item.type === 'income')
             .reduce((sum, item) => sum + item.amount, 0);
 
-        const fundingGap = totalExpenditure - otherIncome;
+        const fundingGap = billableExpenditure - otherIncome;
 
         const feePerStudent = totalStudents > 0 ? fundingGap / totalStudents : 0;
 
@@ -103,17 +129,16 @@ export default function FinancialPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                 
-                {/* 左側：流水帳 */}
                 <div className="space-y-8">
-                    {/* 支出 */}
                     <Card>
                         <div className="flex justify-between items-center mb-4 pb-4 border-b">
                             <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2"><TrendingDown className="text-rose-500"/>總支出</h3>
                             <p className="text-2xl font-black text-rose-600 font-mono">${totalExpenditure.toLocaleString()}</p>
                         </div>
+                        <p className="text-xs text-slate-500 mb-3 font-bold">✅ 勾選的項目將會計入下方的學費攤分計算。</p>
                         <div className="space-y-3 mb-4 max-h-80 overflow-y-auto pr-2">
                             {items.filter(item => item.type === 'expenditure').length > 0 ? (
-                                items.filter(item => item.type === 'expenditure').map(item => <FinancialItem key={item.id} item={item} onDelete={handleDeleteItem} />)
+                                items.filter(item => item.type === 'expenditure').map(item => <FinancialItem key={item.id} item={item} onDelete={handleDeleteItem} onToggleBillable={handleToggleBillable} />)
                             ) : (
                                 <p className="text-center text-slate-400 py-8">暫無支出項目</p>
                             )}
@@ -123,7 +148,6 @@ export default function FinancialPage() {
                         </PrimaryButton>
                     </Card>
 
-                    {/* 收入 */}
                     <Card>
                         <div className="flex justify-between items-center mb-4 pb-4 border-b">
                             <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2"><TrendingUp className="text-emerald-500"/>其他收入</h3>
@@ -142,15 +166,14 @@ export default function FinancialPage() {
                     </Card>
                 </div>
 
-                {/* 右側：計算機 */}
                 <Card className="sticky top-28 bg-blue-50 border-2 border-blue-200 shadow-xl">
                     <div className="p-8 border-b border-blue-200 bg-white rounded-t-[3rem]">
                         <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2"><Target className="text-blue-600"/>收支平衡計算機</h3>
-                        <p className="text-sm text-slate-500 mt-1 font-bold">根據收支流水帳與收生人數，智能建議學費</p>
+                        <p className="text-sm text-slate-500 mt-1 font-bold">根據<span className="text-blue-600">可攤分收支</span>與收生人數，智能建議學費</p>
                     </div>
                     <div className="p-8 space-y-6">
                         <div className="text-center">
-                            <p className="text-sm font-black text-slate-500 uppercase tracking-widest">資金缺口 (總支出 - 其他收入)</p>
+                            <p className="text-sm font-black text-slate-500 uppercase tracking-widest">學費需覆蓋資金 (可攤分支出 - 其他收入)</p>
                             <p className="text-5xl font-black text-slate-800 font-mono tracking-tighter mt-2">${fundingGap > 0 ? fundingGap.toLocaleString() : 0}</p>
                         </div>
 
