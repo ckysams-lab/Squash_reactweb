@@ -62,18 +62,13 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
 // --- 版本控制 ---
-const CURRENT_VERSION = "1.0";
+// v1.5: Final consolidated code. Includes NavButton fix, atomic updates, unified radar logic, bye-match fix, and the critical build error syntax fix in the <header>.
+const CURRENT_VERSION = "1.5";
 
 // Calendar Localizer
 const localizer = momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
 
-// =============================================================================
-// FIX #1 — SchoolLogo moved OUTSIDE App() so React treats it as a real
-// component and the useState call inside it follows the Rules of Hooks.
-// Previously it was defined as a plain nested function inside App(), which
-// caused "rendered more hooks than previous render" crashes on re-renders.
-// =============================================================================
 const SchoolLogo = ({ size = 48, className = "", systemConfig }) => {
   const [error, setError] = useState(false);
   const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
@@ -97,6 +92,35 @@ const SchoolLogo = ({ size = 48, className = "", systemConfig }) => {
     />
   );
 };
+
+const NavButton = ({ tabName, activeTab, setActiveTab, setSidebarOpen, icon, children }) => {
+    const [isHovered, setIsHovered] = useState(false);
+    const isActive = activeTab === tabName;
+    
+    const activeStyle = {
+      backgroundColor: 'var(--theme-sidebar-active-bg)',
+      color: 'var(--theme-sidebar-active-text)',
+      boxShadow: '0 10px 15px -3px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.2)'
+    };
+    const inactiveStyle = { color: 'var(--theme-sidebar-text)', backgroundColor: 'transparent' };
+    const hoverStyle = { backgroundColor: 'rgba(128, 128, 128, 0.05)' };
+
+    let style = isActive ? activeStyle : inactiveStyle;
+    if (!isActive && isHovered) style = {...style, ...hoverStyle};
+    
+    return (
+        <button
+          onClick={() => { setActiveTab(tabName); setSidebarOpen(false); }}
+          className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all text-left font-bold"
+          style={style}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          {icon} {children}
+        </button>
+    );
+};
+
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -131,12 +155,7 @@ export default function App() {
   const [editingStudent, setEditingStudent] = useState(null);
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
-
-  // =============================================================================
-  // FIX #2 — Declare the missing state variables consumed by handleTacticalClick
-  // and saveTacticalShots. Previously these were referenced but never declared,
-  // causing ReferenceErrors at runtime whenever the tactical board was used.
-  // =============================================================================
+  
   const [tacticalData, setTacticalData] = useState({ p1: '', p2: '' });
   const [activePlayer, setActivePlayer] = useState(1);
   const [lastRecorded, setLastRecorded] = useState(null);
@@ -1154,7 +1173,7 @@ export default function App() {
         
         try {
            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
-              type: '',
+              type: 'video',
               url,
               title: title || '未命名影片',
               description: desc,
@@ -1390,16 +1409,11 @@ export default function App() {
     return uniqueNames.sort((a, b) => b.localeCompare(a));
   }, [leagueMatches]);
 
-  // FIX: removed setSelectedTournament() side-effect from this memo.
-  // That call was illegal inside useMemo — it caused extra render cycles and
-  // potential infinite loops in StrictMode. The default tournament selection
-  // is now handled in the useEffect below.
   const filteredMatches = useMemo(() => {
     if (!selectedTournament) return [];
     return leagueMatches.filter(m => m.tournamentName === selectedTournament);
   }, [leagueMatches, selectedTournament]);
 
-  // Set a default tournament when the list first loads
   useEffect(() => {
     if (tournamentList.length > 0 && !selectedTournament) {
       setSelectedTournament(tournamentList[0]);
@@ -1442,9 +1456,9 @@ export default function App() {
           const currentCheers = currentMatch?.cheers || [];
 
           if (currentCheers.includes(userId)) {
-              await updateDoc(matchRef, { cheers: currentCheers.filter(id => id !== userId) });
+              await updateDoc(matchRef, { cheers: arrayRemove(userId) });
           } else {
-              await updateDoc(matchRef, { cheers: [...currentCheers, userId] });
+              await updateDoc(matchRef, { cheers: arrayUnion(userId) });
           }
       } catch (error) {
           console.error("Cheer failed:", error);
@@ -1454,7 +1468,7 @@ export default function App() {
   const handleUpdateLeagueMatchScore = async (match) => {
       const score1_str = prompt(`請輸入 ${match.player1Name} 的分數:`);
       if (score1_str === null) return;
-      const score2_str = prompt(`請輸入 ${match.player2Name} 的分數:`);
+      const score2_str = prompt(`請輸入 ${match.player2Name || '對手'} 的分數:`);
       if (score2_str === null) return;
       
       const score1 = parseInt(score1_str, 10);
@@ -1465,20 +1479,22 @@ export default function App() {
 
       const winnerId = score1 > score2 ? match.player1Id : match.player2Id;
       const winner = students.find(s => s.id === winnerId);
-      const loser = students.find(s => s.id === (winnerId === match.player1Id ? match.player2Id : match.player1Id));
       
-      if (!winner || !loser) { alert("找不到球員資料，無法更新積分。"); return; }
+      const loserId = (winnerId === match.player1Id ? match.player2Id : match.player1Id);
+      const loser = loserId ? students.find(s => s.id === loserId) : null;
+      
+      if (!winner) { alert("找不到獲勝球員資料，無法更新積分。"); return; }
 
       const winnerRank = rankedStudents.findIndex(s => s.id === winner.id) + 1;
-      const loserRank = rankedStudents.findIndex(s => s.id === loser.id) + 1;
+      const loserRank = loser ? (rankedStudents.findIndex(s => s.id === loser.id) + 1) : 0;
       const winnerBadgeLevel = BADGE_DATA[winner.badge]?.level || 0;
-      const loserBadgeLevel = BADGE_DATA[loser.badge]?.level || 0;
+      const loserBadgeLevel = loser ? (BADGE_DATA[loser.badge]?.level || 0) : 0;
       const isRankGiantKiller = winnerRank > 0 && loserRank > 0 && (winnerRank - loserRank) >= 5;
-      const isBadgeGiantKiller = winnerBadgeLevel < loserBadgeLevel;
+      const isBadgeGiantKiller = loser && winnerBadgeLevel < loserBadgeLevel;
       const isGiantKiller = isRankGiantKiller || isBadgeGiantKiller;
       const pointsToAdd = isGiantKiller ? 20 : 10;
       
-      const confirmMsg = `✍️ 確認賽果？\n\n${match.player1Name} vs ${match.player2Name}\n比分: ${score1} - ${score2}\n\n🏆 勝方: ${winner.name} (+${pointsToAdd} 分 ${isGiantKiller ? '🔥巨人殺手' : ''})\n負方: ${loser.name} (+0 分)`;
+      const confirmMsg = `✍️ 確認賽果？\n\n${match.player1Name} vs ${match.player2Name || 'BYE'}\n比分: ${score1} - ${score2}\n\n🏆 勝方: ${winner.name} (+${pointsToAdd} 分 ${isGiantKiller ? '🔥巨人殺手' : ''})`;
 
       if (confirm(confirmMsg)) {
           setIsUpdating(true);
@@ -1612,10 +1628,6 @@ export default function App() {
     return { played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0 };
   }, [tournamentStandings, currentUserInfo, role, selectedTournament]);
 
-  // =============================================================================
-  // FIX #2 (continued) — handleTacticalClick and saveTacticalShots now use the
-  // state variables declared above. No more ReferenceErrors.
-  // =============================================================================
   const handleTacticalClick = (zone) => {
       if (!tacticalData.p1) {
           alert("請至少輸入一位我方球員的姓名！");
@@ -1762,12 +1774,19 @@ export default function App() {
     let radarData = [];
     if (latestAssessment) {
         const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
+        const calculateShotScore = (driveHitsRaw, volleyHitsRaw) => {
+            const driveHits = Math.min(10, Number(driveHitsRaw) || 0);
+            const volleyHits = Math.min(7, Number(volleyHitsRaw) || 0);
+            return Math.floor((driveHits * 4) + (volleyHits * (60 / 7)));
+        };
+        const fhTotalScore = calculateShotScore(latestAssessment.fhDrive, latestAssessment.fhVolley);
+        const bhTotalScore = calculateShotScore(latestAssessment.bhDrive, latestAssessment.bhVolley);
         radarData = [
             { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 25), fullMark: 10 },
-            { subject: '力量 (仰臥/握力)', A: calcScore(((latestAssessment.situps || 0) + (latestAssessment.gripStrength || 0))/2, 50), fullMark: 10 },
+            { subject: '力量 (握力)', A: calcScore(latestAssessment.gripStrength, 70), fullMark: 10 },
             { subject: '柔軟度', A: calcScore(latestAssessment.flexibility, 30), fullMark: 10 },
-            { subject: '正手技術', A: calcScore(((latestAssessment.fhDrive || 0) + (latestAssessment.fhVolley || 0))/2, 10), fullMark: 10 },
-            { subject: '反手技術', A: calcScore(((latestAssessment.bhDrive || 0) + (latestAssessment.bhVolley || 0))/2, 10), fullMark: 10 },
+            { subject: '正手技術', A: Math.max(1, Math.round(fhTotalScore / 10)), fullMark: 10 },
+            { subject: '反手技術', A: Math.max(1, Math.round(bhTotalScore / 10)), fullMark: 10 },
         ];
     }
 
@@ -1893,7 +1912,6 @@ export default function App() {
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
       <div className="mb-8 animate-pulse">
-        {/* Now passing systemConfig as a prop since SchoolLogo is outside App() */}
         <SchoolLogo size={96} systemConfig={systemConfig} />
       </div>
       <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
@@ -1905,7 +1923,6 @@ export default function App() {
   return (
     <div className="min-h-screen flex font-sans overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-text-primary)' }}>
       
-      {/* Hidden Poster for Rendering */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100}}>
           <PosterGenerator ref={posterRef} data={posterData} schoolLogo={posterData?.schoolLogo} />
       </div>
@@ -1967,7 +1984,6 @@ export default function App() {
       >
         <div className="p-10 h-full flex flex-col font-bold">
           <div className="flex items-center gap-4 mb-14 px-2">
-            {/* Pass systemConfig as prop */}
             <div className="flex items-center justify-center"><SchoolLogo size={32} systemConfig={systemConfig} /></div>
             <div>
               <h2 className="text-2xl font-black tracking-tighter">正覺壁球</h2>
@@ -1976,71 +1992,39 @@ export default function App() {
           </div>
           
           <nav className="space-y-2 flex-1 overflow-y-auto">
-              {(() => {
-                const baseButtonClass = "w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all text-left font-bold";
-                const activeStyle = {
-                  backgroundColor: 'var(--theme-sidebar-active-bg)',
-                  color: 'var(--theme-sidebar-active-text)',
-                  boxShadow: '0 10px 15px -3px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.2), 0 4px 6px -2px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.1)'
-                };
-                const inactiveStyle = { color: 'var(--theme-sidebar-text)', backgroundColor: 'transparent' };
-                const hoverStyle = { backgroundColor: 'rgba(128, 128, 128, 0.05)' };
-
-                const NavButton = ({ tabName, icon, children }) => {
-                    const [isHovered, setIsHovered] = useState(false);
-                    const isActive = activeTab === tabName;
-                    let style = isActive ? activeStyle : inactiveStyle;
-                    if (!isActive && isHovered) style = {...style, ...hoverStyle};
-                    
-                    return (
-                        <button
-                          onClick={() => { setActiveTab(tabName); setSidebarOpen(false); }}
-                          className={baseButtonClass}
-                          style={style}
-                          onMouseEnter={() => setIsHovered(true)}
-                          onMouseLeave={() => setIsHovered(false)}
-                        >
-                          {icon} {children}
-                        </button>
-                    );
-                };
-
-                return (
+              <>
+                {(role === 'admin' || role === 'student') && (
                   <>
-                    {(role === 'admin' || role === 'student') && (
-                      <>
-                        <div className="text-[10px] uppercase tracking-widest mb-4 px-6" style={{ color: 'var(--theme-text-faint)' }}>主選單</div>
-                        <NavButton tabName="myDashboard" icon={<UserCheck size={20} />}>我的表現</NavButton>
-                        <NavButton tabName="monthlyStars" icon={<Star size={20} />}>每月之星</NavButton>
-                        <NavButton tabName="rankings" icon={<Trophy size={20} />}>積分排行</NavButton>
-                        <NavButton tabName="league" icon={<Swords size={20} />}>聯賽專區</NavButton>
-                        <NavButton tabName="socialFeed" icon={<MessageSquare size={20} />}>球隊動態</NavButton>
-                        <NavButton tabName="gallery" icon={<ImageIcon size={20} />}>精彩花絮</NavButton>
-                        <NavButton tabName="wallOfFame" icon={<Trophy size={20} />}>榮譽殿堂</NavButton>
-                        <NavButton tabName="awards" icon={<Award size={20} />}>獎項成就</NavButton>
-                        <NavButton tabName="schedules" icon={<CalendarIcon size={20} />}>訓練日程</NavButton>
-                        <NavButton tabName="competitions" icon={<Megaphone size={20} />}>比賽與公告</NavButton>
-                      </>
-                    )}
-                    {role === 'admin' && (
-                      <>
-                        <div className="text-[10px] uppercase tracking-widest my-6 px-6 pt-6 border-t" style={{ color: 'var(--theme-text-faint)', borderColor: 'var(--theme-border)' }}>教練工具</div>
-                        <NavButton tabName="dashboard" icon={<LayoutDashboard size={20} />}>管理概況</NavButton>
-                        <NavButton tabName="assessments" icon={<Activity size={20} />}>綜合能力評估</NavButton>
-                        <NavButton tabName="monthlyStarsAdmin" icon={<Crown size={20} />}>每月之星管理</NavButton>
-                        <NavButton tabName="students" icon={<Users size={20} />}>隊員管理</NavButton>
-                        <NavButton tabName="externalMatches" icon={<BookMarked size={20} />}>校外賽管理</NavButton>
-                        <NavButton tabName="attendance" icon={<ClipboardCheck size={20} />}>快速點名</NavButton>
-                        <NavButton tabName="financial" icon={<DollarSign size={20} />}>財務收支</NavButton>
-                        <NavButton tabName="settings" icon={<Settings2 size={20} />}>系統設定</NavButton>
-                      </>
-                    )}
+                    <div className="text-[10px] uppercase tracking-widest mb-4 px-6" style={{ color: 'var(--theme-text-faint)' }}>主選單</div>
+                    <NavButton tabName="myDashboard" icon={<UserCheck size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>我的表現</NavButton>
+                    <NavButton tabName="monthlyStars" icon={<Star size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>每月之星</NavButton>
+                    <NavButton tabName="rankings" icon={<Trophy size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>積分排行</NavButton>
+                    <NavButton tabName="league" icon={<Swords size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>聯賽專區</NavButton>
+                    <NavButton tabName="socialFeed" icon={<MessageSquare size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>球隊動態</NavButton>
+                    <NavButton tabName="gallery" icon={<ImageIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>精彩花絮</NavButton>
+                    <NavButton tabName="wallOfFame" icon={<Trophy size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>榮譽殿堂</NavButton>
+                    <NavButton tabName="awards" icon={<Award size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>獎項成就</NavButton>
+                    <NavButton tabName="schedules" icon={<CalendarIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>訓練日程</NavButton>
+                    <NavButton tabName="competitions" icon={<Megaphone size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>比賽與公告</NavButton>
                   </>
-                );
-              })()}
-            </nav>
+                )}
+                {role === 'admin' && (
+                  <>
+                    <div className="text-[10px] uppercase tracking-widest my-6 px-6 pt-6 border-t" style={{ color: 'var(--theme-text-faint)', borderColor: 'var(--theme-border)' }}>教練工具</div>
+                    <NavButton tabName="dashboard" icon={<LayoutDashboard size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>管理概況</NavButton>
+                    <NavButton tabName="assessments" icon={<Activity size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>綜合能力評估</NavButton>
+                    <NavButton tabName="monthlyStarsAdmin" icon={<Crown size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>每月之星管理</NavButton>
+                    <NavButton tabName="students" icon={<Users size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>隊員管理</NavButton>
+                    <NavButton tabName="externalMatches" icon={<BookMarked size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>校外賽管理</NavButton>
+                    <NavButton tabName="attendance" icon={<ClipboardCheck size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>快速點名</NavButton>
+                    <NavButton tabName="financial" icon={<DollarSign size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>財務收支</NavButton>
+                    <NavButton tabName="settings" icon={<Settings2 size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>系統設定</NavButton>
+                  </>
+                )}
+              </>
+          </nav>
           
-          <div className="pt-10 border-t">
+          <div className="pt-10 border-t" style={{ borderColor: 'var(--theme-border)' }}>
             <div className="bg-slate-50 rounded-3xl p-6 mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-blue-600 shadow-sm">
@@ -2060,7 +2044,6 @@ export default function App() {
       </aside>
 
       <main className="flex-1 h-screen overflow-y-auto relative" style={{ backgroundColor: 'var(--theme-bg)' }}>
-        {/* FIX: removed the trailing "..." from the className string */}
         <header className="px-10 py-8 sticky top-0 backdrop-blur-xl z-40 border-b flex items-center justify-between" style={{ backgroundColor: 'var(--theme-header-bg)', borderColor: 'var(--theme-border)' }}>
           <div className="flex items-center gap-6">
             <button onClick={()=>setSidebarOpen(true)} className="md:hidden p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-blue-600 transition-all">
@@ -2260,8 +2243,7 @@ export default function App() {
                   handleReplyJournalEntry={handleReplyJournalEntry}
               />
           )}
-
-          {/* FIX: MyDashboardPage now correctly receives myDashboardData instead of playerDashboardData */}
+          
           {!viewingStudent && activeTab === 'myDashboard' && role === 'student' && (
               <MyDashboardPage 
                   currentUserInfo={currentUserInfo}
