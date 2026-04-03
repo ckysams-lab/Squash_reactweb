@@ -1,176 +1,174 @@
-/* index.css (Version 2.4 - "Project 'Kinetic'") */
-
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&family=Roboto+Mono:wght@700&display=swap');
 
-/* ==========================================================================
-   1. Kinetic Palette & Core Variables
-   ========================================================================== */
+/* ===== START: 版本 12.1 - 主題模式樣式 ===== */
 
+/* 1. 定義 CSS 顏色變數 */
 :root {
-  /* Base Colors */
-  --theme-bg: #F8FAFC; /* slate-50 */
+  --theme-bg: #F8FAFC;
   --theme-bg-card: white;
-  --theme-text-primary: #1E293B; /* slate-800 */
-  --theme-text-secondary: #64748B; /* slate-500 */
-  --theme-text-faint: #94A3B8; /* slate-400 */
-  --theme-border: #F1F5F9; /* slate-100 */
-
-  /* Kinetic Accent Colors */
-  --color-squash-yellow: 250, 213, 47;  /* #FAD52F */
-  --color-mint-green: 50, 215, 145;    /* #32D791 */
-  --color-kinetic-glow: rgba(var(--color-squash-yellow), 0.4);
-
-  /* Applying Kinetic Palette to Accent Variables */
-  --theme-accent-rgb: var(--color-squash-yellow);
-  --theme-accent: rgb(var(--color-squash-yellow));
-  --theme-accent-text: #1E293B; /* Dark text for bright button */
-  
-  /* Sidebar - Keeping it clean and professional */
+  --theme-text-primary: #1e293b; /* slate-800 */
+  --theme-text-secondary: #64748b; /* slate-500 */
+  --theme-text-faint: #94a3b8; /* slate-400 */
+  --theme-border: #f1f5f9; /* slate-100 */
+  --theme-accent: #3b82f6; /* blue-600 */
+  --theme-accent-text: white;
   --theme-sidebar-bg: white;
-  --theme-sidebar-text: #475569; /* slate-600 */
-  --theme-sidebar-active-bg: rgb(var(--color-squash-yellow));
-  --theme-sidebar-active-text: var(--theme-accent-text);
-  
-  /* Header */
-  --theme-header-bg: rgba(248, 250, 252, 0.8);
+  --theme-sidebar-text: #64748b; /* slate-500 */
+  --theme-sidebar-active-bg: #3b82f6; /* blue-600 */
+  --theme-sidebar-active-text: white;
+  --theme-header-bg: rgba(255, 255, 255, 0.8);
 }
 
-
-/* ==========================================================================
-   2. Dark Mode Theme ("Night Court")
-   ========================================================================== */
-.theme-night-court {
+/* 2. 定義「冠軍金」主題 */
+.theme-championship-gold {
   --theme-bg: #111827; /* gray-900 */
-  --theme-bg-card: #1F2937; /* gray-800 */
-  --theme-text-primary: #F9FAFB; /* gray-50 */
-  --theme-text-secondary: #9CA3AF; /* gray-400 */
-  --theme-text-faint: #6B7280; /* gray-500 */
+  --theme-bg-card: #1f2937; /* gray-800 */
+  --theme-text-primary: #f9fafb; /* gray-50 */
+  --theme-text-secondary: #9ca3af; /* gray-400 */
+  --theme-text-faint: #6b7280; /* gray-500 */
   --theme-border: #374151; /* gray-700 */
-  
-  /* Accent colors remain kinetic and vibrant against the dark background */
-  --theme-accent-text: #1E293B;
-
-  /* Sidebar */
-  --theme-sidebar-bg: #111827;
-  --theme-sidebar-text: #D1D5DB; /* gray-300 */
-  --theme-sidebar-active-bg: rgb(var(--color-squash-yellow));
-  --theme-sidebar-active-text: #1E293B;
-  
-  /* Header */
-  --theme-header-bg: rgba(17, 24, 39, 0.7);
+  --theme-accent: #facc15; /* yellow-400 */
+  --theme-accent-text: #422006;
+  --theme-sidebar-bg: #1f2937;
+  --theme-sidebar-text: #d1d5db; /* gray-300 */
+  --theme-sidebar-active-bg: #facc15;
+  --theme-sidebar-active-text: #422006;
+  --theme-header-bg: rgba(31, 41, 55, 0.8);
 }
 
+/* 3. 定義「清新綠」主題 */
+.theme-fresh-green {
+  --theme-bg: #f0fdf4; /* green-50 */
+  --theme-bg-card: white;
+  --theme-text-primary: #14532d; /* green-900 */
+  --theme-text-secondary: #4d7c0f; /* lime-700 */
+  --theme-text-faint: #84cc16; /* lime-500 */
+  --theme-border: #dcfce7; /* green-100 */
+  --theme-accent: #22c55e; /* green-500 */
+  --theme-accent-text: white;
+  --theme-sidebar-bg: white;
+  --theme-sidebar-text: #3f6212; /* lime-800 */
+  --theme-sidebar-active-bg: #16a34a; /* green-600 */
+  --theme-sidebar-active-text: white;
+  --theme-header-bg: rgba(255, 255, 255, 0.8);
+}
 
-/* ==========================================================================
-   3. Body & Font Setup
-   ========================================================================== */
-
+/* 4. 將背景圖案應用到 body */
 body {
   background-color: var(--theme-bg);
   transition: background-color 0.5s ease;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  /* -- Kinetic Element: Subtle Grid Background -- */
-  background-image:
-    linear-gradient(rgba(var(--theme-accent-rgb), 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--theme-accent-rgb), 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
+}
+body.theme-default {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%23dbeafe' fill-opacity='0.4'%3E%3Cpath d='M0 38.59l2.83-2.83 1.41 1.41L1.41 40H0v-1.41zM0 1.4l2.83 2.83 1.41-1.41L1.41 0H0v1.41zM38.59 40l-2.83-2.83 1.41-1.41L40 38.59V40h-1.41zM40 1.41l-2.83 2.83-1.41-1.41L38.59 0H40v1.41z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+body.theme-championship-gold {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg id='hexagons' fill='%23ca8a04' fill-opacity='0.1' fill-rule='nonzero'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.99-7.5L26 15v19L13 41.5 0 34V15z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+body.theme-fresh-green {
+  background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2386efac' fill-opacity='0.15'%3E%3Cpath d='M50 50c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c-5.523 0-10-4.477-10-10zM10 10c0-5.523 4.477-10 10-10s10 4.477 10 10-4.477 10-10 10c-5.523 0-10-4.477-10-10z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
 
-.font-mono {
-  font-family: 'Roboto Mono', monospace;
-}
-
-
-/* ==========================================================================
-   4. Overriding ui.jsx Component Styles
-   ========================================================================== */
-
-/* PageHeader - Adding the tilted element */
-.kinetic-page-header {
-  position: relative;
-  overflow: hidden;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
-}
-.kinetic-page-header::before {
-  content: '';
-  position: absolute;
-  top: -20%;
-  left: -5%;
-  width: 110%;
-  height: 140%;
-  background: linear-gradient(105deg, rgba(var(--color-squash-yellow), 0.05), rgba(var(--color-mint-green), 0.1));
-  transform: skewY(-3deg);
-  z-index: -1;
-}
-
-/* PrimaryButton - Applying the new gradient and glow */
-.kinetic-primary-button {
-  color: var(--theme-accent-text);
-  background: linear-gradient(95deg, rgb(var(--color-squash-yellow)), rgb(var(--color-mint-green)));
-  box-shadow: 0 0 20px 0 rgba(var(--color-squash-yellow), 0.3); /* The Glow */
-  transition: all 0.3s ease-out;
-}
-.kinetic-primary-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 0 30px 5px rgba(var(--color-squash-yellow), 0.5);
-}
-
-/* SecondaryButton - New outlined style */
-.kinetic-secondary-button {
-  background-color: transparent;
-  color: var(--theme-text-secondary);
-  border: 2px solid var(--theme-border);
-}
-.kinetic-secondary-button:hover {
-  background-color: var(--theme-border);
-  color: var(--theme-text-primary);
-  border-color: var(--theme-border);
-}
-
-/* DangerButton - New outlined style */
-.kinetic-danger-button {
-  background-color: transparent;
-  color: #ef4444; /* red-500 */
-  border: 2px solid #fee2e2; /* red-100 */
-}
-.kinetic-danger-button:hover {
-  background-color: #ef4444;
-  border-color: #ef4444;
-  color: white;
-}
-
-/* Card - Adding more refined shadow */
-.kinetic-card {
-    background-color: var(--theme-bg-card);
-    border-radius: 2.5rem;
-    border: 1px solid var(--theme-border);
-    box-shadow: 0 10px 30px -15px rgba(0, 0, 0, 0.07);
-    overflow: hidden;
-    transition: all 0.3s ease;
-}
-.kinetic-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.1);
-}
-
-/* ==========================================================================
-   5. Preserving Old Dashboard Styles (from v12.2)
-      You can later decide to refactor these to use the new system.
-   ========================================================================== */
-
-/* The styles you provided are excellent, so we keep them but ensure they
-   use our new variables where appropriate for consistency. */
+/* ===== START: 版本 12.2 - PlayerDashboard 樣式 ===== */
 
 .dashboard-stat-card {
-  /* ... (your existing dashboard-stat-card styles) ... */
-  border-radius: 2rem;
+  background-color: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: 2rem; /* 32px */
+  padding: 2rem; /* 32px */
+  text-align: center;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03), 0 2px 4px -1px rgba(0,0,0,0.02);
+  transition: all 0.3s ease-out;
+  position: relative;
+  overflow: hidden;
 }
 
-.achievement-badge-3d {
-  /* ... (your existing achievement-badge-3d styles) ... */
+.dashboard-stat-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.08), 0 10px 10px -5px rgba(0,0,0,0.04);
+  border-color: var(--theme-accent);
 }
+
+.dashboard-stat-card .icon-container {
+  margin: 0 auto 1rem;
+  width: 4rem; /* 64px */
+  height: 4rem; /* 64px */
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease-out;
+}
+
+.dashboard-stat-card:hover .icon-container {
+  transform: scale(1.1);
+  box-shadow: 0 0 20px rgba(var(--theme-accent-rgb), 0.5);
+}
+
+.dashboard-stat-card .stat-value {
+  font-size: 3rem; /* 48px */
+  font-weight: 900;
+  line-height: 1;
+  color: var(--theme-text-primary);
+}
+
+.dashboard-stat-card .stat-label {
+  margin-top: 0.5rem;
+  font-size: 0.75rem; /* 12px */
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--theme-text-secondary);
+}
+
+/* 偽 3D 成就徽章 */
+.achievement-badge-3d {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+.achievement-badge-3d .icon-wrapper {
+  width: 4rem; /* 64px */
+  height: 4rem; /* 64px */
+  border-radius: 1rem; /* 16px */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, rgba(255,255,255,0.1), rgba(255,255,255,0));
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+  transform-style: preserve-3d;
+}
+.achievement-badge-3d:hover {
+  transform: translateY(-5px);
+}
+.achievement-badge-3d:hover .icon-wrapper {
+  transform: scale(1.1) rotateX(10deg) rotateY(5deg);
+  box-shadow: 0 16px 32px rgba(0,0,0,0.2);
+  background-color: var(--theme-accent);
+}
+.achievement-badge-3d .icon-wrapper > svg {
+  color: var(--theme-accent);
+  transition: color 0.3s ease;
+}
+.achievement-badge-3d:hover .icon-wrapper > svg {
+  color: var(--theme-accent-text);
+}
+.achievement-badge-3d .badge-name {
+  width: 100%;
+  margin-top: 0.75rem;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--theme-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* ===== END: 版本 12.2 - PlayerDashboard 樣式 ===== */
