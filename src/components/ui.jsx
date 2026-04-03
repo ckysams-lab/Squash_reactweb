@@ -1,12 +1,21 @@
-// src/components/ui.jsx (Version 1.0 - Shared UI Library)
+// src/components/ui.jsx (Version 2.4 - "Project 'Kinetic'")
+
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
-// --- 1. 統一的頁面大標題 ---
+// --- 1. PageHeader - 注入動感與品牌色彩 ---
+// 新特色：
+// - 主色改為「壁球黃」。
+// - 標題字重更粗，視覺衝擊力更強。
+// - 背景增加一個傾斜的、半透明的裝飾性漸層，打破版式。
 export const PageHeader = ({ title, subtitle, icon: Icon }) => (
-    <div className="mb-10 text-center md:text-left">
-        <h2 className="text-3xl md:text-4xl font-black text-slate-800 flex flex-col md:flex-row items-center gap-3 justify-center md:justify-start">
-            {Icon && <Icon className="text-blue-600" size={36} />}
+    <div className="relative mb-10 text-center md:text-left py-4 overflow-hidden">
+        {/* -- Kinetic Element: Tilted Background Gradient -- */}
+        <div className="absolute inset-0 -skew-y-2 bg-gradient-to-r from-slate-50 to-slate-100/50 -z-10"></div>
+        
+        <h2 className="text-3xl md:text-4xl font-[900] text-slate-800 flex flex-col md:flex-row items-center gap-3 justify-center md:justify-start">
+            {/* -- Kinetic Element: Icon color changed to Squash Yellow -- */}
+            {Icon && <Icon className="text-yellow-500" size={36} />}
             {title}
         </h2>
         {subtitle && (
@@ -17,47 +26,69 @@ export const PageHeader = ({ title, subtitle, icon: Icon }) => (
     </div>
 );
 
-// --- 2. 統一的卡片容器 (Card) ---
+// --- 2. Card - 增加深度與質感 ---
+// 新特色：
+// - 圓角更柔和。
+// - 陰影更多層次、更細膩，提升立體感。
+// - 邊框顏色更淡，與陰影更好地融合。
 export const Card = ({ children, className = "", noPadding = false }) => (
-    <div className={`bg-white rounded-[2.5rem] md:rounded-[3.5rem] border border-slate-100 shadow-sm overflow-hidden ${noPadding ? '' : 'p-8 md:p-12'} ${className}`}>
+    <div className={`bg-white rounded-3xl md:rounded-[2.5rem] border border-slate-100/80 shadow-lg shadow-slate-200/50 overflow-hidden ${noPadding ? '' : 'p-8 md:p-10'} ${className}`}>
         {children}
     </div>
 );
 
-// --- 3. 統一的主要按鈕 (Primary Button - 例如：儲存、新增、確認) ---
-// 特色：藍色背景、白色文字、強烈的點擊回饋
+// --- 3. PrimaryButton - 核心操作的視覺焦點 ---
+// 新特色：
+// - 主色改為從「壁球黃」到「薄荷綠」的動感漸層。
+// - 增加與漸層色匹配的「輝光 (Glow)」效果，讓按鈕成為視覺中心。
+// - 字體改為黑色，在亮色背景上更清晰。
 export const PrimaryButton = ({ children, onClick, disabled, loading, icon: Icon, className = "" }) => (
     <button 
         onClick={onClick} 
         disabled={disabled || loading}
-        className={`bg-blue-600 text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-700 hover:shadow-2xl hover:-translate-y-1 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${className}`}
+        className={`relative text-black px-8 py-4 rounded-2xl font-black transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 group overflow-hidden ${className}`}
     >
-        {loading ? <Loader2 size={20} className="animate-spin" /> : Icon && <Icon size={20} />}
-        {children}
+        {/* -- Kinetic Element: Gradient Background -- */}
+        <span className="absolute inset-0 bg-gradient-to-r from-yellow-400 to-emerald-400 group-hover:from-yellow-500 group-hover:to-emerald-500 transition-all"></span>
+        
+        {/* -- Kinetic Element: Glow Effect -- */}
+        <span className="absolute inset-[-10px] bg-gradient-to-r from-yellow-400 to-emerald-400 blur-xl opacity-40 group-hover:opacity-60 transition-all duration-500 -z-10"></span>
+
+        <span className="relative z-10 flex items-center justify-center gap-2">
+            {loading ? <Loader2 size={20} className="animate-spin" /> : Icon && <Icon size={20} />}
+            {children}
+        </span>
     </button>
 );
 
-// --- 4. 統一的次要按鈕 (Secondary Button - 例如：取消、返回、下載範本) ---
-// 特色：淺色背景、灰色文字、柔和的 Hover 效果
+// --- 4. SecondaryButton - 清晰但低調的次要操作 ---
+// 新特色：
+// - 預設為描邊樣式，背景透明，視覺上更輕量。
+// - 滑鼠懸停時，背景填充為淺灰色，提供清晰的回饋。
+// - 文字顏色預設為較深的灰色，更易閱讀。
 export const SecondaryButton = ({ children, onClick, disabled, icon: Icon, className = "" }) => (
     <button 
         onClick={onClick} 
         disabled={disabled}
-        className={`bg-slate-50 text-slate-600 border border-slate-200 px-6 py-4 rounded-2xl font-bold hover:bg-slate-100 hover:text-blue-600 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${className}`}
+        className={`bg-transparent text-slate-700 border-2 border-slate-200 px-6 py-4 rounded-2xl font-bold hover:bg-slate-100 hover:border-slate-300 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${className}`}
     >
         {Icon && <Icon size={18} />}
         {children}
     </button>
 );
 
-// --- 5. 統一的危險操作按鈕 (Danger Button - 例如：刪除) ---
+// --- 5. DangerButton - 醒目且謹慎的危險操作 ---
+// 新特色：
+// - 同樣採用描邊樣式，與 SecondaryButton 保持風格一致。
+// - 使用醒目的紅色，並在懸停時填充背景，提供強烈的警示。
 export const DangerButton = ({ children, onClick, disabled, icon: Icon, className = "" }) => (
     <button 
         onClick={onClick} 
         disabled={disabled}
-        className={`bg-red-50 text-red-600 px-6 py-4 rounded-2xl font-bold hover:bg-red-600 hover:text-white transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${className}`}
+        className={`bg-transparent text-red-600 border-2 border-red-200 px-6 py-4 rounded-2xl font-bold hover:bg-red-600 hover:text-white hover:border-red-600 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${className}`}
     >
         {Icon && <Icon size={18} />}
         {children}
     </button>
 );
+
