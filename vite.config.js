@@ -3,7 +3,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { viteStaticCopy } from 'vite-plugin-static-copy'; // <-- 導入我們的新插件
 // import { VitePWA } from 'vite-plugin-pwa' // 保持 PWA 插件的導入（註解狀態）
 
 // https://vitejs.dev/config/
@@ -12,16 +11,6 @@ export default defineConfig({
     react(),
     tailwindcss(), // <-- 保留您原有的 tailwindcss 插件
 
-    // --- v3.5 FIX: 添加 viteStaticCopy 插件來處理 pdf.worker.min.js ---
-    viteStaticCopy({
-      targets: [
-        {
-          src: 'node_modules/pdfjs-dist/build/pdf.worker.min.js',
-          dest: '' // 將檔案複製到部署後的根目錄
-        }
-      ]
-    }),
-    
     /*
     VitePWA({
       registerType: 'autoUpdate',
