@@ -1,14 +1,14 @@
-// src/pages/LeaguePage.jsx (Version 3.9 - Merging New Features into v3.2 Base Code - Full Code)
+// src/pages/LeaguePage.jsx (Version 4.0 - Final Defensive Stand - Full Code)
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { 
     Target, Activity, Plus, Swords, Zap, PlayCircle, FileText, Pencil, Trash2, Download, Loader2, Trophy,
-    ArrowUp, ArrowDown, Minus, ShieldAlert // <-- v3.9: Import new icons
+    ArrowUp, ArrowDown, Minus, ShieldAlert 
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
 
-// --- v3.9: New Helper Component for Trend Arrow ---
+// Helper component for Trend Arrow
 const TrendIndicator = ({ trend }) => {
     if (trend > 0) return <ArrowUp size={14} className="text-emerald-500" title={`排名上升 ${trend} 位`} />;
     if (trend < 0) return <ArrowDown size={14} className="text-rose-500" title={`排名下降 ${Math.abs(trend)} 位`} />;
@@ -21,31 +21,24 @@ export default function LeaguePage({
     setSelectedTournament, tournamentList, leagueMatches, myTournamentStats,
     myUpcomingMatches, groupedMatches, tournamentStandings, handleCheerMatch,
     handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, schoolLogo,
-    students // v3.9: Ensure students prop is passed for Giant Slayer logic
+    students
 }) {
 
     const posterRef = useRef();
     const [isRenderingPoster, setIsRenderingPoster] = useState(false);
-    
-    // --- v3.9: New state and effects for trend calculation ---
     const [previousStandings, setPreviousStandings] = useState({});
 
     useEffect(() => {
-        // Only update previous standings if the new standings are valid and not empty
         if (tournamentStandings && Object.keys(tournamentStandings).length > 0) {
             setPreviousStandings(current => ({ ...current, [selectedTournament]: tournamentStandings }));
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tournamentStandings]);
+    }, [tournamentStandings, selectedTournament]);
     
     useEffect(() => {
-        // Clear history specifically when the tournament selection changes to avoid stale data
         setPreviousStandings({});
     }, [selectedTournament]);
-    // --- End of new state and effects ---
 
     const handleDownloadPoster = () => {
-        // This logic from v3.2 is retained completely.
         if (!tournamentStandings || Object.keys(tournamentStandings).length === 0) return alert("目前沒有可生成的積分榜數據。");
         setIsRenderingPoster(true);
         setTimeout(() => {
@@ -63,7 +56,6 @@ export default function LeaguePage({
         }, 500);
     };
 
-    // This entire function from v3.2 is retained completely.
     const renderTeamTieResult = (groupName, matches) => {
         if (!groupName || !groupName.includes(' vs ')) return null;
         const [teamA, teamB] = groupName.split(' vs ');
@@ -108,32 +100,45 @@ export default function LeaguePage({
         );
     };
 
-    // --- v3.9: New robust useMemo hook for enriched data ---
+    // --- 👇 v4.0: The ULTIMATE DEFENSIVE useMemo with try...catch 👇 ---
     const enrichedStandings = useMemo(() => {
-        if (!tournamentStandings || typeof tournamentStandings !== 'object') {
+        try {
+            if (!tournamentStandings || typeof tournamentStandings !== 'object' || !leagueMatches) {
+                return {};
+            }
+
+            const enriched = {};
+            const prevTournamentData = previousStandings ? previousStandings[selectedTournament] : null;
+
+            for (const group of Object.keys(tournamentStandings)) {
+                const currentGroupData = tournamentStandings[group];
+                if (!Array.isArray(currentGroupData)) {
+                    continue;
+                }
+                
+                enriched[group] = currentGroupData.map((player, index) => {
+                    const playerMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === player.id || m.player2Id === player.id) && m.tournamentName === selectedTournament).sort((a, b) => (b.updatedAt?.seconds || b.timestamp?.seconds || 0) - (a.updatedAt?.seconds || a.timestamp?.seconds || 0));
+                    
+                    let hotStreak = 0;
+                    for (const match of playerMatches) {
+                        if (match.winnerId === player.id) { hotStreak++; } 
+                        else { break; }
+                    }
+
+                    const prevGroupData = (prevTournamentData && Array.isArray(prevTournamentData[group])) ? prevTournamentData[group] : [];
+                    const prevRank = prevGroupData.findIndex(p => p.id === player.id);
+                    const trend = (prevRank !== -1) ? prevRank - index : 0;
+                    
+                    return { ...player, hotStreak, trend };
+                });
+            }
+            return enriched;
+        } catch (error) {
+            // If any error occurs during calculation, log it and return an empty object
+            // This prevents the entire application from crashing.
+            console.error("Critical error in enrichedStandings calculation:", error);
             return {};
         }
-        const enriched = {};
-        const prevTournamentData = previousStandings ? previousStandings[selectedTournament] : null;
-
-        for (const group of Object.keys(tournamentStandings)) {
-            const currentGroupData = tournamentStandings[group];
-            if (!Array.isArray(currentGroupData)) {
-                continue;
-            }
-            enriched[group] = currentGroupData.map((player, index) => {
-                const playerMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === player.id || m.player2Id === player.id) && m.tournamentName === selectedTournament).sort((a, b) => (b.updatedAt?.seconds || b.timestamp?.seconds || 0) - (a.updatedAt?.seconds || a.timestamp?.seconds || 0));
-                let hotStreak = 0;
-                for (const match of playerMatches) {
-                    if (match.winnerId === player.id) { hotStreak++; } else { break; }
-                }
-                const prevGroupData = (prevTournamentData && Array.isArray(prevTournamentData[group])) ? prevTournamentData[group] : [];
-                const prevRank = prevGroupData.findIndex(p => p.id === player.id);
-                const trend = (prevRank !== -1) ? prevRank - index : 0;
-                return { ...player, hotStreak, trend };
-            });
-        }
-        return enriched;
     }, [tournamentStandings, leagueMatches, previousStandings, selectedTournament]);
 
     return (
@@ -217,8 +222,7 @@ export default function LeaguePage({
                             {!groupName.includes(' vs ') && ( <h4 className="text-2xl font-black text-slate-600 mb-4 pl-2">{groupName}</h4> )}
                             <div className="overflow-x-auto bg-slate-50/50 p-2 md:p-6 rounded-3xl border">
                                 {renderTeamTieResult(groupName, groupedMatches[groupName])}
-
-                                {/* --- 👇 v3.9: UPDATED Standings Table 👇 --- */}
+                                
                                 {!groupName.includes(' vs ') && enrichedStandings[groupName] && (
                                     <table className="w-full text-left mb-6">
                                         <thead className="text-[10px] text-slate-400 uppercase tracking-widest font-black">
@@ -258,7 +262,6 @@ export default function LeaguePage({
                                     </table>
                                 )}
                                 
-                                {/* --- 👇 v3.9: UPDATED Matches Table 👇 --- */}
                                 <table className="w-full text-left mt-2">
                                     <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-black border-b border-slate-200">
                                         <tr>
