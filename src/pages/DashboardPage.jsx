@@ -20,18 +20,22 @@ export default function DashboardPage({
     assessments // 👈 接收新傳入的 assessments
 }) {
 
-    // --- 1. 各班級人數分佈資料 (保持不變) ---
+    // ✅ FIX: Guard props that may be undefined on first render (Firebase loads async)
+    const safeStudents = Array.isArray(students) ? students : [];
+    const safeAssessments = Array.isArray(assessments) ? assessments : [];
+
+    // --- 1. 各班級人數分佈資料 ---
     const classDistributionData = useMemo(() => {
-        if (!students || students.length === 0) return [];
+        if (safeStudents.length === 0) return [];
         const classCounts = {};
-        students.forEach(s => {
+        safeStudents.forEach(s => {
             const className = s.squashClass || '未分班';
             classCounts[className] = (classCounts[className] || 0) + 1;
         });
         return Object.entries(classCounts)
             .map(([name, count]) => ({ name, count }))
             .sort((a, b) => b.count - a.count);
-    }, [students]);
+    }, [safeStudents]);
 
 
     // --- 2. 👇 全新：全隊學業與訓練散佈圖資料處理 👇 ---
@@ -42,14 +46,17 @@ export default function DashboardPage({
     const { scatterDataT1, scatterDataT2, scatterDataT3 } = useMemo(() => {
         const t1 = []; const t2 = []; const t3 = [];
         
-        if (!assessments || assessments.length === 0) return { scatterDataT1: t1, scatterDataT2: t2, scatterDataT3: t3 };
+        if (safeAssessments.length === 0 || safeStudents.length === 0) {
+            return { scatterDataT1: t1, scatterDataT2: t2, scatterDataT3: t3 };
+        }
 
         // 針對每一個學生，只取他「最新」的一筆評估紀錄 (避免重複畫點)
-        students.forEach(student => {
-            const studentAssessments = assessments.filter(a => a.studentId === student.id).sort((a, b) => b.date.localeCompare(a.date));
+        safeStudents.forEach(student => {
+            const studentAssessments = safeAssessments
+                .filter(a => a.studentId === student.id)
+                .sort((a, b) => b.date.localeCompare(a.date));
             if (studentAssessments.length > 0) {
                 const latestAsm = studentAssessments[0];
-                // 如果有 T1 資料，就塞進 t1 陣列
                 if (latestAsm.rankT1 && latestAsm.hoursT1) {
                     t1.push({ x: Number(latestAsm.hoursT1), y: Number(latestAsm.rankT1), name: student.name });
                 }
@@ -63,7 +70,7 @@ export default function DashboardPage({
         });
 
         return { scatterDataT1: t1, scatterDataT2: t2, scatterDataT3: t3 };
-    }, [assessments, students]);
+    }, [safeAssessments, safeStudents]);
     // ----------------------------------------------------
 
 
@@ -184,7 +191,6 @@ export default function DashboardPage({
                                             if (name === "排名") return [`第 ${value} 名`, name];
                                             return [value, name];
                                         }}
-                                        // 顯示學生名字在 Tooltip 標題
                                         labelFormatter={() => ''} 
                                         content={({ active, payload }) => {
                                             if (active && payload && payload.length) {
