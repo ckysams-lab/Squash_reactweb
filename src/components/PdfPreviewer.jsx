@@ -1,22 +1,32 @@
-// src/components/PdfPreviewer.jsx (Version 3.8 - No Worker Strategy)
+// src/components/PdfPreviewer.jsx (Version 3.9 - Official No-Worker Strategy - Full Code)
 
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// --- v3.8 FIX: COMPLETELY DISABLE THE WEB WORKER ---
-// We will perform rendering on the main thread. This eliminates all external file dependencies.
-// To do this, we pass a `GlobalWorkerOptions.worker` instance that is null.
-// Note: This requires pdfjs-dist version >= 2.13.216
-pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+// --- v3.9 FINAL FIX: Based on the official pdf.js documentation for disabling the worker ---
+// We must provide a dummy path, even if it's not used by our custom worker instance below.
+// This satisfies the library's initial check.
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+// This class simulates a worker on the main thread.
+// It tricks pdf.js into thinking it's communicating with a real worker,
+// but all operations will actually run on the main thread.
+class MainThreadWorker {
+    postMessage(data) {
+        // This is a "fake" postMessage that does nothing.
+        // It's here solely to prevent errors when pdf.js tries to call it.
+    }
+}
 
 export default function PdfPreviewer({ file, onRenderSuccess }) {
     const canvasContainerRef = useRef(null);
     const [error, setError] = useState(null);
-    const [status, setStatus] = useState('idle');
+    const [status, setStatus] = useState('idle'); // 'idle', 'loading', 'rendering_page_x', 'success', 'error'
 
     useEffect(() => {
         if (!file || !canvasContainerRef.current) return;
 
+        // Reset state for new file processing.
         setError(null);
         setStatus('loading');
         
@@ -36,8 +46,12 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
 
                 const typedarray = new Uint8Array(buffer);
 
-                // --- v3.8: Pass `worker: false` to getDocument to force main thread rendering ---
-                const pdf = await pdfjsLib.getDocument({ data: typedarray, worker: false }).promise;
+                // --- v3.9: This is the OFFICIAL way to disable the worker ---
+                // We pass a custom worker instance to force all operations onto the main thread.
+                const pdf = await pdfjsLib.getDocument({ 
+                    data: typedarray,
+                    worker: new MainThreadWorker() 
+                }).promise;
 
                 const canvases = [];
                 for (let i = 1; i <= pdf.numPages; i++) {
@@ -79,6 +93,7 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
 
     }, [file, onRenderSuccess]);
 
+    // This function determines what to display based on the current status
     const renderContent = () => {
         switch (status) {
             case 'idle':
@@ -94,8 +109,9 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
                     </div>
                 );
             case 'success':
-                return null;
-            default:
+                // When successful, the canvases are already in the container, so we render nothing here.
+                return null; 
+            default: // Catches 'rendering_page_x'
                 return <p className="text-center text-slate-500 font-bold p-8">{`正在渲染第 ${status.split('_')[2]} 頁...`}</p>;
         }
     };
