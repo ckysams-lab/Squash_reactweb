@@ -31,6 +31,7 @@ import CreatePostModal from './components/CreatePostModal';
 import ExternalMatchesPage from './pages/ExternalMatchesPage';
 import SocialFeedPage from './pages/SocialFeedPage';
 import RankingPage from './pages/RankingPage';
+import FormTemplatePage from './pages/FormTemplatePage';
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
 import { useFirebaseData } from './hooks/useFirebaseData';
 import LiveScoreboardDisplay from './components/LiveScoreboardDisplay';
@@ -1936,6 +1937,7 @@ export default function App() {
                   <>
                     <div className="text-[10px] uppercase tracking-widest my-6 px-6 pt-6 border-t" style={{ color: 'var(--theme-text-faint)', borderColor: 'var(--theme-border)' }}>教練工具</div>
                     <NavButton tabName="dashboard" icon={<LayoutDashboard size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>管理概況</NavButton>
+                    <NavButton tabName="formTemplates" icon={<FilePenLine size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>報名表範本</NavButton>
                     <NavButton tabName="assessments" icon={<Activity size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>綜合能力評估</NavButton>
                     <NavButton tabName="monthlyStarsAdmin" icon={<Crown size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>每月之星管理</NavButton>
                     <NavButton tabName="students" icon={<Users size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>隊員管理</NavButton>
@@ -2195,6 +2197,10 @@ export default function App() {
             />
           )}
 
+          {!viewingStudent && activeTab === 'formTemplates' && role === 'admin' && (
+                      <FormTemplatePage />
+                    )}
+          
           {!viewingStudent && activeTab === 'monthlyStars' && (<MonthlyStarsPage monthlyStarsData={monthlyStars} />)}
 
           {!viewingStudent && activeTab === 'assessments' && role === 'admin' && (
