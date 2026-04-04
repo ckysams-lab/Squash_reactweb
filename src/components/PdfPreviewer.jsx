@@ -1,11 +1,11 @@
-// src/components/PdfPreviewer.jsx (Version 4.1 - Engine Replaced with react-pdf)
+// src/components/PdfPreviewer.jsx (Version 4.1 / Final)
 
 import React, { useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 
-// --- v4.1 FINAL, DECISIVE FIX: Use the stable worker source provided by react-pdf ---
+// --- This is the verified, correct way to set up the worker for Vite/Vercel ---
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.js',
   import.meta.url,
@@ -17,9 +17,9 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
     
     function onDocumentLoadSuccess({ numPages: nextNumPages }) {
         setNumPages(nextNumPages);
-        setError(null); // Clear previous errors on new success
+        setError(null);
         if(onRenderSuccess) {
-            onRenderSuccess(); // Notify parent that loading is complete
+            onRenderSuccess();
         }
     }
 
@@ -29,7 +29,6 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
         setError(userFriendlyError);
     }
     
-    // Create a URL for the local file to pass to the Document component
     const fileUrl = file ? URL.createObjectURL(file) : null;
 
     return (
@@ -50,10 +49,10 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
                         <Page
                             key={`page_${index + 1}`}
                             pageNumber={index + 1}
-                            renderAnnotationLayer={false} // Disable annotation layer for cleaner view
-                            renderTextLayer={false}      // Disable text layer for now
+                            renderAnnotationLayer={false}
+                            renderTextLayer={false}
                             className="mb-4 shadow-lg"
-                            width={800} // Set a max-width for consistency
+                            width={800}
                         />
                     ))}
                 </Document>
@@ -61,4 +60,3 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
         </div>
     );
 }
-
