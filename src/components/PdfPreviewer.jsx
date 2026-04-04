@@ -1,30 +1,36 @@
-// src/components/PdfPreviewer.jsx (Version 3.4 - Final Fix using a Static, Verified CDN Worker)
+// src/components/PdfPreviewer.jsx (Version 3.5 - Local Worker Strategy - Full Code)
 
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// --- v3.4 FIX: Use a static, verified, and known-good CDN URL for the worker. ---
-// This eliminates all pathing and versioning guesswork.
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+// --- v3.5 FIX: Point to the worker file that vite-plugin-static-copy will place in our own build output ---
+pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
 
 export default function PdfPreviewer({ file, onRenderSuccess }) {
     const canvasContainerRef = useRef(null);
     const [error, setError] = useState(null);
-    const [status, setStatus] = useState('idle'); // 'idle', 'loading', 'success', 'error'
+    const [status, setStatus] = useState('idle'); // 'idle', 'loading', 'rendering_page_x', 'success', 'error'
 
     useEffect(() => {
+        // Guard clause: Do nothing if there's no file or the container isn't ready.
         if (!file || !canvasContainerRef.current) return;
 
+        // Reset state for the new file processing.
         setError(null);
         setStatus('loading');
         
         const container = canvasContainerRef.current;
-        container.innerHTML = ''; 
+        // The "NotFoundError" from previous log suggests we should be careful when clearing.
+        // This ensures we only clear content if there's something to clear.
+        if (container.firstChild) {
+            container.innerHTML = '';
+        }
 
         const renderPdf = async () => {
             try {
-                const fileReader = new FileReader();
+                // Use a Promise to handle FileReader's async nature cleanly.
                 const buffer = await new Promise((resolve, reject) => {
+                    const fileReader = new FileReader();
                     fileReader.onload = () => resolve(fileReader.result);
                     fileReader.onerror = () => reject(fileReader.error);
                     fileReader.readAsArrayBuffer(file);
@@ -33,27 +39,36 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
                 const typedarray = new Uint8Array(buffer);
                 const pdf = await pdfjsLib.getDocument(typedarray).promise;
 
+                // All canvases will be stored here
                 const canvases = [];
                 for (let i = 1; i <= pdf.numPages; i++) {
+                    // Update status for user feedback
                     setStatus(`rendering_page_${i}`);
+
                     const page = await pdf.getPage(i);
+                    // Use device pixel ratio for sharper rendering on high-DPI screens
                     const viewport = page.getViewport({ scale: window.devicePixelRatio || 2 });
 
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
+                    
+                    // Style canvas to ensure it's responsive and fits the container
                     canvas.style.width = '100%';
                     canvas.style.height = 'auto';
-                    canvas.className = 'mb-4 shadow-lg';
+                    canvas.className = 'mb-4 shadow-lg rounded-md'; // Add some styling
                     
+                    // Append canvas to the container *before* rendering
                     container.appendChild(canvas);
                     canvases.push(canvas);
 
+                    // Render the page onto the canvas
                     await page.render({ canvasContext: context, viewport: viewport }).promise;
                 }
                 
                 setStatus('success');
+                // Notify parent component that rendering is complete, passing the created canvas elements
                 if (onRenderSuccess) {
                     onRenderSuccess(canvases);
                 }
@@ -65,8 +80,8 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
                     userFriendlyError = '錯誤：PDF 檔案缺失或無法讀取。';
                 } else if (err.name === 'PasswordException') {
                     userFriendlyError = '錯誤：此 PDF 檔案受密碼保護，無法預覽。';
-                } else if (err.message.includes('Failed to fetch')) {
-                    userFriendlyError = '錯誤：無法從網路加載 PDF 渲染引擎，請檢查您的網路連線。';
+                } else if (err.message && err.message.includes('Failed to fetch')) {
+                    userFriendlyError = '錯誤：無法加載 PDF 渲染引擎，這通常是一個部署配置問題。';
                 }
                 setError({ message: userFriendlyError, details: err.toString() });
                 setStatus('error');
@@ -75,9 +90,9 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
 
         renderPdf();
 
-    }, [file, onRenderSuccess]);
+    }, [file, onRenderSuccess]); // Effect dependencies
 
-    // UI Rendering Logic based on status
+    // This function determines what to display based on the current status
     const renderContent = () => {
         switch (status) {
             case 'idle':
@@ -93,8 +108,9 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
                     </div>
                 );
             case 'success':
-                return null; // Canvases are already in the container
-            default: // For rendering_page_x
+                // When successful, the canvases are already in the container, so we render nothing here.
+                return null; 
+            default: // Catches 'rendering_page_x'
                 return <p className="text-center text-slate-500 font-bold p-8">{`正在渲染第 ${status.split('_')[2]} 頁...`}</p>;
         }
     };
