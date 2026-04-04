@@ -1,13 +1,13 @@
-// src/components/PdfPreviewer.jsx (Version 5.0)
+// src/components/PdfPreviewer.jsx (Version 5.1)
 import React, { useState, useMemo, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 
-// Use CDN worker matched to the installed pdfjs-dist version.
-// This is more reliable than local bundling across Vite/Vercel builds.
+// unpkg mirrors every exact npm version, so this will always match
+// whatever pdfjs-dist version is installed in your project.
 pdfjs.GlobalWorkerOptions.workerSrc =
-  `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+  `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export default function PdfPreviewer({ file, onRenderSuccess }) {
     const [numPages, setNumPages] = useState(null);
