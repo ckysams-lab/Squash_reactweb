@@ -1,35 +1,48 @@
-// src/components/PdfPreviewer.jsx (Version 4.1 / Final)
-
-import React, { useState } from 'react';
+// src/components/PdfPreviewer.jsx (Version 5.0)
+import React, { useState, useMemo, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 
-// --- This is the verified, correct way to set up the worker for Vite/Vercel ---
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.js',
-  import.meta.url,
-).toString();
+// Use CDN worker matched to the installed pdfjs-dist version.
+// This is more reliable than local bundling across Vite/Vercel builds.
+pdfjs.GlobalWorkerOptions.workerSrc =
+  `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 export default function PdfPreviewer({ file, onRenderSuccess }) {
     const [numPages, setNumPages] = useState(null);
     const [error, setError] = useState(null);
-    
+
+    // Memoize the object URL so it's only created when `file` changes,
+    // not on every re-render. This prevents stale/dangling blob URLs.
+    const fileUrl = useMemo(() => {
+        if (!file) return null;
+        return URL.createObjectURL(file);
+    }, [file]);
+
+    // Revoke the object URL when the component unmounts or file changes
+    // to avoid memory leaks.
+    useEffect(() => {
+        return () => {
+            if (fileUrl) {
+                URL.revokeObjectURL(fileUrl);
+            }
+        };
+    }, [fileUrl]);
+
     function onDocumentLoadSuccess({ numPages: nextNumPages }) {
         setNumPages(nextNumPages);
         setError(null);
-        if(onRenderSuccess) {
+        if (onRenderSuccess) {
             onRenderSuccess();
         }
     }
 
     function onDocumentLoadError(err) {
-        console.error('react-pdf error:', err);
-        let userFriendlyError = 'PDF 預覽失敗。檔案可能已損壞、格式不兼容或受密碼保護。';
-        setError(userFriendlyError);
+        // Log the real error to help with future debugging
+        console.error('react-pdf load error:', err?.message || err);
+        setError('PDF 預覽失敗。檔案可能已損壞、格式不兼容或受密碼保護。');
     }
-    
-    const fileUrl = file ? URL.createObjectURL(file) : null;
 
     return (
         <div className="pdf-preview-container bg-slate-200 p-4 md:p-8 rounded-lg min-h-[400px]">
@@ -43,7 +56,11 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
                     file={fileUrl}
                     onLoadSuccess={onDocumentLoadSuccess}
                     onLoadError={onDocumentLoadError}
-                    loading={<p className="text-center text-slate-500 font-bold p-8">正在加載 PDF 預覽...</p>}
+                    loading={
+                        <p className="text-center text-slate-500 font-bold p-8">
+                            正在加載 PDF 預覽...
+                        </p>
+                    }
                 >
                     {Array.from(new Array(numPages), (el, index) => (
                         <Page
