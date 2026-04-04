@@ -1,65 +1,48 @@
-// src/components/PdfPreviewer.jsx (Version 3.7 - Visual Debugger Edition)
+// src/components/PdfPreviewer.jsx (Version 3.8 - No Worker Strategy)
 
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// We continue with the most robust local worker strategy.
-pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
+// --- v3.8 FIX: COMPLETELY DISABLE THE WEB WORKER ---
+// We will perform rendering on the main thread. This eliminates all external file dependencies.
+// To do this, we pass a `GlobalWorkerOptions.worker` instance that is null.
+// Note: This requires pdfjs-dist version >= 2.13.216
+pdfjsLib.GlobalWorkerOptions.workerSrc = '';
 
 export default function PdfPreviewer({ file, onRenderSuccess }) {
     const canvasContainerRef = useRef(null);
-    
-    // --- DEBUG STATE ---
-    const [debugLog, setDebugLog] = useState([]);
-    const [finalError, setFinalError] = useState(null);
-    const [pdfInfo, setPdfInfo] = useState(null);
-
-    const log = (message, data = '') => {
-        const timestamp = new Date().toLocaleTimeString();
-        setDebugLog(prev => [...prev, { timestamp, message, data: data ? JSON.stringify(data, null, 2) : '' }]);
-    };
+    const [error, setError] = useState(null);
+    const [status, setStatus] = useState('idle');
 
     useEffect(() => {
         if (!file || !canvasContainerRef.current) return;
 
-        // Reset for new file
-        setDebugLog([]);
-        setFinalError(null);
-        setPdfInfo(null);
-        log('useEffect triggered. New file detected.', { name: file.name, size: file.size, type: file.type });
+        setError(null);
+        setStatus('loading');
         
         const container = canvasContainerRef.current;
-        if (container.firstChild) container.innerHTML = '';
+        if (container.firstChild) {
+            container.innerHTML = '';
+        }
 
         const renderPdf = async () => {
             try {
-                log('Starting PDF render process...');
-                const fileReader = new FileReader();
-                
                 const buffer = await new Promise((resolve, reject) => {
-                    fileReader.onload = () => {
-                        log('FileReader successfully loaded file into memory.');
-                        resolve(fileReader.result);
-                    };
-                    fileReader.onerror = () => {
-                        log('FileReader failed to read file.');
-                        reject(fileReader.error);
-                    };
+                    const fileReader = new FileReader();
+                    fileReader.onload = () => resolve(fileReader.result);
+                    fileReader.onerror = () => reject(fileReader.error);
                     fileReader.readAsArrayBuffer(file);
                 });
 
                 const typedarray = new Uint8Array(buffer);
-                log('File buffer converted to Uint8Array.');
 
-                const pdfDoc = await pdfjsLib.getDocument(typedarray).promise;
-                log('pdf.js successfully parsed the document.', { numPages: pdfDoc.numPages });
-                setPdfInfo({ numPages: pdfDoc.numPages });
+                // --- v3.8: Pass `worker: false` to getDocument to force main thread rendering ---
+                const pdf = await pdfjsLib.getDocument({ data: typedarray, worker: false }).promise;
 
                 const canvases = [];
-                for (let i = 1; i <= pdfDoc.numPages; i++) {
-                    log(`Getting page ${i}...`);
-                    const page = await pdfDoc.getPage(i);
-                    log(`Page ${i} retrieved. Viewport scale: ${window.devicePixelRatio || 2}`);
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    setStatus(`rendering_page_${i}`);
+                    const page = await pdf.getPage(i);
                     const viewport = page.getViewport({ scale: window.devicePixelRatio || 2 });
 
                     const canvas = document.createElement('canvas');
@@ -73,20 +56,22 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
                     container.appendChild(canvas);
                     canvases.push(canvas);
 
-                    log(`Rendering page ${i} onto canvas...`);
                     await page.render({ canvasContext: context, viewport: viewport }).promise;
-                    log(`Page ${i} rendered successfully.`);
                 }
                 
-                log('All pages rendered. Firing onRenderSuccess.');
+                setStatus('success');
                 if (onRenderSuccess) {
                     onRenderSuccess(canvases);
                 }
 
             } catch (err) {
-                log('--- CRITICAL ERROR ---', err.toString());
                 console.error('PDF Rendering Failed:', err);
-                setFinalError({ name: err.name, message: err.message, stack: err.stack });
+                let userFriendlyError = 'PDF 預覽失敗。檔案可能已損壞或格式不兼容。';
+                if (err.name === 'PasswordException') {
+                    userFriendlyError = '錯誤：此 PDF 檔案受密碼保護，無法預覽。';
+                }
+                setError({ message: userFriendlyError, details: err.toString() });
+                setStatus('error');
             }
         };
 
@@ -94,38 +79,30 @@ export default function PdfPreviewer({ file, onRenderSuccess }) {
 
     }, [file, onRenderSuccess]);
 
+    const renderContent = () => {
+        switch (status) {
+            case 'idle':
+                return <p className="text-center text-slate-500 p-8">請上傳 PDF 檔案以開始預覽...</p>;
+            case 'loading':
+                return <p className="text-center text-slate-500 font-bold p-8">正在主線程解析 PDF...</p>;
+            case 'error':
+                return (
+                    <div className="text-center text-red-600 bg-red-50 p-6 rounded-lg border border-red-200">
+                        <h4 className="font-black text-lg">預覽失敗</h4>
+                        <p className="text-sm mt-1">{error.message}</p>
+                        <p className="text-xs text-red-400 mt-4 font-mono break-all">{error.details}</p>
+                    </div>
+                );
+            case 'success':
+                return null;
+            default:
+                return <p className="text-center text-slate-500 font-bold p-8">{`正在渲染第 ${status.split('_')[2]} 頁...`}</p>;
+        }
+    };
+    
     return (
-        <div className="border-4 border-dashed border-red-300 p-2 bg-white">
-            <h3 className="font-black text-red-600 text-center text-lg">--- 偵錯模式 V3.7 ---</h3>
-            
-            {/* The actual preview area */}
-            <div ref={canvasContainerRef} className="pdf-preview-container bg-slate-200 p-4 rounded-lg min-h-[200px] flex items-center justify-center">
-                {/* This area will be populated by canvases or will remain empty on failure */}
-            </div>
-
-            {/* Debug Information Panel */}
-            <div className="mt-4 p-4 bg-gray-900 text-white font-mono text-xs rounded-lg max-h-96 overflow-y-auto">
-                <h4 className="font-bold text-yellow-400 mb-2">[偵錯日誌]</h4>
-                {debugLog.map((entry, index) => (
-                    <div key={index} className="mb-2 border-b border-gray-700 pb-1">
-                        <p><span className="text-gray-500">{entry.timestamp}</span>: <span className="text-green-400">{entry.message}</span></p>
-                        {entry.data && <pre className="text-cyan-400 bg-gray-800 p-2 rounded mt-1">{entry.data}</pre>}
-                    </div>
-                ))}
-
-                {finalError && (
-                    <div className="mt-4 p-4 bg-red-900/50 rounded">
-                        <h4 className="font-bold text-red-400">--- 最終捕獲錯誤 ---</h4>
-                        <p className="text-red-300 mt-2"><strong>類型:</strong> {finalError.name}</p>
-                        <p className="text-red-300"><strong>訊息:</strong> {finalError.message}</p>
-                        <pre className="text-red-200 text-xs mt-2 whitespace-pre-wrap">{finalError.stack}</pre>
-                    </div>
-                )}
-                 {!finalError && pdfInfo && (
-                     <p className="text-emerald-400 font-bold mt-2">偵錯結論：程式碼流程已走完且未捕獲到任何致命錯誤。</p>
-                 )}
-            </div>
+        <div ref={canvasContainerRef} className="pdf-preview-container bg-slate-200 p-4 md:p-8 rounded-lg min-h-[400px] flex items-center justify-center">
+            {renderContent()}
         </div>
     );
 }
-
