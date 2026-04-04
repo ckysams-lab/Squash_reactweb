@@ -1,50 +1,107 @@
-// src/pages/FormTemplatePage.jsx (Version 3.0 - Initial Setup)
+// src/pages/FormTemplatePage.jsx (Version 3.0 - PDF Upload & Preview Enabled)
 
-import React from 'react';
-import { FilePenLine, Upload, MousePointerClick, FileDown } from 'lucide-react';
-import { PageHeader, Card, PrimaryButton } from '../components/ui.jsx';
+import React, { useState, useRef } from 'react';
+import { FilePenLine, Upload } from 'lucide-react';
+import { PageHeader, Card, PrimaryButton, SecondaryButton } from '../components/ui.jsx';
+import PdfPreviewer from '../components/PdfPreviewer.jsx';
 
 export default function FormTemplatePage() {
+    const [templateName, setTemplateName] = useState('');
+    const [pdfFile, setPdfFile] = useState(null);
+    const fileInputRef = useRef(null);
+
+    const handleFileChange = (event) => {
+        const file = event.target.files[0];
+        if (file && file.type === 'application/pdf') {
+            setPdfFile(file);
+            if (!templateName) {
+                // Auto-fill template name from file name (without .pdf)
+                setTemplateName(file.name.replace(/\.pdf$/i, ''));
+            }
+        } else {
+            alert('請選擇一個有效的 PDF 檔案。');
+        }
+    };
+
+    const handleUploadClick = () => {
+        // Trigger the hidden file input
+        fileInputRef.current.click();
+    };
+    
+    // This will be the main view for creating a template
+    if (pdfFile) {
+        return (
+            <div className="space-y-8 animate-in fade-in">
+                <PageHeader 
+                    title="創建報名表範本" 
+                    subtitle="請在下方的 PDF 預覽圖上點擊，以標記需要填寫的欄位。" 
+                    icon={FilePenLine} 
+                />
+                <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-8 items-start">
+                    {/* Left: PDF Previewer */}
+                    <div>
+                       <PdfPreviewer file={pdfFile} />
+                    </div>
+                    {/* Right: Mapping Controls (Placeholder for now) */}
+                    <Card className="sticky top-28">
+                        <h3 className="text-2xl font-black text-slate-800 mb-4">欄位標記</h3>
+                         <div>
+                            <label className="text-xs font-bold text-slate-500 mb-1 block">範本名稱</label>
+                            <input 
+                                type="text"
+                                value={templateName}
+                                onChange={e => setTemplateName(e.target.value)}
+                                className="w-full bg-slate-100 border-2 border-transparent focus:border-blue-500 transition-all rounded-xl p-3 outline-none font-bold"
+                            />
+                        </div>
+                        <div className="mt-6">
+                            <p className="text-sm text-slate-500">在這裡，您將看到所有已標記的欄位列表... (下一步開發)</p>
+                        </div>
+                        <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col gap-3">
+                            <PrimaryButton>儲存範本 (開發中)</PrimaryButton>
+                            <SecondaryButton onClick={() => setPdfFile(null)}>重新選擇 PDF</SecondaryButton>
+                        </div>
+                    </Card>
+                </div>
+            </div>
+        );
+    }
+
+    // This is the initial "upload" view
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 font-bold max-w-5xl mx-auto">
-            
             <PageHeader 
                 title="智慧報名表系統" 
                 subtitle="上傳PDF、標記欄位、一鍵生成，徹底告別手動填表" 
                 icon={FilePenLine} 
             />
-
             <Card>
                 <div className="text-center">
-                    <h3 className="text-2xl font-black text-slate-800 mb-4">歡迎來到「Project 'AutoForm'」</h3>
-                    <p className="text-slate-500 max-w-2xl mx-auto mb-8">
-                        這將是您處理比賽報名的革命性工具。我們將分階段實現這個強大的功能，讓您從此告別繁瑣的重複工作。
-                    </p>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left my-12">
-                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                            <Upload className="text-blue-500 mb-3" />
-                            <h4 className="font-black">第一步：上傳</h4>
-                            <p className="text-xs text-slate-500 font-normal mt-1">上傳任何比賽的空白PDF報名表。</p>
-                        </div>
-                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                            <MousePointerClick className="text-yellow-500 mb-3" />
-                            <h4 className="font-black">第二步：標記</h4>
-                            <p className="text-xs text-slate-500 font-normal mt-1">在PDF預覽圖上點擊，並指定每個位置對應的學生資料欄位。</p>
-                        </div>
-                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                            <FileDown className="text-emerald-500 mb-3" />
-                            <h4 className="font-black">第三步：生成</h4>
-                            <p className="text-xs text-slate-500 font-normal mt-1">勾選參賽學生，一鍵生成所有填好的PDF並打包下載。</p>
-                        </div>
+                    <div className="max-w-md mx-auto">
+                        <Upload className="text-blue-500 mx-auto mb-4" size={48} />
+                        <h3 className="text-2xl font-black text-slate-800">開始創建新範本</h3>
+                        <p className="text-slate-500 mt-2 mb-8">
+                            請上傳一份空白的比賽報名表 (PDF格式)，我們將引導您完成後續的欄位標記。
+                        </p>
+                        
+                        {/* Hidden file input */}
+                        <input 
+                            type="file" 
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            accept="application/pdf"
+                            className="hidden"
+                        />
+                        
+                        {/* Visible upload button */}
+                        <PrimaryButton onClick={handleUploadClick} icon={Upload} className="w-full">
+                            選擇 PDF 檔案
+                        </PrimaryButton>
                     </div>
-
-                    <PrimaryButton className="w-full md:w-auto px-10">
-                        ➕ 創建新範本 (開發中...)
-                    </PrimaryButton>
                 </div>
             </Card>
-
+             {/* We will add a list of existing templates here later */}
         </div>
     );
 }
+
