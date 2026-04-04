@@ -45,7 +45,6 @@ export default function LeaguePage({
     // --- End of new state and effects ---
 
     const handleDownloadPoster = () => {
-        // This logic from v3.2 is retained completely.
         if (!tournamentStandings || Object.keys(tournamentStandings).length === 0) return alert("目前沒有可生成的積分榜數據。");
         setIsRenderingPoster(true);
         setTimeout(() => {
@@ -63,7 +62,6 @@ export default function LeaguePage({
         }, 500);
     };
 
-    // This entire function from v3.2 is retained completely.
     const renderTeamTieResult = (groupName, matches) => {
         if (!groupName || !groupName.includes(' vs ')) return null;
         const [teamA, teamB] = groupName.split(' vs ');
@@ -113,6 +111,10 @@ export default function LeaguePage({
         if (!tournamentStandings || typeof tournamentStandings !== 'object') {
             return {};
         }
+
+        // ✅ FIX: Guard leagueMatches — it may be undefined on first render
+        const safeLeagueMatches = Array.isArray(leagueMatches) ? leagueMatches : [];
+
         const enriched = {};
         const prevTournamentData = previousStandings ? previousStandings[selectedTournament] : null;
 
@@ -122,7 +124,18 @@ export default function LeaguePage({
                 continue;
             }
             enriched[group] = currentGroupData.map((player, index) => {
-                const playerMatches = leagueMatches.filter(m => m.status === 'completed' && (m.player1Id === player.id || m.player2Id === player.id) && m.tournamentName === selectedTournament).sort((a, b) => (b.updatedAt?.seconds || b.timestamp?.seconds || 0) - (a.updatedAt?.seconds || a.timestamp?.seconds || 0));
+                // ✅ FIX: Use safeLeagueMatches instead of leagueMatches
+                const playerMatches = safeLeagueMatches
+                    .filter(m =>
+                        m.status === 'completed' &&
+                        (m.player1Id === player.id || m.player2Id === player.id) &&
+                        m.tournamentName === selectedTournament
+                    )
+                    .sort((a, b) =>
+                        (b.updatedAt?.seconds || b.timestamp?.seconds || 0) -
+                        (a.updatedAt?.seconds || a.timestamp?.seconds || 0)
+                    );
+
                 let hotStreak = 0;
                 for (const match of playerMatches) {
                     if (match.winnerId === player.id) { hotStreak++; } else { break; }
@@ -135,6 +148,12 @@ export default function LeaguePage({
         }
         return enriched;
     }, [tournamentStandings, leagueMatches, previousStandings, selectedTournament]);
+
+    // ✅ FIX: Guard all array props that may be undefined
+    const safeTournamentList = Array.isArray(tournamentList) ? tournamentList : [];
+    const safeGroupedMatches = groupedMatches && typeof groupedMatches === 'object' ? groupedMatches : {};
+    const safeLeagueMatches = Array.isArray(leagueMatches) ? leagueMatches : [];
+    const safeMyUpcomingMatches = Array.isArray(myUpcomingMatches) ? myUpcomingMatches : [];
 
     return (
         <div className="space-y-10 animate-in fade-in duration-500 font-bold">
@@ -164,7 +183,10 @@ export default function LeaguePage({
                             onChange={(e) => setSelectedTournament(e.target.value)} 
                             className="flex-grow w-full md:w-72 bg-slate-50 border-none outline-none pl-6 pr-10 py-4 rounded-2xl text-sm font-black appearance-none cursor-pointer hover:bg-slate-100 transition-all shadow-inner"
                         >
-                            {tournamentList.length === 0 ? <option value="">暫無賽事</option> : tournamentList.map(t => <option key={t} value={t}>{t}</option>)}
+                            {safeTournamentList.length === 0
+                                ? <option value="">暫無賽事</option>
+                                : safeTournamentList.map(t => <option key={t} value={t}>{t}</option>)
+                            }
                         </select>
                         
                         {role === 'admin' && (
@@ -194,10 +216,10 @@ export default function LeaguePage({
                             <div><p className="text-3xl font-black text-rose-600">{myTournamentStats.losses}</p><p className="text-xs font-bold text-slate-400">負</p></div>
                             <div><p className="text-3xl font-black text-slate-600">{myTournamentStats.leaguePoints}</p><p className="text-xs font-bold text-slate-400">積分</p></div>
                         </div>
-                        {myUpcomingMatches.length > 0 && (
+                        {safeMyUpcomingMatches.length > 0 && (
                             <div className="mt-6 pt-6 border-t border-blue-200">
                                 <h5 className="font-bold text-sm text-blue-800 mb-2">你即將到來的比賽：</h5>
-                                {myUpcomingMatches.map(match => (
+                                {safeMyUpcomingMatches.map(match => (
                                     <div key={match.id} className="text-xs text-slate-600">
                                         <span>{match.date} {match.time} vs <strong>{match.player1Id === currentUserInfo.id ? match.player2Name : match.player1Name}</strong></span>
                                     </div>
@@ -207,16 +229,16 @@ export default function LeaguePage({
                     </div>
                 )}
                 
-                {Object.keys(groupedMatches).length === 0 ? (
+                {Object.keys(safeGroupedMatches).length === 0 ? (
                     <div className="text-center py-20 text-slate-300 font-bold bg-slate-50/50 rounded-2xl">
-                        {leagueMatches.length > 0 ? '請從上方選擇一個賽事' : '暫無任何賽事，請教練建立新賽事。'}
+                        {safeLeagueMatches.length > 0 ? '請從上方選擇一個賽事' : '暫無任何賽事，請教練建立新賽事。'}
                     </div>
                 ) : (
-                    Object.keys(groupedMatches).map(groupName => (
+                    Object.keys(safeGroupedMatches).map(groupName => (
                         <div key={groupName} className="mb-12">
                             {!groupName.includes(' vs ') && ( <h4 className="text-2xl font-black text-slate-600 mb-4 pl-2">{groupName}</h4> )}
                             <div className="overflow-x-auto bg-slate-50/50 p-2 md:p-6 rounded-3xl border">
-                                {renderTeamTieResult(groupName, groupedMatches[groupName])}
+                                {renderTeamTieResult(groupName, safeGroupedMatches[groupName])}
 
                                 {/* --- 👇 v3.9: UPDATED Standings Table 👇 --- */}
                                 {!groupName.includes(' vs ') && enrichedStandings[groupName] && (
@@ -271,7 +293,7 @@ export default function LeaguePage({
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {groupedMatches[groupName].sort((a,b) => a.date.localeCompare(b.date) || (a.matchOrder || '').localeCompare(b.matchOrder || '')).map(match => {
+                                        {safeGroupedMatches[groupName].sort((a,b) => a.date.localeCompare(b.date) || (a.matchOrder || '').localeCompare(b.matchOrder || '')).map(match => {
                                             let isGiantSlayer = false;
                                             if (match.status === 'completed' && match.winnerId && tournamentStandings && tournamentStandings[groupName]) {
                                                 const winnerRank = tournamentStandings[groupName].findIndex(p => p.id === match.winnerId);
@@ -294,7 +316,7 @@ export default function LeaguePage({
                                                             <div className={`font-black text-base ${match.winnerId === match.player1Id ? 'text-blue-600' : 'text-slate-800'}`}>{match.player1Name}</div>
                                                             <Swords size={14} className="text-slate-300 shrink-0"/>
                                                             <div className={`font-black text-base ${match.winnerId === match.player2Id ? 'text-blue-600' : 'text-slate-800'}`}>{match.player2Name}</div>
-                                                            {isGiantSlayer && <span title="巨人殺手！(以弱勝強)" className="p-1 bg-amber-100 text-amber-600 rounded-md ml-2"><ShieldAlert size={14} /></span>}
+                                                            {isGiantSlayer && <span title="巨人殺手！(以弱勝強)" className="p1 bg-amber-100 text-amber-600 rounded-md ml-2"><ShieldAlert size={14} /></span>}
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-5 text-center whitespace-nowrap">
@@ -352,7 +374,7 @@ export default function LeaguePage({
                         ref={posterRef}
                         tournamentName={selectedTournament}
                         standings={tournamentStandings && Object.values(tournamentStandings).flat().sort((a,b) => b.leaguePoints - a.leaguePoints)}
-                        upcomingMatches={leagueMatches}
+                        upcomingMatches={safeLeagueMatches}
                         schoolLogo={schoolLogo}
                     />
                 </div>
