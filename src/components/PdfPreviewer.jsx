@@ -1,10 +1,9 @@
-// src/components/PdfPreviewer.jsx (Version 5.2)
+// src/components/PdfPreviewer.jsx (Version 5.3 - Accurate PDF-space coordinates)
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 
-// unpkg mirrors every exact npm version
 pdfjs.GlobalWorkerOptions.workerSrc =
   `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -13,7 +12,11 @@ const PAGE_WIDTH = 800;
 export default function PdfPreviewer({ file, markers = [], onPageClick, onRenderSuccess }) {
   const [numPages, setNumPages] = useState(null);
   const [error, setError] = useState(null);
+
+  // Stores the TRUE original PDF dimensions per page (in PDF points, e.g. 595×842 for A4)
+  // These come from react-pdf's page.originalWidth / page.originalHeight
   const [pageDimensions, setPageDimensions] = useState({});
+
   const containerRef = useRef(null);
 
   const fileUrl = useMemo(() => {
@@ -22,10 +25,14 @@ export default function PdfPreviewer({ file, markers = [], onPageClick, onRender
   }, [file]);
 
   useEffect(() => {
-    return () => {
-      if (fileUrl) URL.revokeObjectURL(fileUrl);
-    };
+    return () => { if (fileUrl) URL.revokeObjectURL(fileUrl); };
   }, [fileUrl]);
+
+  // Reset page dimensions when file changes
+  useEffect(() => {
+    setPageDimensions({});
+    setNumPages(null);
+  }, [file]);
 
   function onDocumentLoadSuccess({ numPages: nextNumPages }) {
     setNumPages(nextNumPages);
@@ -38,30 +45,46 @@ export default function PdfPreviewer({ file, markers = [], onPageClick, onRender
     setError('PDF 預覽失敗。檔案可能已損壞、格式不兼容或受密碼保護。');
   }
 
-  // Captures the page's rendered dimensions after each page renders
+  // KEY FIX: page.originalWidth/originalHeight are the true PDF point dimensions,
+  // NOT the rendered pixel dimensions. We store both so we can scale accurately.
   function onPageRenderSuccess(page, pageNumber) {
     setPageDimensions(prev => ({
       ...prev,
-      [pageNumber]: { width: page.width, height: page.height },
+      [pageNumber]: {
+        originalWidth: page.originalWidth,   // true PDF width in points (e.g. 595)
+        originalHeight: page.originalHeight, // true PDF height in points (e.g. 842)
+      },
     }));
   }
 
-  // Translates a click on the rendered page into normalised 0–1 PDF-space coordinates
   function handlePageClick(e, pageNumber) {
     if (!onPageClick) return;
 
     const pageEl = e.currentTarget;
     const rect = pageEl.getBoundingClientRect();
 
+    // Click position in rendered pixels
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
 
+    const dims = pageDimensions[pageNumber];
+    if (!dims) return; // page hasn't finished rendering yet
+
+    // Scale factor: how many PDF points per rendered pixel
+    const scaleX = dims.originalWidth / rect.width;
+    const scaleY = dims.originalHeight / rect.height;
+
     onPageClick({
       page: pageNumber,
+      // Normalized 0–1 (for % positioning of pins on screen)
       x: parseFloat((clickX / rect.width).toFixed(4)),
       y: parseFloat((clickY / rect.height).toFixed(4)),
-      pageWidth: rect.width,
-      pageHeight: rect.height,
+      // True PDF-unit coordinates (for writing fields into the actual PDF later)
+      pdfX: Math.round(clickX * scaleX),
+      pdfY: Math.round(clickY * scaleY),
+      // Original page size in PDF points (needed when generating filled PDFs)
+      pageWidth: dims.originalWidth,
+      pageHeight: dims.originalHeight,
     });
   }
 
@@ -87,13 +110,14 @@ export default function PdfPreviewer({ file, markers = [], onPageClick, onRender
           {Array.from(new Array(numPages), (el, index) => {
             const pageNumber = index + 1;
             const pageMarkers = markers.filter(m => m.page === pageNumber);
+            const isPageReady = Boolean(pageDimensions[pageNumber]);
 
             return (
               <div
                 key={`page_wrapper_${pageNumber}`}
-                className="relative mb-4 shadow-lg cursor-crosshair select-none"
+                className={`relative mb-4 shadow-lg select-none ${isPageReady ? 'cursor-crosshair' : 'cursor-wait'}`}
                 onClick={(e) => handlePageClick(e, pageNumber)}
-                title="點擊以新增標記"
+                title={isPageReady ? '點擊以新增標記' : '頁面加載中，請稍候...'}
               >
                 <Page
                   pageNumber={pageNumber}
@@ -116,7 +140,7 @@ export default function PdfPreviewer({ file, markers = [], onPageClick, onRender
   );
 }
 
-// Visual pin rendered at the marker's normalised (x, y) position
+// ── Visual pin at the marker's normalised (x, y) position ────────────────────
 function MarkerPin({ marker }) {
   const isAssigned = Boolean(marker.fieldKey);
 
@@ -131,7 +155,7 @@ function MarkerPin({ marker }) {
       }}
     >
       <div className="flex flex-col items-center">
-        {/* Circle badge */}
+        {/* Circle badge with marker number */}
         <div
           className="flex items-center justify-center rounded-full text-white font-black shadow-lg border-2 border-white"
           style={{
@@ -144,7 +168,7 @@ function MarkerPin({ marker }) {
           {marker.index + 1}
         </div>
 
-        {/* Field label bubble (only shown when a field is assigned) */}
+        {/* Field label bubble (shown once a field is assigned) */}
         {marker.fieldLabel && (
           <div
             className="mt-1 px-2 py-0.5 rounded text-white font-bold shadow whitespace-nowrap"
