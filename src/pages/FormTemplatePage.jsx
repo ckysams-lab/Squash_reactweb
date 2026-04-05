@@ -1,4 +1,4 @@
-// src/pages/FormTemplatePage.jsx (Version 5.2)
+// src/pages/FormTemplatePage.jsx (Version 5.3)
 import React, { useState, useCallback } from 'react';
 import PdfPreviewer from '../components/PdfPreviewer';
 
@@ -34,16 +34,24 @@ export default function FormTemplatePage() {
   }
 
   // ── Receive click coords from PdfPreviewer ───────────────────────────────
-  const handlePageClick = useCallback(({ page, x, y }) => {
+  // Now receives both normalised (x, y) for pin display AND true PDF coords
+  // (pdfX, pdfY, pageWidth, pageHeight) for actual PDF generation later.
+  const handlePageClick = useCallback(({ page, x, y, pdfX, pdfY, pageWidth, pageHeight }) => {
     setMarkers(prev => [
       ...prev,
       {
         id: `marker_${++markerIdCounter}`,
-        index: prev.length,   // display number (0-based → shown as +1)
+        index: prev.length,
         page,
+        // For rendering the pin on screen (normalised 0–1)
         x,
         y,
-        fieldKey: '',         // to be assigned in the control panel
+        // For writing into the actual PDF later (PDF point units)
+        pdfX,
+        pdfY,
+        pageWidth,
+        pageHeight,
+        fieldKey: '',
         fieldLabel: '',
       },
     ]);
@@ -63,15 +71,37 @@ export default function FormTemplatePage() {
 
   // ── Delete a marker ──────────────────────────────────────────────────────
   function handleDeleteMarker(markerId) {
-    setMarkers(prev => {
-      const updated = prev
+    setMarkers(prev =>
+      prev
         .filter(m => m.id !== markerId)
-        .map((m, i) => ({ ...m, index: i })); // re-index
-      return updated;
-    });
+        .map((m, i) => ({ ...m, index: i })) // re-index after deletion
+    );
+  }
+
+  // ── Export template config (ready to save to Firestore / JSON) ──────────
+  function handleExport() {
+    const unassigned = markers.filter(m => !m.fieldKey).length;
+    if (unassigned > 0) {
+      alert(`還有 ${unassigned} 個標記尚未指定欄位，請先完成所有標記的設定。`);
+      return;
+    }
+    const config = markers.map(m => ({
+      page:        m.page,
+      fieldKey:    m.fieldKey,
+      fieldLabel:  m.fieldLabel,
+      pdfX:        m.pdfX,
+      pdfY:        m.pdfY,
+      pageWidth:   m.pageWidth,
+      pageHeight:  m.pageHeight,
+    }));
+    console.log('📋 Template config ready to save:', JSON.stringify(config, null, 2));
+    alert(`✅ ${config.length} 個欄位設定已準備完成！請查看 console 確認輸出。`);
+    // TODO: replace alert with your Firestore save call, e.g.:
+    // await setDoc(doc(db, 'formTemplates', templateId), { fields: config });
   }
 
   const assignedCount = markers.filter(m => m.fieldKey).length;
+  const allAssigned = markers.length > 0 && assignedCount === markers.length;
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans">
@@ -92,6 +122,13 @@ export default function FormTemplatePage() {
             >
               清除所有標記
             </button>
+            <button
+              onClick={handleExport}
+              disabled={!allAssigned}
+              className="text-xs text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-1.5 rounded-lg transition-colors font-bold"
+            >
+              儲存模板設定 →
+            </button>
           </div>
         )}
       </header>
@@ -100,7 +137,6 @@ export default function FormTemplatePage() {
         {/* ── Left: PDF Preview ── */}
         <main className="flex-1 overflow-y-auto p-6">
           {!file ? (
-            // Upload prompt
             <label className="flex flex-col items-center justify-center w-full h-full min-h-[400px] border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all group">
               <div className="text-center">
                 <div className="text-5xl mb-4 group-hover:scale-110 transition-transform">📂</div>
@@ -116,7 +152,6 @@ export default function FormTemplatePage() {
             </label>
           ) : (
             <div>
-              {/* Mode hint banner */}
               {isPdfReady && (
                 <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-2.5 rounded-xl">
                   <span className="text-base">🖱️</span>
@@ -163,14 +198,19 @@ export default function FormTemplatePage() {
             )}
           </div>
 
-          {/* Export summary */}
+          {/* Summary footer */}
           {markers.length > 0 && (
             <div className="border-t border-slate-100 px-5 py-4 bg-slate-50">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">標記摘要</p>
               <div className="space-y-1">
                 {markers.map(m => (
                   <div key={m.id} className="flex justify-between text-xs text-slate-600">
-                    <span className="font-semibold">#{m.index + 1} 第 {m.page} 頁</span>
+                    <span className="font-semibold">
+                      #{m.index + 1} 第 {m.page} 頁
+                      <span className="text-slate-400 font-normal ml-1">
+                        ({m.pdfX}, {m.pdfY})
+                      </span>
+                    </span>
                     <span className={m.fieldKey ? 'text-blue-600 font-bold' : 'text-amber-500'}>
                       {m.fieldLabel || '未指定'}
                     </span>
@@ -192,9 +232,7 @@ function MarkerCard({ marker, fields, onFieldAssign, onDelete }) {
   return (
     <div
       className={`rounded-xl border p-3 transition-all ${
-        isAssigned
-          ? 'border-blue-200 bg-blue-50'
-          : 'border-amber-200 bg-amber-50'
+        isAssigned ? 'border-blue-200 bg-blue-50' : 'border-amber-200 bg-amber-50'
       }`}
     >
       {/* Header row */}
@@ -214,7 +252,8 @@ function MarkerCard({ marker, fields, onFieldAssign, onDelete }) {
           <span className="text-xs font-semibold text-slate-600">
             第 {marker.page} 頁
           </span>
-          <span className="text-xs text-slate-400">
+          {/* Shows both normalised % and true PDF coords */}
+          <span className="text-xs text-slate-400" title={`PDF 座標: (${marker.pdfX}, ${marker.pdfY})`}>
             ({(marker.x * 100).toFixed(1)}%, {(marker.y * 100).toFixed(1)}%)
           </span>
         </div>
