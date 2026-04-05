@@ -26,7 +26,7 @@
     "react-big-calendar": "^1.13.0",
     "react-dom": "^18.2.0",
     "recharts": "^2.12.2",
-    "file-saver": "^2.0.5"
+    "file-saver": "^2.0.5",
     "@react-three/drei": "^9.96.1",
     "@react-three/fiber": "^8.15.12",
     "three": "^0.160.0"
