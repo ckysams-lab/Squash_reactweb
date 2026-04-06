@@ -1,4 +1,4 @@
-// src/pages/FormTemplatePage.jsx (Version 7.0 - Fixed Coordinate System & Field Metadata)
+// src/pages/FormTemplatePage.jsx (Version 8.0 - Multi-Student Slot Support)
 
 import React, { useState, useCallback } from 'react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -6,85 +6,133 @@ import { db } from '../firebase';
 import { Loader2, Save } from 'lucide-react';
 import PdfPreviewer from '../components/PdfPreviewer';
 
-// These are the fields that can be AUTO-FILLED from the student record in Firestore.
-// The `path` is the dot-notation key used to read the value from a student object.
-export const STUDENT_FIELDS = [
-  { key: 'nameZH',   label: '學生中文姓名', path: 'nameZH',   source: 'student' },
-  { key: 'nameEN',   label: '學生英文姓名', path: 'nameEN',   source: 'student' },
-  { key: 'dob',      label: '出生日期',     path: 'dob',      source: 'student' },
-  { key: 'gender',   label: '性別',         path: 'gender',   source: 'student' },
-  { key: 'idNumber', label: '證件號碼',     path: 'idNumber', source: 'student' },
-  { key: 'class',    label: '年級班別',     path: 'class',    source: 'student' },
-  { key: 'phone',    label: '聯絡電話',     path: 'phone',    source: 'student' },
-  // Add more student fields here as needed.
+// ─── Field Definitions ───────────────────────────────────────────────────────
+//
+// Three kinds of fields:
+//   "manual"       – typed once, same on all copies (school name, teacher, etc.)
+//   "student_slot" – per-slot student data picked from roster on BatchFillPage
+//                    fieldKey format: "slot_A1_nameZH"
+
+export const SCHOOL_FIELDS = [
+  { key: 'schoolNameZH',    label: '學校名稱（中文）', source: 'manual' },
+  { key: 'schoolNameShort', label: '校名簡稱（中文）', source: 'manual' },
+  { key: 'address',         label: '地址',             source: 'manual' },
+  { key: 'email',           label: '電郵地址',          source: 'manual' },
+  { key: 'fax',             label: '傳真號碼',          source: 'manual' },
+  { key: 'teacherName',     label: '負責老師姓名',      source: 'manual' },
+  { key: 'teacherPhone',    label: '老師聯絡電話',      source: 'manual' },
+  { key: 'captainName',     label: '領隊姓名',          source: 'manual' },
+  { key: 'captainPhone',    label: '領隊聯絡電話',      source: 'manual' },
+  { key: 'signDate',        label: '簽署日期',          source: 'manual' },
 ];
 
-// Fields that must be typed manually (not pulled from any student record).
-export const MANUAL_FIELDS = [
-  { key: 'eventName',  label: '活動名稱',  source: 'manual' },
-  { key: 'eventDate',  label: '活動日期',  source: 'manual' },
-  { key: 'venue',      label: '場地',      source: 'manual' },
-  { key: 'coachName',  label: '教練姓名',  source: 'manual' },
-  { key: 'remark',     label: '備註',      source: 'manual' },
+// Per-student properties pulled automatically from the student record
+export const STUDENT_PROPS = [
+  { prop: 'nameZH', label: '中文姓名' },
+  { prop: 'class',  label: '就讀班別' },
+  { prop: 'dob',    label: '出生日期' },
 ];
 
-export const ALL_FIELDS = [...STUDENT_FIELDS, ...MANUAL_FIELDS];
+// 4 teams × 3 player slots = 12 slots total
+export const TEAM_SLOTS = ['A', 'B', 'C', 'D'].flatMap(team =>
+  [1, 2, 3].map(n => ({ slotId: `${team}${n}`, label: `${team} 隊 第${n}位` }))
+);
+
+export const makeSlotKey = (slotId, prop) => `slot_${slotId}_${prop}`;
+
+export const parseSlotKey = (key) => {
+  const m = key?.match(/^slot_([A-D]\d+)_(.+)$/);
+  return m ? { slotId: m[1], prop: m[2] } : null;
+};
+
+// Flat list with group labels for the <select>
+export const ALL_FIELDS = [
+  ...SCHOOL_FIELDS.map(f => ({ ...f, group: '📋 學校資料（手動填寫）' })),
+  ...TEAM_SLOTS.flatMap(({ slotId, label: slotLabel }) =>
+    STUDENT_PROPS.map(({ prop, label: propLabel }) => ({
+      key: makeSlotKey(slotId, prop),
+      label: `${slotLabel} · ${propLabel}`,
+      group: `👤 球員名單（${slotId[0]} 隊）`,
+      source: 'student_slot',
+      slotId,
+      prop,
+    }))
+  ),
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fileToBase64 = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.readAsDataURL(file);
   reader.onload = () => resolve(reader.result);
-  reader.onerror = (err) => reject(err);
+  reader.onerror = reject;
 });
+
+// ─── MarkerCard ───────────────────────────────────────────────────────────────
+
+const SOURCE_BADGE = {
+  manual: { bg: '#fef9c3', color: '#92400e', text: '手動' },
+  student_slot: { bg: '#dbeafe', color: '#1d4ed8', text: '球員' },
+};
+
+// Pre-group options so the select renders correctly
+const GROUPED_OPTIONS = (() => {
+  const map = new Map();
+  for (const f of ALL_FIELDS) {
+    if (!map.has(f.group)) map.set(f.group, []);
+    map.get(f.group).push(f);
+  }
+  return [...map.entries()];
+})();
 
 const MarkerCard = React.memo(function MarkerCard({ marker, onFieldAssign, onDelete }) {
   const isAssigned = Boolean(marker.fieldKey);
-  const assignedField = ALL_FIELDS.find(f => f.key === marker.fieldKey);
-  const sourceTag = assignedField?.source === 'student'
-    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#dbeafe', color: '#1d4ed8', fontWeight: 700, marginLeft: 4 }}>自動</span>
-    : assignedField?.source === 'manual'
-    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#fef9c3', color: '#92400e', fontWeight: 700, marginLeft: 4 }}>手動</span>
-    : null;
+  const field = ALL_FIELDS.find(f => f.key === marker.fieldKey);
+  const badge = field ? SOURCE_BADGE[field.source] : null;
 
   return (
     <div className={`rounded-xl border p-3 transition-all ${isAssigned ? 'border-blue-200 bg-blue-50' : 'border-amber-200 bg-amber-50'}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span
-            className="flex items-center justify-center rounded-full text-white text-xs font-black shadow"
+            className="flex items-center justify-center rounded-full text-white font-black shadow"
             style={{ width: 22, height: 22, background: isAssigned ? '#2563eb' : '#f59e0b', fontSize: 10 }}
           >
             {marker.index + 1}
           </span>
           <span className="text-xs font-semibold text-slate-600">第 {marker.page} 頁</span>
           <span className="text-xs text-slate-400">({(marker.x * 100).toFixed(1)}%, {(marker.y * 100).toFixed(1)}%)</span>
-          {sourceTag}
+          {badge && (
+            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: badge.bg, color: badge.color, fontWeight: 700 }}>
+              {badge.text}
+            </span>
+          )}
         </div>
-        <button
-          onClick={() => onDelete(marker.id)}
-          className="text-slate-300 hover:text-red-400 transition-colors text-sm leading-none"
-          title="刪除標記"
-        >✕</button>
+        <button onClick={() => onDelete(marker.id)} className="text-slate-300 hover:text-red-400 transition-colors text-sm" title="刪除標記">✕</button>
       </div>
 
       <select
         value={marker.fieldKey}
         onChange={(e) => onFieldAssign(marker.id, e.target.value)}
         className={`w-full text-xs rounded-lg border px-2 py-1.5 outline-none focus:ring-2 transition-all bg-white ${
-          isAssigned ? 'border-blue-300 focus:ring-blue-200 text-blue-700 font-semibold' : 'border-amber-300 focus:ring-amber-200 text-slate-500'
+          isAssigned
+            ? 'border-blue-300 focus:ring-blue-200 text-blue-700 font-semibold'
+            : 'border-amber-300 focus:ring-amber-200 text-slate-500'
         }`}
       >
         <option value="">— 選擇資料欄位 —</option>
-        <optgroup label="📋 學生資料（自動填入）">
-          {STUDENT_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-        </optgroup>
-        <optgroup label="✏️ 手動填寫">
-          {MANUAL_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-        </optgroup>
+        {GROUPED_OPTIONS.map(([group, fields]) => (
+          <optgroup key={group} label={group}>
+            {fields.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+          </optgroup>
+        ))}
       </select>
     </div>
   );
 });
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function FormTemplatePage() {
   const [file, setFile] = useState(null);
@@ -106,7 +154,7 @@ export default function FormTemplatePage() {
   const handlePageClick = useCallback(({ page, x, y }) => {
     setMarkers(prev => [
       ...prev,
-      { id: crypto.randomUUID(), index: prev.length, page, x, y, fieldKey: '', fieldLabel: '', fieldSource: '' },
+      { id: crypto.randomUUID(), index: prev.length, page, x, y, fieldKey: '' },
     ]);
   }, []);
 
@@ -115,7 +163,14 @@ export default function FormTemplatePage() {
     setMarkers(prev =>
       prev.map(m =>
         m.id === markerId
-          ? { ...m, fieldKey, fieldLabel: field?.label ?? '', fieldSource: field?.source ?? '' }
+          ? {
+              ...m,
+              fieldKey,
+              fieldLabel:  field?.label  ?? '',
+              fieldSource: field?.source ?? '',
+              slotId:      field?.slotId ?? null,
+              prop:        field?.prop   ?? null,
+            }
           : m
       )
     );
@@ -129,40 +184,30 @@ export default function FormTemplatePage() {
 
   const handleSaveTemplate = async () => {
     const assignedMarkers = markers.filter(m => m.fieldKey);
-    if (!file) return alert('請先上傳 PDF 檔案。');
-    if (!templateName.trim()) return alert('請為您的範本命名。');
+    if (!file)                    return alert('請先上傳 PDF 檔案。');
+    if (!templateName.trim())     return alert('請為您的範本命名。');
     if (assignedMarkers.length === 0) return alert('請至少標記並指定一個欄位。');
-
-    if (file.size > 700 * 1024) {
-      return alert(`錯誤：PDF 檔案過大 (${(file.size / 1024).toFixed(0)} KB)。此儲存方式僅支援小於 700KB 的檔案。`);
-    }
+    if (file.size > 700 * 1024)   return alert(`錯誤：PDF 過大 (${(file.size / 1024).toFixed(0)} KB)，最大 700KB。`);
 
     if (assignedMarkers.length < markers.length) {
-      if (!window.confirm('您有部分標記尚未指定欄位，確定要儲存嗎？（未指定的標記將被忽略）')) return;
+      if (!window.confirm('部分標記尚未指定欄位，確定儲存嗎？（未指定的標記將被忽略）')) return;
     }
 
     setIsSaving(true);
     try {
       const pdfAsBase64 = await fileToBase64(file);
-
-      const templateData = {
+      await addDoc(collection(db, 'form_templates'), {
         templateName: templateName.trim(),
         pdfData: pdfAsBase64,
-        // FIX: Save fieldLabel and fieldSource so BatchFillPage can show human-readable labels
-        // and know which fields need manual input vs auto-fill from the student record.
-        mappings: assignedMarkers.map(({ page, x, y, fieldKey, fieldLabel, fieldSource }) => ({
+        mappings: assignedMarkers.map(({ page, x, y, fieldKey, fieldLabel, fieldSource, slotId, prop }) => ({
           page, x, y, fieldKey, fieldLabel, fieldSource,
+          slotId: slotId ?? null,
+          prop:   prop   ?? null,
         })),
         createdAt: serverTimestamp(),
-      };
-
-      await addDoc(collection(db, 'form_templates'), templateData);
+      });
       alert(`✅ 範本 "${templateName.trim()}" 已成功儲存！`);
-
-      setFile(null);
-      setMarkers([]);
-      setTemplateName('');
-      setIsPdfReady(false);
+      setFile(null); setMarkers([]); setTemplateName(''); setIsPdfReady(false);
     } catch (error) {
       console.error('儲存範本失敗:', error);
       alert(`儲存範本時發生錯誤：${error.message}`);
@@ -186,9 +231,7 @@ export default function FormTemplatePage() {
             <button
               onClick={() => setMarkers([])}
               className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              清除所有標記
-            </button>
+            >清除所有標記</button>
           </div>
         )}
       </header>
@@ -208,10 +251,11 @@ export default function FormTemplatePage() {
             <div>
               {isPdfReady && (
                 <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-2.5 rounded-xl">
-                  <span className="text-base">🖱️</span>
+                  <span>🖱️</span>
                   <span><strong>點擊模式已啟動</strong> — 點擊 PDF 上任意位置以插入標記，然後在右側面板指定對應欄位。</span>
                 </div>
               )}
+              {/* markers prop passed so pins render on the PDF */}
               <PdfPreviewer
                 file={file}
                 markers={markers}
@@ -224,15 +268,13 @@ export default function FormTemplatePage() {
 
         <aside className="w-80 bg-white border-l border-slate-200 flex flex-col shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100">
-            <label htmlFor="templateName" className="font-black text-slate-700 text-sm tracking-wide uppercase">
-              範本名稱
-            </label>
+            <label htmlFor="tplName" className="font-black text-slate-700 text-sm tracking-wide uppercase">範本名稱</label>
             <input
-              id="templateName"
+              id="tplName"
               type="text"
               value={templateName}
               onChange={(e) => setTemplateName(e.target.value)}
-              placeholder="例如：2024 壁總盃 U12"
+              placeholder="例如：2026 外展壁球 U12"
               className="w-full mt-2 p-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none"
             />
           </div>
@@ -244,20 +286,13 @@ export default function FormTemplatePage() {
                 <p>尚未新增任何標記</p>
                 <p className="text-xs mt-1 text-slate-300">上傳 PDF 後點擊頁面即可新增</p>
               </div>
-            ) : (
-              markers.map((marker) => (
-                <MarkerCard
-                  key={marker.id}
-                  marker={marker}
-                  onFieldAssign={handleFieldAssign}
-                  onDelete={handleDeleteMarker}
-                />
-              ))
-            )}
+            ) : markers.map(marker => (
+              <MarkerCard key={marker.id} marker={marker} onFieldAssign={handleFieldAssign} onDelete={handleDeleteMarker} />
+            ))}
           </div>
 
           {file && (
-            <div className="border-t border-slate-100 px-5 py-4 bg-slate-50 space-y-3">
+            <div className="border-t border-slate-100 px-5 py-4 bg-slate-50">
               <button
                 onClick={handleSaveTemplate}
                 disabled={isSaving}
