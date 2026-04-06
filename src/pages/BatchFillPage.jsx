@@ -11,6 +11,26 @@ import { FileText, Download, ChevronsRight, Loader2, Eye, Users } from 'lucide-r
 import PdfPreviewer from '../components/PdfPreviewer';
 
 // ---------------------------------------------------------------------------
+// Backward-compatible field classification
+// ---------------------------------------------------------------------------
+
+// Keys that map to student records. Old templates have no fieldSource, so we
+// classify by matching against this set as a fallback.
+const STUDENT_FIELD_KEYS = new Set([
+  'nameZH', 'nameEN', 'dob', 'gender', 'idNumber', 'class', 'phone',
+  // extend this list if you add more fields to STUDENT_FIELDS in FormTemplatePage
+]);
+
+/**
+ * Determine the effective source of a mapping, supporting old Firestore documents
+ * that were saved before fieldSource was added.
+ */
+const getFieldSource = (mapping) => {
+  if (mapping.fieldSource) return mapping.fieldSource;
+  return STUDENT_FIELD_KEYS.has(mapping.fieldKey) ? 'student' : 'manual';
+};
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -33,8 +53,8 @@ const getStudentValue = (obj, path, defaultValue = '') => {
  * into the student object (e.g. key = "nameZH" → student.nameZH).
  */
 const resolveFieldValue = (mapping, student, manualData) => {
-  const { fieldKey, fieldSource } = mapping;
-  if (fieldSource === 'student' && student) {
+  const { fieldKey } = mapping;
+  if (getFieldSource(mapping) === 'student' && student) {
     return String(getStudentValue(student, fieldKey, ''));
   }
   return String(manualData[fieldKey] ?? '');
@@ -189,17 +209,13 @@ export default function BatchFillPage({ students }) {
     if (!selectedTemplate) return [];
     const seen = new Set();
     return selectedTemplate.mappings
-      .filter(m => m.fieldSource === 'manual' && !seen.has(m.fieldKey) && seen.add(m.fieldKey))
-      .map(m => ({ fieldKey: m.fieldKey, fieldLabel: m.fieldLabel }));
+      .filter(m => getFieldSource(m) === 'manual' && !seen.has(m.fieldKey) && seen.add(m.fieldKey))
+      .map(m => ({ fieldKey: m.fieldKey, fieldLabel: m.fieldLabel || m.fieldKey }));
   }, [selectedTemplate]);
 
-  /**
-   * Does this template have any student auto-fill fields?
-   * If yes, we show the student selector.
-   */
   const hasStudentFields = useMemo(() => {
     if (!selectedTemplate) return false;
-    return selectedTemplate.mappings.some(m => m.fieldSource === 'student');
+    return selectedTemplate.mappings.some(m => getFieldSource(m) === 'student');
   }, [selectedTemplate]);
 
   const handleManualUpdate = useCallback((fieldKey, value) => {
