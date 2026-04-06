@@ -1,68 +1,50 @@
-// src/pages/BatchFillPage.jsx (Version 6.2 - Mini-Form Entry Slots - Full Code)
+// src/pages/BatchFillPage.jsx (Version 7.0 - Dynamic Form Generation - Full Code)
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import JSZip from 'jszip';
 import FileSaver from 'file-saver';
 import { db } from '../firebase';
 import { PageHeader, Card, PrimaryButton } from '../components/ui.jsx';
-import { FileText, Users, Download, ChevronsRight, Loader2, Eye, User, Calendar } from 'lucide-react';
+import { FileText, Users, Download, ChevronsRight, Loader2, Eye } from 'lucide-react';
 import PdfPreviewer from '../components/PdfPreviewer';
 
 const appId = 'bcklas-squash-core-v1'; 
 
 // Helper to get nested properties from an object, e.g., "personal.name"
 const getStudentValue = (obj, path, defaultValue = '') => {
-    // This is a simple implementation. For production, a more robust library like lodash.get might be used.
     if (!path) return defaultValue;
     const value = path.split('.').reduce((acc, part) => acc && acc[part], obj);
     return value || defaultValue;
 };
 
-// --- v6.2: New Slot Component for selecting a player for each position ---
-const EntrySlot = ({ slot, students, onSelectPlayer, onUpdateExtraData, selectedPlayerIds }) => {
-    // Filter out students who are already selected in other slots, but keep the current slot's selected student in the list
-    const availableStudents = students.filter(s => !selectedPlayerIds.includes(s.id) || s.id === slot.studentId);
-    const selectedStudent = slot.studentId ? students.find(s => s.id === slot.studentId) : null;
-
+// --- v7.0: New Dynamic Input Component ---
+const DynamicInput = ({ fieldKey, value, students, onUpdate }) => {
+    // If the key suggests it's a player selection, render a dropdown
+    if (fieldKey.toLowerCase().includes('name')) {
+        return (
+            <select
+                value={value || ''}
+                onChange={(e) => onUpdate(fieldKey, e.target.value)}
+                className="w-full mt-1 bg-slate-100 border-slate-200 rounded-lg p-2 font-bold"
+            >
+                <option value="">-- 選擇隊員 --</option>
+                {students.map(s => (
+                    <option key={s.id} value={s.id}>{s.nameZH || s.nameEN} ({s.class})</option>
+                ))}
+            </select>
+        );
+    }
+    
+    // Otherwise, render a simple text input
     return (
-        <div className="p-4 bg-white rounded-xl border-2 space-y-3">
-            <div>
-                <label className="font-bold text-sm text-blue-800">席位 #{slot.slotNumber}</label>
-                <select
-                    value={slot.studentId || ''}
-                    onChange={(e) => onSelectPlayer(slot.slotNumber, e.target.value)}
-                    className="w-full mt-1 bg-slate-100 border-slate-200 rounded-lg p-2 font-bold"
-                >
-                    <option value="">-- 未選擇隊員 --</option>
-                    {availableStudents.map(s => (
-                        <option key={s.id} value={s.id}>{s.nameZH || s.nameEN} ({s.class})</option>
-                    ))}
-                </select>
-            </div>
-
-            {selectedStudent && (
-                <div className="space-y-3 pt-3 border-t border-slate-200 animate-in fade-in duration-300">
-                    <div className="text-xs text-slate-500 space-y-1">
-                        <p className="flex items-center gap-2"><User size={14}/> {selectedStudent.nameEN}</p>
-                        <p className="flex items-center gap-2"><Calendar size={14}/> {selectedStudent.dob}</p>
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-600">參賽組別 (例如: U12男子組)</label>
-                        <input type="text" value={slot.extraData.competitionGroup || ''} onChange={(e) => onUpdateExtraData(slot.slotNumber, 'competitionGroup', e.target.value)} className="w-full text-sm mt-1 bg-slate-50 border-slate-200 rounded-md p-1.5"/>
-                    </div>
-                     <div>
-                        <label className="text-xs font-bold text-slate-600">球衣尺碼 (例如: M)</label>
-                        <input type="text" value={slot.extraData.jerseySize || ''} onChange={(e) => onUpdateExtraData(slot.slotNumber, 'jerseySize', e.target.value)} className="w-full text-sm mt-1 bg-slate-50 border-slate-200 rounded-md p-1.5"/>
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-600">其他備註</label>
-                        <input type="text" value={slot.extraData.notes || ''} onChange={(e) => onUpdateExtraData(slot.slotNumber, 'notes', e.target.value)} className="w-full text-sm mt-1 bg-slate-50 border-slate-200 rounded-md p-1.5"/>
-                    </div>
-                </div>
-            )}
-        </div>
+        <input
+            type="text"
+            value={value || ''}
+            onChange={(e) => onUpdate(fieldKey, e.target.value)}
+            className="w-full mt-1 bg-slate-100 border-slate-200 rounded-lg p-2"
+        />
     );
 };
 
@@ -73,8 +55,8 @@ export default function BatchFillPage({ students }) {
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [progress, setProgress] = useState(0);
-    
-    const [entrySlots, setEntrySlots] = useState([]);
+
+    const [formData, setFormData] = useState({});
     const [previewFile, setPreviewFile] = useState(null);
 
     useEffect(() => {
@@ -98,85 +80,53 @@ export default function BatchFillPage({ students }) {
                     setPreviewFile(new File([blob], "preview.pdf", { type: "application/pdf" }));
                 });
             }
-
-            const slotNumbers = new Set(
-                selectedTemplate.mappings.map(m => {
-                    const match = m.fieldKey.match(/_(\d+)$/);
-                    return match ? parseInt(match[1], 10) : 1;
-                })
-            );
-            
-            const maxSlot = Math.max(0, ...slotNumbers);
-            const newSlots = Array.from({ length: maxSlot }, (_, i) => ({
-                slotNumber: i + 1,
-                studentId: null,
-                extraData: {},
-            }));
-            setEntrySlots(newSlots);
-
+            setFormData({}); 
         } else {
             setPreviewFile(null);
-            setEntrySlots([]);
         }
     }, [selectedTemplate]);
-
-    const handleSelectPlayerForSlot = (slotNumber, studentId) => {
-        setEntrySlots(prevSlots => 
-            prevSlots.map(slot => 
-                slot.slotNumber === slotNumber ? { ...slot, studentId } : slot
-            )
-        );
-    };
-
-    const handleUpdateExtraData = (slotNumber, field, value) => {
-        setEntrySlots(prevSlots =>
-            prevSlots.map(slot =>
-                slot.slotNumber === slotNumber 
-                    ? { ...slot, extraData: { ...slot.extraData, [field]: value } }
-                    : slot
-            )
-        );
-    };
+    
+    const handleFormUpdate = useCallback((fieldKey, value) => {
+        setFormData(prev => ({ ...prev, [fieldKey]: value }));
+    }, []);
 
     const handleGeneratePdf = async () => {
-        if (!selectedTemplate) return alert('請先選擇一個報名表範本。');
-        const filledSlots = entrySlots.filter(s => s.studentId);
-        if (filledSlots.length === 0) return alert('請至少為一個席位選擇隊員。');
-
+        if (!selectedTemplate) return alert('請先選擇範本。');
+        
         setIsGenerating(true);
-        setProgress(0);
+        setProgress(0); // Reset progress
         try {
             const fontBytes = await fetch(StandardFonts.Helvetica).then(res => res.arrayBuffer());
             const existingPdfBytes = await fetch(selectedTemplate.pdfData).then(res => res.arrayBuffer());
             const pdfDoc = await PDFDocument.load(existingPdfBytes);
             const helveticaFont = await pdfDoc.embedFont(fontBytes);
 
-            selectedTemplate.mappings.forEach(mapping => {
-                const match = mapping.fieldKey.match(/_(\d+)$/);
-                const slotNumber = match ? parseInt(match[1], 10) : 1;
-                const baseFieldKey = match ? mapping.fieldKey.replace(`_${slotNumber}`, '') : mapping.fieldKey;
+            const mappings = selectedTemplate.mappings;
 
-                const targetSlot = entrySlots.find(s => s.slotNumber === slotNumber);
-                if (!targetSlot || !targetSlot.studentId) return;
-
-                const student = students.find(s => s.id === targetSlot.studentId);
-                if (!student) return;
+            for(let i = 0; i < mappings.length; i++) {
+                const mapping = mappings[i];
+                const { page, x, y, fieldKey } = mapping;
                 
-                const textToDraw = targetSlot.extraData[baseFieldKey] || getStudentValue(student, baseFieldKey);
-
-                const page = pdfDoc.getPage(mapping.page - 1);
-                page.drawText(String(textToDraw), {
-                    x: mapping.x,
-                    y: mapping.y,
-                    font: helveticaFont,
-                    size: 10,
-                    color: rgb(0, 0, 0),
-                });
-            });
-
+                // Get the value from our form state
+                let textToDraw = formData[fieldKey] || '';
+                
+                // If the value is a student ID (because it was a dropdown), resolve it to a name
+                if (fieldKey.toLowerCase().includes('name') && textToDraw) {
+                    const student = students.find(s => s.id === textToDraw);
+                    if (student) {
+                       textToDraw = student.nameEN || student.nameZH || '';
+                    }
+                }
+                
+                const pdfPage = pdfDoc.getPage(page - 1);
+                pdfPage.drawText(String(textToDraw), { x, y, font: helveticaFont, size: 10, color: rgb(0, 0, 0) });
+                
+                // Update progress after each field is drawn
+                setProgress(Math.round(((i + 1) / mappings.length) * 100));
+            }
+            
             const pdfBytes = await pdfDoc.save();
-            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-            FileSaver.saveAs(blob, `${selectedTemplate.templateName}_filled.pdf`);
+            FileSaver.saveAs(new Blob([pdfBytes], { type: 'application/pdf' }), `${selectedTemplate.templateName}_filled.pdf`);
 
         } catch (error) {
             console.error("PDF 生成失敗:", error);
@@ -192,11 +142,14 @@ export default function BatchFillPage({ students }) {
         return [...students].sort((a,b) => (a.class || '').localeCompare(b.class) || (a.classNo || '').localeCompare(b.classNo));
     }, [students]);
     
-    const selectedPlayerIds = entrySlots.map(s => s.studentId).filter(Boolean);
+    const formFields = useMemo(() => {
+        if (!selectedTemplate) return [];
+        return [...new Set(selectedTemplate.mappings.map(m => m.fieldKey))].sort();
+    }, [selectedTemplate]);
 
     return (
         <div className="space-y-8 animate-in fade-in max-w-7xl mx-auto">
-            <PageHeader title="批量生成報名表" subtitle="選擇範本、勾選學生、一鍵下載所有填妥的PDF" icon={FileText} />
+            <PageHeader title="批量生成報名表" subtitle="選擇範本，填寫資料，一鍵生成PDF" icon={FileText} />
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
                 <Card className="lg:col-span-1">
@@ -230,23 +183,27 @@ export default function BatchFillPage({ students }) {
                         </Card>
                     )}
 
-                    {entrySlots.length > 0 && (
+                    {selectedTemplate && (
                         <Card>
                              <h3 className="text-xl font-black mb-4 flex items-center gap-2">
-                                <span className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-sans">2</span> 
-                                選擇參賽隊員
+                                <span className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-sans">2</span>
+                                填寫報名資料
                             </h3>
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {entrySlots.map(slot => (
-                                    <EntrySlot 
-                                        key={slot.slotNumber}
-                                        slot={slot}
-                                        students={sortedStudents}
-                                        onSelectPlayer={handleSelectPlayerForSlot}
-                                        onUpdateExtraData={handleUpdateExtraData}
-                                        selectedPlayerIds={selectedPlayerIds}
-                                    />
+                                {formFields.map(fieldKey => (
+                                    <div key={fieldKey}>
+                                        <label className="font-bold text-sm text-slate-700">{fieldKey}</label>
+                                        <DynamicInput 
+                                            fieldKey={fieldKey}
+                                            value={formData[fieldKey]}
+                                            students={sortedStudents}
+                                            onUpdate={handleFormUpdate}
+                                        />
+                                    </div>
                                 ))}
+                                {formFields.length === 0 && (
+                                    <p className="text-slate-400 text-sm col-span-full">此範本尚未標記任何欄位。</p>
+                                )}
                              </div>
                         </Card>
                     )}
@@ -258,9 +215,9 @@ export default function BatchFillPage({ students }) {
                     <div className="flex items-center gap-6">
                         <div><p className="text-xs font-bold text-slate-400">已選範本</p><p className="font-bold">{selectedTemplate?.templateName || '未選擇'}</p></div>
                         <ChevronsRight className="text-slate-300" />
-                        <div><p className="text-xs font-bold text-slate-400">已填席位</p><p className="font-bold">{selectedPlayerIds.length} / {entrySlots.length}</p></div>
+                        <div><p className="text-xs font-bold text-slate-400">已填寫欄位</p><p className="font-bold">{Object.keys(formData).filter(k => formData[k]).length} / {formFields.length}</p></div>
                     </div>
-                    <PrimaryButton onClick={handleGeneratePdf} disabled={!selectedTemplate || selectedPlayerIds.length === 0 || isGenerating} icon={isGenerating ? undefined : Download} loading={isGenerating}>
+                    <PrimaryButton onClick={handleGeneratePdf} disabled={!selectedTemplate || isGenerating} icon={isGenerating ? undefined : Download} loading={isGenerating}>
                         {isGenerating ? `生成中... (${progress}%)` : `生成報名表`}
                     </PrimaryButton>
                 </Card>
