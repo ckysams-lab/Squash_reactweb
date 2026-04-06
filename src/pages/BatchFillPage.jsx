@@ -1,409 +1,310 @@
-// src/pages/BatchFillPage.jsx (Version 8.0 - Fixed Coords, Fixed Font, True Batch Mode)
+// src/pages/BatchFillPage.jsx (Version 8.0 - Team Slot Model, Markers on Preview, Name Display Fix)
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { db } from '../firebase';
 import { PageHeader, Card, PrimaryButton } from '../components/ui.jsx';
-import { FileText, Download, ChevronsRight, Loader2, Eye, Users } from 'lucide-react';
+import { FileText, Download, ChevronsRight, Loader2, Eye } from 'lucide-react';
 import PdfPreviewer from '../components/PdfPreviewer';
+import { TEAM_SLOTS, STUDENT_PROPS, parseSlotKey } from './FormTemplatePage';
 
-// ---------------------------------------------------------------------------
-// Backward-compatible field classification
-// ---------------------------------------------------------------------------
-
-// Keys that map to student records. Old templates have no fieldSource, so we
-// classify by matching against this set as a fallback.
-const STUDENT_FIELD_KEYS = new Set([
-  'nameZH', 'nameEN', 'dob', 'gender', 'idNumber', 'class', 'phone',
-  // extend this list if you add more fields to STUDENT_FIELDS in FormTemplatePage
-]);
-
-/**
- * Determine the effective source of a mapping, supporting old Firestore documents
- * that were saved before fieldSource was added.
- */
-const getFieldSource = (mapping) => {
-  if (mapping.fieldSource) return mapping.fieldSource;
-  return STUDENT_FIELD_KEYS.has(mapping.fieldKey) ? 'student' : 'manual';
-};
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Read a value from a student object by dot-notation path, e.g. "personal.name".
- */
-const getStudentValue = (obj, path, defaultValue = '') => {
-  if (!path || !obj) return defaultValue;
-  const value = path.split('.').reduce((acc, part) => acc?.[part], obj);
-  return value ?? defaultValue;
-};
-
-/**
- * Resolve the text to draw for a single mapping entry given:
- *  - the mapping metadata saved from FormTemplatePage
- *  - the current student object (for auto-fill fields)
- *  - the manual form data object (for manual fields)
- *
- * The STUDENT_FIELDS exported from FormTemplatePage use the `key` as the path
- * into the student object (e.g. key = "nameZH" → student.nameZH).
- */
-const resolveFieldValue = (mapping, student, manualData) => {
-  const { fieldKey } = mapping;
-  if (getFieldSource(mapping) === 'student' && student) {
-    return String(getStudentValue(student, fieldKey, ''));
-  }
-  return String(manualData[fieldKey] ?? '');
-};
-
-/**
- * FIX: Convert a relative marker position (0–1 fractions of the *rendered* PDF
- * canvas size) back to absolute PDF user-space points.
- *
- * PdfPreviewer renders each page at some CSS pixel size. The markers store
- * x/y as fractions of that rendered size. pdf-lib's coordinate system has its
- * origin at the BOTTOM-LEFT of the page, so we must flip the y axis.
- *
- * @param {number} relX   - marker.x  (0 to 1 fraction of page width)
- * @param {number} relY   - marker.y  (0 to 1 fraction of page height, 0 = top)
- * @param {PDFPage} pdfPage
- * @returns {{ x: number, y: number }} in PDF points (origin = bottom-left)
- */
-const relativeToAbsoluteCoords = (relX, relY, pdfPage) => {
+// ─── Coordinate helper ───────────────────────────────────────────────────────
+// Markers store x/y as fractions (0–1) of the rendered canvas.
+// pdf-lib uses absolute points with origin at BOTTOM-LEFT → flip Y.
+const toAbsCoords = (relX, relY, pdfPage) => {
   const { width, height } = pdfPage.getSize();
-  return {
-    x: relX * width,
-    // Flip Y: PDF origin is bottom-left, but our marker Y is measured from top
-    y: height - relY * height,
-  };
+  return { x: relX * width, y: height - relY * height };
 };
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
 /**
- * A simple text input for fields that are NOT auto-filled from student records.
- * These are fields tagged with fieldSource = 'manual' in the template mappings.
+ * A single student slot row: shows the slot label and a searchable dropdown
+ * of students from the roster. Displays "中文姓名 (班別)" in the list.
  */
-const ManualFieldInput = ({ fieldKey, fieldLabel, value, onChange }) => (
+const SlotPicker = ({ slotId, slotLabel, students, selectedId, onSelect }) => {
+  const selected = students.find(s => s.id === selectedId);
+
+  return (
+    <div className="flex items-center gap-3 py-2 border-b border-slate-100 last:border-0">
+      <span className="w-20 shrink-0 text-xs font-bold text-slate-500">{slotLabel}</span>
+      <select
+        value={selectedId || ''}
+        onChange={(e) => onSelect(slotId, e.target.value || null)}
+        className="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-300"
+      >
+        {/* FIX: option text shows name + class so the user always sees who they picked */}
+        <option value="">— 選擇球員 —</option>
+        {students.map(s => (
+          <option key={s.id} value={s.id}>
+            {s.nameZH || s.nameEN || s.id}
+            {s.class ? ` (${s.class})` : ''}
+          </option>
+        ))}
+      </select>
+      {selected && (
+        <button
+          onClick={() => onSelect(slotId, null)}
+          className="text-slate-300 hover:text-red-400 text-sm shrink-0"
+          title="清除"
+        >✕</button>
+      )}
+    </div>
+  );
+};
+
+/**
+ * A text input for manual (school-level) fields.
+ */
+const ManualInput = ({ fieldKey, fieldLabel, value, onChange }) => (
   <div>
-    <label className="font-bold text-sm text-slate-700">
+    <label className="font-bold text-sm text-slate-700 flex items-center gap-2">
       {fieldLabel || fieldKey}
-      <span className="ml-2 text-xs font-normal text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">手動</span>
+      <span className="text-xs font-normal text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">手動</span>
     </label>
     <input
       type="text"
       value={value || ''}
       onChange={(e) => onChange(fieldKey, e.target.value)}
       placeholder={`輸入 ${fieldLabel || fieldKey}...`}
-      className="w-full mt-1 bg-slate-100 border border-slate-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
+      className="w-full mt-1 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none"
     />
   </div>
 );
 
-/**
- * A student selector checkbox list for choosing which students to generate PDFs for.
- */
-const StudentSelector = ({ students, selectedIds, onToggle, onSelectAll, onClearAll }) => (
-  <div>
-    <div className="flex items-center justify-between mb-2">
-      <span className="text-sm font-bold text-slate-600">選擇學生 ({selectedIds.size} / {students.length})</span>
-      <div className="flex gap-2">
-        <button onClick={onSelectAll} className="text-xs text-blue-500 hover:underline">全選</button>
-        <button onClick={onClearAll} className="text-xs text-slate-400 hover:underline">清除</button>
-      </div>
-    </div>
-    <div className="max-h-64 overflow-y-auto space-y-1 border border-slate-200 rounded-lg p-2">
-      {students.map(s => (
-        <label key={s.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 rounded px-2 py-1">
-          <input
-            type="checkbox"
-            checked={selectedIds.has(s.id)}
-            onChange={() => onToggle(s.id)}
-            className="rounded"
-          />
-          <span className="text-sm text-slate-700 font-medium">{s.nameZH || s.nameEN}</span>
-          <span className="text-xs text-slate-400">{s.class}</span>
-        </label>
-      ))}
-      {students.length === 0 && (
-        <p className="text-xs text-slate-400 text-center py-4">沒有學生資料</p>
-      )}
-    </div>
-  </div>
-);
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function BatchFillPage({ students }) {
-  const [templates, setTemplates] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [templates,        setTemplates]       = useState([]);
+  const [isLoading,        setIsLoading]        = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0, label: '' });
+  const [isGenerating,     setIsGenerating]     = useState(false);
+  const [progressLabel,    setProgressLabel]    = useState('');
 
-  // Manual-input fields (fieldSource === 'manual') shared across all generated PDFs
+  // Manual fields (school name, teacher, etc.)
   const [manualData, setManualData] = useState({});
 
-  // Batch: which students to include
-  const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
+  // Slot → student id mapping  e.g. { A1: 'studentId_xyz', B2: null, … }
+  const [slotAssignments, setSlotAssignments] = useState({});
 
   // Preview
-  const [previewFile, setPreviewFile] = useState(null);
+  const [previewFile,    setPreviewFile]    = useState(null);
+  const [previewMarkers, setPreviewMarkers] = useState([]);
 
-  // -------------------------------------------------------------------------
-  // Load templates from Firestore
-  // -------------------------------------------------------------------------
+  // ── Load templates ────────────────────────────────────────────────────────
   useEffect(() => {
     setIsLoading(true);
     const q = query(collection(db, 'form_templates'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setTemplates(data);
+    const unsub = onSnapshot(q, snap => {
+      setTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setIsLoading(false);
-    }, (err) => {
-      console.error('Failed to fetch templates:', err);
-      setIsLoading(false);
-    });
-    return () => unsubscribe();
+    }, err => { console.error(err); setIsLoading(false); });
+    return () => unsub();
   }, []);
 
-  // -------------------------------------------------------------------------
-  // When a template is selected, reset state and load its PDF preview
-  // -------------------------------------------------------------------------
+  // ── When template changes ─────────────────────────────────────────────────
   useEffect(() => {
-    if (selectedTemplate?.pdfData) {
-      fetch(selectedTemplate.pdfData)
-        .then(res => res.blob())
-        .then(blob => setPreviewFile(new File([blob], 'preview.pdf', { type: 'application/pdf' })));
-    } else {
+    if (!selectedTemplate) {
       setPreviewFile(null);
+      setPreviewMarkers([]);
+      return;
     }
+
+    // Build a preview File object from the stored base64 data
+    fetch(selectedTemplate.pdfData)
+      .then(r => r.blob())
+      .then(blob => setPreviewFile(new File([blob], 'preview.pdf', { type: 'application/pdf' })));
+
+    // FIX: pass the saved mappings as markers so they appear as pins on the preview
+    setPreviewMarkers(
+      (selectedTemplate.mappings || []).map((m, i) => ({
+        id:       `preview-${i}`,
+        index:    i,
+        page:     m.page,
+        x:        m.x,
+        y:        m.y,
+        fieldKey: m.fieldKey,
+      }))
+    );
+
     setManualData({});
-    setSelectedStudentIds(new Set());
+    setSlotAssignments({});
   }, [selectedTemplate]);
 
-  // -------------------------------------------------------------------------
-  // Derived data
-  // -------------------------------------------------------------------------
-
+  // ── Derived data ──────────────────────────────────────────────────────────
   const sortedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
     return [...students].sort(
-      (a, b) => (a.class || '').localeCompare(b.class) || (a.classNo || '').localeCompare(b.classNo)
+      (a, b) => (a.class || '').localeCompare(b.class) || (a.nameZH || '').localeCompare(b.nameZH)
     );
   }, [students]);
 
-  /**
-   * Unique manual fields in the template (fields that need user input,
-   * i.e. NOT sourced from the student record).
-   */
+  // Unique manual fields in this template
   const manualFields = useMemo(() => {
     if (!selectedTemplate) return [];
     const seen = new Set();
-    return selectedTemplate.mappings
-      .filter(m => getFieldSource(m) === 'manual' && !seen.has(m.fieldKey) && seen.add(m.fieldKey))
-      .map(m => ({ fieldKey: m.fieldKey, fieldLabel: m.fieldLabel || m.fieldKey }));
+    return (selectedTemplate.mappings || [])
+      .filter(m => m.fieldSource === 'manual' && !seen.has(m.fieldKey) && seen.add(m.fieldKey))
+      .map(m => ({ fieldKey: m.fieldKey, fieldLabel: m.fieldLabel }));
   }, [selectedTemplate]);
 
-  const hasStudentFields = useMemo(() => {
-    if (!selectedTemplate) return false;
-    return selectedTemplate.mappings.some(m => getFieldSource(m) === 'student');
+  // Which slots actually appear in this template (may be a subset of all 12)
+  const usedSlots = useMemo(() => {
+    if (!selectedTemplate) return [];
+    const slotSet = new Set(
+      (selectedTemplate.mappings || [])
+        .filter(m => m.fieldSource === 'student_slot' && m.slotId)
+        .map(m => m.slotId)
+    );
+    return TEAM_SLOTS.filter(s => slotSet.has(s.slotId));
   }, [selectedTemplate]);
 
-  const handleManualUpdate = useCallback((fieldKey, value) => {
-    setManualData(prev => ({ ...prev, [fieldKey]: value }));
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleManualUpdate = useCallback((key, value) => {
+    setManualData(prev => ({ ...prev, [key]: value }));
   }, []);
 
-  const handleToggleStudent = useCallback((id) => {
-    setSelectedStudentIds(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+  const handleSlotSelect = useCallback((slotId, studentId) => {
+    setSlotAssignments(prev => ({ ...prev, [slotId]: studentId }));
   }, []);
 
-  const handleSelectAll = useCallback(() => {
-    setSelectedStudentIds(new Set(sortedStudents.map(s => s.id)));
-  }, [sortedStudents]);
-
-  const handleClearAll = useCallback(() => {
-    setSelectedStudentIds(new Set());
-  }, []);
-
-  // -------------------------------------------------------------------------
-  // Core: generate a single filled PDF for one student
-  // FIX 1: pdfDoc.embedFont(StandardFonts.Helvetica) — not fetch()
-  // FIX 2: relativeToAbsoluteCoords() for correct placement
-  // -------------------------------------------------------------------------
-  const generateOnePdf = async (pdfDoc, font, template, student, manualData) => {
-    const mappings = template.mappings;
-    for (const mapping of mappings) {
-      const { page, x, y } = mapping;
-      const text = resolveFieldValue(mapping, student, manualData);
-      if (!text) continue;
-
-      const pdfPage = pdfDoc.getPage(page - 1);
-      // FIX: convert relative (0–1) coordinates to absolute PDF points
-      const { x: absX, y: absY } = relativeToAbsoluteCoords(x, y, pdfPage);
-
-      pdfPage.drawText(text, {
-        x: absX,
-        y: absY,
-        font,
-        size: 10,
-        color: rgb(0, 0, 0),
-      });
+  // ── PDF generation ────────────────────────────────────────────────────────
+  /**
+   * Resolve the text to print for a single mapping entry.
+   *
+   * - manual fields   → read from manualData
+   * - student_slot    → look up the assigned student, read the named property
+   */
+  const resolveValue = useCallback((mapping) => {
+    if (mapping.fieldSource === 'manual') {
+      return String(manualData[mapping.fieldKey] ?? '');
     }
-    return pdfDoc.save();
-  };
+    if (mapping.fieldSource === 'student_slot' && mapping.slotId && mapping.prop) {
+      const studentId = slotAssignments[mapping.slotId];
+      if (!studentId) return '';
+      const student = students.find(s => s.id === studentId);
+      // FIX: read the named property from the student object (not raw id)
+      return String(student?.[mapping.prop] ?? '');
+    }
+    return '';
+  }, [manualData, slotAssignments, students]);
 
-  // -------------------------------------------------------------------------
-  // Batch generate: one PDF per student, download as ZIP
-  // -------------------------------------------------------------------------
-  const handleGenerateBatch = async () => {
+  const handleGenerate = async () => {
     if (!selectedTemplate) return alert('請先選擇範本。');
-    if (hasStudentFields && selectedStudentIds.size === 0) return alert('請至少選擇一名學生。');
 
     setIsGenerating(true);
-    setProgress({ current: 0, total: 0, label: '準備中...' });
-
+    setProgressLabel('載入 PDF…');
     try {
-      // FIX: embed the font once from the template (no fetch needed)
       const existingPdfBytes = await fetch(selectedTemplate.pdfData).then(r => r.arrayBuffer());
+      const pdfDoc = await PDFDocument.load(existingPdfBytes);
+      // FIX: correct font embedding — no fetch(), just embedFont()
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-      const studentsToProcess = hasStudentFields
-        ? sortedStudents.filter(s => selectedStudentIds.has(s.id))
-        : [null]; // no student fields → generate a single PDF
+      const mappings = selectedTemplate.mappings || [];
+      for (let i = 0; i < mappings.length; i++) {
+        const mapping = mappings[i];
+        const text = resolveValue(mapping);
+        if (!text) continue;
 
-      const zip = new JSZip();
-      const total = studentsToProcess.length;
-      setProgress({ current: 0, total, label: '生成中...' });
+        const pdfPage = pdfDoc.getPage(mapping.page - 1);
+        // FIX: convert relative coords → absolute PDF points
+        const { x, y } = toAbsCoords(mapping.x, mapping.y, pdfPage);
 
-      for (let i = 0; i < studentsToProcess.length; i++) {
-        const student = studentsToProcess[i];
-
-        // Load a fresh copy of the PDF for each student
-        const pdfDoc = await PDFDocument.load(existingPdfBytes);
-        // FIX: correct way to embed a standard font
-        const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-        const pdfBytes = await generateOnePdf(pdfDoc, font, selectedTemplate, student, manualData);
-
-        const fileName = student
-          ? `${selectedTemplate.templateName}_${student.nameZH || student.nameEN || student.id}.pdf`
-          : `${selectedTemplate.templateName}_filled.pdf`;
-
-        zip.file(fileName, pdfBytes);
-        setProgress({ current: i + 1, total, label: `已完成 ${i + 1} / ${total}` });
+        pdfPage.drawText(text, { x, y, font, size: 10, color: rgb(0, 0, 0) });
+        setProgressLabel(`填寫中… ${i + 1} / ${mappings.length}`);
       }
 
-      if (total === 1) {
-        // Single PDF → download directly without ZIP
-        const [fileName, fileData] = Object.entries(zip.files)[0];
-        const bytes = await fileData.async('uint8array');
-        saveAs(new Blob([bytes], { type: 'application/pdf' }), fileName);
-      } else {
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        saveAs(zipBlob, `${selectedTemplate.templateName}_batch.zip`);
-      }
-
+      const pdfBytes = await pdfDoc.save();
+      saveAs(
+        new Blob([pdfBytes], { type: 'application/pdf' }),
+        `${selectedTemplate.templateName}_filled.pdf`
+      );
     } catch (err) {
       console.error('PDF 生成失敗:', err);
       alert(`生成 PDF 時發生錯誤：${err.message}`);
     } finally {
       setIsGenerating(false);
-      setProgress({ current: 0, total: 0, label: '' });
+      setProgressLabel('');
     }
   };
 
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
-  const filledManualCount = manualFields.filter(f => manualData[f.fieldKey]).length;
-  const canGenerate =
-    !!selectedTemplate &&
-    !isGenerating &&
-    (!hasStudentFields || selectedStudentIds.size > 0);
+  // ── Stats for bottom bar ──────────────────────────────────────────────────
+  const filledSlots   = usedSlots.filter(s => slotAssignments[s.slotId]).length;
+  const filledManual  = manualFields.filter(f => manualData[f.fieldKey]).length;
 
+  const canGenerate = !!selectedTemplate && !isGenerating;
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-8 animate-in fade-in max-w-7xl mx-auto">
-      <PageHeader title="批量生成報名表" subtitle="選擇範本，填寫資料，一鍵生成PDF" icon={FileText} />
+      <PageHeader title="填寫及生成報名表" subtitle="選擇範本，分配球員，一鍵生成 PDF" icon={FileText} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
 
-        {/* ── Step 1: Choose template ── */}
+        {/* ── Step 1: choose template ── */}
         <Card className="lg:col-span-1">
           <h3 className="text-xl font-black mb-4 flex items-center gap-2">
-            <span className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-sans">1</span>
+            <span className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-sans text-sm">1</span>
             選擇範本
           </h3>
-          <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+          <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
             {isLoading ? (
               <div className="text-center text-slate-400 py-10">
-                <Loader2 className="animate-spin inline-block mr-2" /> 載入中...
+                <Loader2 className="animate-spin inline-block mr-2" size={16} /> 載入中...
               </div>
             ) : templates.length === 0 ? (
-              <div className="text-center text-slate-400 py-10">
+              <p className="text-center text-slate-400 py-10 text-sm">
                 暫無任何範本。<br />請先到「報名表範本」頁面創建。
-              </div>
-            ) : (
-              templates.map(template => (
-                <button
-                  key={template.id}
-                  onClick={() => setSelectedTemplate(template)}
-                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                    selectedTemplate?.id === template.id ? 'bg-blue-50 border-blue-500' : 'bg-white hover:bg-slate-50'
-                  }`}
-                >
-                  <p className="font-bold">{template.templateName}</p>
-                  <p className="text-xs text-slate-400">包含 {template.mappings.length} 個標記欄位</p>
-                </button>
-              ))
-            )}
+              </p>
+            ) : templates.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setSelectedTemplate(t)}
+                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                  selectedTemplate?.id === t.id ? 'bg-blue-50 border-blue-500' : 'bg-white border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <p className="font-bold text-sm">{t.templateName}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{t.mappings?.length ?? 0} 個標記欄位</p>
+              </button>
+            ))}
           </div>
         </Card>
 
-        {/* ── Step 2+3: Fill data ── */}
+        {/* ── Steps 2+3 ── */}
         <div className="lg:col-span-2 space-y-8">
 
-          {/* PDF preview */}
+          {/* PDF preview — FIX: markers prop passed so pins show */}
           {previewFile && (
             <Card>
               <h3 className="text-xl font-black mb-4 flex items-center gap-2">
                 <Eye className="text-purple-500" size={20} /> 範本預覽
               </h3>
-              <div className="max-h-96 overflow-y-auto rounded-lg border bg-slate-100 p-2">
-                <PdfPreviewer file={previewFile} />
+              <div className="max-h-[480px] overflow-y-auto rounded-lg border bg-slate-100 p-2">
+                <PdfPreviewer
+                  file={previewFile}
+                  markers={previewMarkers}
+                  // read-only preview: no click handler
+                />
               </div>
             </Card>
           )}
 
           {selectedTemplate && (
             <>
-              {/* Manual fields */}
+              {/* Manual / school fields */}
               {manualFields.length > 0 && (
                 <Card>
-                  <h3 className="text-xl font-black mb-4 flex items-center gap-2">
-                    <span className="bg-amber-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-sans">2</span>
-                    手動填寫欄位
-                    <span className="text-xs font-normal text-slate-400 ml-auto">
-                      {filledManualCount} / {manualFields.length} 已填
-                    </span>
+                  <h3 className="text-xl font-black mb-1 flex items-center gap-2">
+                    <span className="bg-amber-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-sans text-sm">2</span>
+                    學校資料
                   </h3>
-                  <p className="text-xs text-slate-500 mb-4">
-                    以下欄位對所有生成的 PDF 使用相同的值（例如：活動名稱、日期）。
-                  </p>
+                  <p className="text-xs text-slate-500 mb-4">以下欄位所有生成的 PDF 共用相同值。</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {manualFields.map(({ fieldKey, fieldLabel }) => (
-                      <ManualFieldInput
+                      <ManualInput
                         key={fieldKey}
                         fieldKey={fieldKey}
                         fieldLabel={fieldLabel}
@@ -415,25 +316,41 @@ export default function BatchFillPage({ students }) {
                 </Card>
               )}
 
-              {/* Student selector */}
-              {hasStudentFields && (
+              {/* Per-slot student assignment */}
+              {usedSlots.length > 0 && (
                 <Card>
-                  <h3 className="text-xl font-black mb-4 flex items-center gap-2">
-                    <span className="bg-green-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-sans">
+                  <h3 className="text-xl font-black mb-1 flex items-center gap-2">
+                    <span className="bg-green-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-sans text-sm">
                       {manualFields.length > 0 ? '3' : '2'}
                     </span>
-                    選擇學生
+                    分配球員名單
                   </h3>
-                  <p className="text-xs text-slate-500 mb-4">
-                    每名學生將生成一份獨立的 PDF，學生資料將自動從記錄中填入。
+                  <p className="text-xs text-slate-500 mb-3">
+                    為每個隊伍位置指定球員，系統將自動從學生記錄填入中文姓名、班別及出生日期。
                   </p>
-                  <StudentSelector
-                    students={sortedStudents}
-                    selectedIds={selectedStudentIds}
-                    onToggle={handleToggleStudent}
-                    onSelectAll={handleSelectAll}
-                    onClearAll={handleClearAll}
-                  />
+
+                  {/* Group by team letter */}
+                  {['A', 'B', 'C', 'D'].map(team => {
+                    const teamSlots = usedSlots.filter(s => s.slotId.startsWith(team));
+                    if (teamSlots.length === 0) return null;
+                    return (
+                      <div key={team} className="mb-4 last:mb-0">
+                        <div className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1 px-1">{team} 隊</div>
+                        <div className="bg-slate-50 rounded-xl px-3 py-1">
+                          {teamSlots.map(({ slotId, label }) => (
+                            <SlotPicker
+                              key={slotId}
+                              slotId={slotId}
+                              slotLabel={label}
+                              students={sortedStudents}
+                              selectedId={slotAssignments[slotId] ?? null}
+                              onSelect={handleSlotSelect}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </Card>
               )}
             </>
@@ -443,31 +360,37 @@ export default function BatchFillPage({ students }) {
 
       {/* ── Sticky action bar ── */}
       <div className="sticky bottom-6">
-        <Card noPadding className="p-6 flex items-center justify-between shadow-2xl">
-          <div className="flex items-center gap-6">
+        <Card noPadding className="p-5 flex items-center justify-between shadow-2xl">
+          <div className="flex items-center gap-6 text-sm">
             <div>
               <p className="text-xs font-bold text-slate-400">已選範本</p>
               <p className="font-bold">{selectedTemplate?.templateName || '未選擇'}</p>
             </div>
-            <ChevronsRight className="text-slate-300" />
-            <div>
-              <p className="text-xs font-bold text-slate-400">生成份數</p>
-              <p className="font-bold">
-                {hasStudentFields ? `${selectedStudentIds.size} 名學生` : (selectedTemplate ? '1 份' : '—')}
-              </p>
-            </div>
+            <ChevronsRight className="text-slate-300" size={18} />
+            {usedSlots.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-slate-400">球員位置</p>
+                <p className="font-bold">{filledSlots} / {usedSlots.length} 已分配</p>
+              </div>
+            )}
+            {manualFields.length > 0 && (
+              <>
+                <ChevronsRight className="text-slate-300" size={18} />
+                <div>
+                  <p className="text-xs font-bold text-slate-400">學校資料</p>
+                  <p className="font-bold">{filledManual} / {manualFields.length} 已填寫</p>
+                </div>
+              </>
+            )}
           </div>
 
-          <PrimaryButton onClick={handleGenerateBatch} disabled={!canGenerate} icon={isGenerating ? undefined : Download}>
-            {isGenerating
-              ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="animate-spin" size={16} />
-                  {progress.label || '生成中...'}
-                  {progress.total > 0 && ` (${progress.current}/${progress.total})`}
-                </span>
-              )
-              : `生成報名表${selectedStudentIds.size > 1 ? ` (${selectedStudentIds.size} 份 ZIP)` : ''}`}
+          <PrimaryButton onClick={handleGenerate} disabled={!canGenerate} icon={isGenerating ? undefined : Download}>
+            {isGenerating ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="animate-spin" size={16} />
+                {progressLabel || '生成中...'}
+              </span>
+            ) : '生成報名表 PDF'}
           </PrimaryButton>
         </Card>
       </div>
