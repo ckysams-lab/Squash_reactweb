@@ -1,7 +1,8 @@
-// src/pages/RankingPage.jsx (Version 1.0)
+code = """// src/pages/RankingPage.jsx (Version 1.3)
+// 更新內容: 整合 1.2 版本的權重計分機制說明，並將教練操作按鈕更新為「輸入對賽成績」
 
 import React from 'react';
-import { Search, Trophy as TrophyIcon, Crown, Info, Plus, MinusCircle, Globe, Trash2 } from 'lucide-react';
+import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords } from 'lucide-react';
 import { BADGE_DATA, ACHIEVEMENT_DATA } from '../constants/data';
 
 // 引入共用 UI 元件
@@ -14,7 +15,7 @@ export default function RankingPage({
     searchTerm,
     setSearchTerm,
     setShowPlayerCard,
-    adjustPoints,
+    handleMatchRecord, // 新增: 處理對賽成績輸入 (包含權重計算)
     handleExternalComp,
     deleteItem
 }) {
@@ -27,7 +28,7 @@ export default function RankingPage({
                 icon={TrophyIcon} 
             />
 
-            {/* 前三名頒獎台區塊 */}
+            {/* 前三名頒獎台區塊 (保持不變) */}
             <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
@@ -59,23 +60,30 @@ export default function RankingPage({
                 })}
             </div>
 
-            {/* 積分機制說明 */}
+            {/* 👉 更新：1.3 版本 積分權重機制說明 👈 */}
             <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
                 <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Info size={24} /></div>
                 <div className="flex-1">
-                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分機制說明</h4>
+                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分權重機制說明 (v1.3)</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
-                        <ul className="list-disc pl-4 space-y-1"><li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li><li><span className="text-blue-600">內部聯賽</span>：勝方 +10 / 巨人殺手 +20</li></ul>
-                        <ul className="list-disc pl-4 space-y-1"><li><span className="text-indigo-500">校外賽參與</span>：+20 / 勝場 +20</li><li><span className="text-yellow-600">校外賽獎項</span>：冠軍+100 / 亞軍+50 / 季殿+30</li></ul>
+                        <ul className="list-disc pl-4 space-y-1">
+                            <li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li>
+                            <li><span className="text-blue-600">基礎勝局</span>：勝方 +10分 / 敗方 -5分</li>
+                            <li><span className="text-indigo-500">局數權重</span>：3-0 完勝(x1.2) / 3-1(x1.1)</li>
+                        </ul>
+                        <ul className="list-disc pl-4 space-y-1">
+                            <li><span className="text-yellow-600">實力權重</span>：擊敗高排名對手獲額外加成</li>
+                            <li><span className="text-red-500">賽事權重</span>：校內(x1.0) / 友誼賽(x1.2) / 學界(x1.5) / 區際(x2.0)</li>
+                        </ul>
                     </div>
                 </div>
             </div>
 
-            {/* 全體隊員列表 (使用 Card 元件) */}
+            {/* 全體隊員列表 */}
             <Card noPadding>
                 <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
-                  {role === 'admin' && <div className="flex gap-2"><span className="text-[10px] text-slate-400 self-center">*請在下方列表為個別學生加分</span></div>}
+                  {role === 'admin' && <div className="flex gap-2"><span className="text-[10px] text-slate-400 self-center">*請在下方點擊以記錄對賽成績</span></div>}
                   <div className="relative w-full md:w-80">
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
                       <input 
@@ -94,7 +102,6 @@ export default function RankingPage({
                         <tr key={s.id} className="group hover:bg-blue-50/30 transition-all cursor-pointer" onClick={() => setShowPlayerCard(s)}>
                           <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
                           
-                          {/* 👉 優化後的隊員資料顯示區塊 👈 */}
                           <td className="px-8 py-8 max-w-[250px]">
                               <div className="flex items-center gap-4">
                                   <div className="w-12 h-12 bg-slate-50 rounded-2xl flex shrink-0 items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase shadow-inner">{s.name[0]}</div>
@@ -125,8 +132,9 @@ export default function RankingPage({
                           {role === 'admin' && (
                             <td className="px-8 py-8">
                                 <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                    <button onClick={()=>adjustPoints(s.id, 10)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="+10分"><Plus size={18}/></button>
-                                    <button onClick={()=>adjustPoints(s.id, -10)} className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="-10分"><MinusCircle size={18}/></button>
+                                    {/* 👉 更新：1.3 版本 新增「輸入對賽成績」按鈕取代簡單的加減分 👈 */}
+                                    <button onClick={()=>handleMatchRecord(s)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="輸入對賽成績 (計算權重)"><Swords size={18}/></button>
+                                    
                                     <button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="校外賽成績錄入"><Globe size={18}/></button>
                                     <button onClick={()=>deleteItem('students', s.id)} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="永久刪除"><Trash2 size={18}/></button>
                                 </div>
@@ -141,3 +149,7 @@ export default function RankingPage({
         </div>
     );
 }
+"""
+
+with open('updated_ui.txt', 'w', encoding='utf-8') as f:
+    f.write(code)
