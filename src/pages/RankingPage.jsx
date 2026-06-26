@@ -1,5 +1,5 @@
-code = """// src/pages/RankingPage.jsx (Version 1.3)
-// 更新內容: 整合 1.2 版本的權重計分機制說明，並將教練操作按鈕更新為「輸入對賽成績」
+// src/pages/RankingPage.jsx (Version 1.4)
+// 更新內容: 修復 Vercel build error，移除多餘的 Python 字串符號，確保為純 React 格式
 
 import React from 'react';
 import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords } from 'lucide-react';
@@ -28,7 +28,7 @@ export default function RankingPage({
                 icon={TrophyIcon} 
             />
 
-            {/* 前三名頒獎台區塊 (保持不變) */}
+            {/* 前三名頒獎台區塊 */}
             <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
@@ -60,11 +60,11 @@ export default function RankingPage({
                 })}
             </div>
 
-            {/* 👉 更新：1.3 版本 積分權重機制說明 👈 */}
+            {/* 積分權重機制說明 */}
             <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
                 <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Info size={24} /></div>
                 <div className="flex-1">
-                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分權重機制說明 (v1.3)</h4>
+                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分權重機制說明 (v1.4)</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
                         <ul className="list-disc pl-4 space-y-1">
                             <li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li>
@@ -132,7 +132,7 @@ export default function RankingPage({
                           {role === 'admin' && (
                             <td className="px-8 py-8">
                                 <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                    {/* 👉 更新：1.3 版本 新增「輸入對賽成績」按鈕取代簡單的加減分 👈 */}
+                                    {/* 輸入對賽成績按鈕 */}
                                     <button onClick={()=>handleMatchRecord(s)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="輸入對賽成績 (計算權重)"><Swords size={18}/></button>
                                     
                                     <button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="校外賽成績錄入"><Globe size={18}/></button>
@@ -149,7 +149,3 @@ export default function RankingPage({
         </div>
     );
 }
-"""
-
-with open('updated_ui.txt', 'w', encoding='utf-8') as f:
-    f.write(code)
