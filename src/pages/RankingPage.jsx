@@ -1,8 +1,8 @@
-// src/pages/RankingPage.jsx (Version 1.4)
-// 更新內容: 修復 Vercel build error，移除多餘的 Python 字串符號，確保為純 React 格式
+// src/pages/RankingPage.jsx (Version 1.5)
+// 更新內容: 修復 onClick 錯誤，並在當前頁面新增「對賽成績輸入 (Match Record Modal)」的彈出式版面設計
 
-import React from 'react';
-import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords, X } from 'lucide-react';
 import { BADGE_DATA, ACHIEVEMENT_DATA } from '../constants/data';
 
 // 引入共用 UI 元件
@@ -15,12 +15,23 @@ export default function RankingPage({
     searchTerm,
     setSearchTerm,
     setShowPlayerCard,
-    handleMatchRecord, // 新增: 處理對賽成績輸入 (包含權重計算)
     handleExternalComp,
     deleteItem
 }) {
+    // 新增：控制「對賽成績輸入」彈出視窗的狀態
+    const [matchModalData, setMatchModalData] = useState(null);
+    const [opponentId, setOpponentId] = useState("");
+    const [matchType, setMatchType] = useState("internal_challenge");
+    const [score, setScore] = useState("3-0");
+
+    // 預留給下一步整合 1.2 版本計算機制的 function
+    const handleMatchSubmit = () => {
+        alert(`即將整合權重計算機制！\n主角: ${matchModalData.name}\n對手ID: ${opponentId}\n賽事類型: ${matchType}\n局數比分: ${score}`);
+        setMatchModalData(null); // 關閉視窗
+    };
+
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 relative">
             
             <PageHeader 
                 title="積分排行榜" 
@@ -64,7 +75,7 @@ export default function RankingPage({
             <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
                 <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Info size={24} /></div>
                 <div className="flex-1">
-                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分權重機制說明 (v1.4)</h4>
+                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分權重機制說明 (v1.5)</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
                         <ul className="list-disc pl-4 space-y-1">
                             <li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li>
@@ -132,8 +143,8 @@ export default function RankingPage({
                           {role === 'admin' && (
                             <td className="px-8 py-8">
                                 <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                    {/* 輸入對賽成績按鈕 */}
-                                    <button onClick={()=>handleMatchRecord(s)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="輸入對賽成績 (計算權重)"><Swords size={18}/></button>
+                                    {/* 👉 更新：點擊後觸發打開 local Modal 狀態 👈 */}
+                                    <button onClick={()=>setMatchModalData(s)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="輸入對賽成績 (計算權重)"><Swords size={18}/></button>
                                     
                                     <button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="校外賽成績錄入"><Globe size={18}/></button>
                                     <button onClick={()=>deleteItem('students', s.id)} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="永久刪除"><Trash2 size={18}/></button>
@@ -146,6 +157,63 @@ export default function RankingPage({
                   </table>
                 </div>
             </Card>
+
+            {/* 👉 新增：對賽成績彈出視窗 (Modal) 👈 */}
+            {matchModalData && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100">
+                        <div className="p-6 bg-slate-50 border-b flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-100 text-blue-600 rounded-xl"><Swords size={20}/></div>
+                                <h3 className="text-xl font-black text-slate-800">輸入對賽成績</h3>
+                            </div>
+                            <button onClick={() => setMatchModalData(null)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-all"><X size={20}/></button>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">主角球員 (勝/負方)</label>
+                                <div className="p-3 bg-blue-50 text-blue-700 rounded-xl font-black">{matchModalData.name} (目前的總分: {matchModalData.totalPoints})</div>
+                            </div>
+                            
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">選擇對手</label>
+                                <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 transition-all" value={opponentId} onChange={(e)=>setOpponentId(e.target.value)}>
+                                    <option value="">-- 請選擇對手 --</option>
+                                    {rankedStudents.filter(s => s.id !== matchModalData.id).map(s => (
+                                        <option key={s.id} value={s.id}>{s.name} (積分: {s.totalPoints})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">比賽類型 (影響權重)</label>
+                                <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 transition-all" value={matchType} onChange={(e)=>setMatchType(e.target.value)}>
+                                    <option value="internal_challenge">校內日常挑戰賽 (x1.0)</option>
+                                    <option value="friendly_match">友誼賽/交流賽 (x1.2)</option>
+                                    <option value="inter_school">學界比賽 (x1.5)</option>
+                                    <option value="regional_elite">區際/全港錦標賽 (x2.0)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">局數比分 (影響權重)</label>
+                                <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 transition-all" value={score} onChange={(e)=>setScore(e.target.value)}>
+                                    <option value="3-0">勝 3 - 0 (完勝 x1.2)</option>
+                                    <option value="3-1">勝 3 - 1 (優勢 x1.1)</option>
+                                    <option value="3-2">勝 3 - 2 (險勝 x1.0)</option>
+                                    <option value="2-3">負 2 - 3 (惜敗 -5分)</option>
+                                    <option value="1-3">負 1 - 3 (落敗 -5分)</option>
+                                    <option value="0-3">負 0 - 3 (完敗 -5分)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="p-6 bg-slate-50 border-t flex justify-end gap-3">
+                            <button onClick={() => setMatchModalData(null)} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-200 transition-all">取消</button>
+                            <button onClick={handleMatchSubmit} className="px-6 py-3 rounded-xl font-black bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg transition-all">確認並計算積分</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
