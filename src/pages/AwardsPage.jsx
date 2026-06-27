@@ -1,8 +1,12 @@
-// src/pages/AwardsPage.jsx (Version 2.0)
-// 更新內容: 新增榮譽數據大屏、智能篩選器(學年/獎牌/類型)、團隊榮譽標籤，並支援點擊學員名字彈出個人檔案(Player Card)。
+// src/pages/AwardsPage.jsx (Version 2.1)
+// 更新內容: 修復 Crown 與 Trash2 圖示未引入導致的 ReferenceError 崩潰問題。
 
 import React, { useMemo, useState } from 'react';
-import { Award, Columns, History, PlusCircle, Trophy, UserCog, Medal, Calendar as CalendarIcon, Users, User, Filter, ArrowUpRight } from 'lucide-react';
+import { 
+    Award, Columns, History, PlusCircle, Trophy, UserCog, 
+    Medal, Calendar as CalendarIcon, Users, User, Filter, 
+    ArrowUpRight, Crown, Trash2 // 👉 修復：補回這兩個缺失的圖示
+} from 'lucide-react';
 
 // 輔助函數：根據日期計算學年 (例如 2023-10-15 -> "23/24 學年")
 const getAcademicYear = (dateString) => {
@@ -29,13 +33,13 @@ export default function AwardsPage({
     awardsViewMode,
     setAwardsViewMode,
     setShowAddAwardModal,
-    setShowPlayerCard, // 👉 接收彈出 Player Card 的函數
+    setShowPlayerCard,
     deleteItem
 }) {
     // --- 狀態：智能篩選器 ---
     const [filterYear, setFilterYear] = useState('ALL');
     const [filterMedal, setFilterMedal] = useState('ALL');
-    const [filterType, setFilterType] = useState('ALL'); // ALL, INDIVIDUAL, TEAM
+    const [filterType, setFilterType] = useState('ALL');
 
     // --- 數據統計 (Dashboard) ---
     const dashboardStats = useMemo(() => {
@@ -81,7 +85,7 @@ export default function AwardsPage({
             if (filterType === 'INDIVIDUAL') matchType = !isTeam;
 
             return matchYear && matchMedal && matchType;
-        }).sort((a, b) => new Date(b.date) - new Date(a.date)); // 預設按日期新到舊
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
     }, [awards, filterYear, filterMedal, filterType]);
 
 
@@ -133,12 +137,10 @@ export default function AwardsPage({
 
         return (
             <div style={style} className={`group relative flex flex-col ${rankStyles.bg} rounded-[2rem] p-1.5 shadow-lg ${rankStyles.shadow} transition-all duration-300 ease-in-out hover:-translate-y-1`}>
-                {/* 左上角緞帶裝飾 */}
                 <div className="absolute top-0 left-10 w-12 h-16 overflow-hidden z-20">
                     <div className={`absolute -top-2 left-0 w-full h-full rotate-45 transform-gpu ${rankStyles.ribbon} shadow-md`}></div>
                 </div>
 
-                {/* 👉 團隊榮譽標籤 👈 */}
                 {isTeam && (
                     <div className="absolute top-4 left-4 px-3 py-1.5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg flex items-center gap-1 z-30 border border-indigo-400/50">
                         <Users size={12}/> 團隊榮譽
@@ -146,7 +148,6 @@ export default function AwardsPage({
                 )}
 
                 <div className="bg-white/60 backdrop-blur-md rounded-[1.65rem] h-full flex flex-col p-6 border border-white/40">
-                    {/* 照片區塊 */}
                     <div className="w-full aspect-[4/3] rounded-2xl bg-white/50 overflow-hidden relative shadow-inner">
                         {award.photoUrl ? (
                             <img src={award.photoUrl} alt={award.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
@@ -160,12 +161,10 @@ export default function AwardsPage({
                         </div>
                     </div>
 
-                    {/* 文字資訊區塊 */}
                     <div className="flex-1 flex flex-col pt-5 px-1">
                         <p className={`text-xs font-bold ${rankStyles.text} opacity-70`}>{award.date} ({getAcademicYear(award.date)})</p>
                         <h4 className={`text-xl font-black leading-tight mt-1 mb-4 ${rankStyles.text}`}>{award.title}</h4>
                         
-                        {/* 👉 連動 Player Profile 的點擊區塊 👈 */}
                         <div 
                             className={`mt-auto flex items-center gap-3 ${student && typeof setShowPlayerCard === 'function' ? 'cursor-pointer hover:bg-white/40 p-2 -ml-2 rounded-xl transition-all group/profile' : ''}`}
                             onClick={(e) => {
@@ -203,7 +202,6 @@ export default function AwardsPage({
     return (
         <div className="space-y-8 animate-in fade-in duration-500 font-bold relative">
             
-            {/* 頂部標題與控制區 */}
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm">
                 <div className="flex items-center gap-6">
                     <div className="p-4 bg-yellow-100 text-yellow-600 rounded-2xl shadow-inner"><Award size={28}/></div>
@@ -225,7 +223,6 @@ export default function AwardsPage({
                 </div>
             </div>
 
-            {/* 👉 1. 榮譽數據大屏 (Trophy Cabinet Dashboard) 👈 */}
             {awards.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-bottom-4">
                     <div className="bg-gradient-to-br from-amber-400 to-yellow-500 rounded-[2rem] p-6 text-white shadow-xl shadow-yellow-200/50 flex items-center gap-6 relative overflow-hidden">
@@ -253,7 +250,6 @@ export default function AwardsPage({
                 </div>
             )}
 
-            {/* 👉 2. 智能賽季與級別篩選器 👈 */}
             {awards.length > 0 && (
                 <div className="bg-white rounded-[2rem] p-4 border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center animate-in slide-in-from-bottom-4">
                     <div className="flex items-center gap-2 text-slate-400 pl-4 font-black text-sm uppercase tracking-widest w-full md:w-auto">
@@ -279,7 +275,6 @@ export default function AwardsPage({
                 </div>
             )}
             
-            {/* 內容顯示區 */}
             {awards.length === 0 ? (
                 <div className="bg-white rounded-[3rem] p-20 border border-dashed flex flex-col items-center justify-center text-center shadow-sm">
                     <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-6"><Trophy size={48}/></div>
