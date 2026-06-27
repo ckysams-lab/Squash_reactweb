@@ -1646,8 +1646,18 @@ export default function App() {
           )}
 
           {!viewingStudent && activeTab === 'rankings' && (
-              <RankingPage role={role} rankedStudents={rankedStudents} filteredStudents={filteredStudents} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setShowPlayerCard={setShowPlayerCard} adjustPoints={adjustPoints} deleteItem={deleteItem} />
-          )}
+              <RankingPage 
+        role={role} 
+        rankedStudents={rankedStudents} 
+        filteredStudents={filteredStudents} 
+        searchTerm={searchTerm} 
+        setSearchTerm={setSearchTerm} 
+        setShowPlayerCard={setShowPlayerCard} 
+        adjustPoints={adjustPoints} 
+        deleteItem={deleteItem} 
+        leagueMatches={leagueMatches} /* 👉 加上這行，傳入比賽資料 */
+    />
+)}
 
           {!viewingStudent && activeTab === 'students' && role === 'admin' && (
             <RosterPage students={students} filteredStudents={filteredStudents} birthYearStats={birthYearStats} selectedYearFilter={selectedYearFilter} setSelectedYearFilter={setSelectedYearFilter} handleCSVImportStudents={handleCSVImportStudents} setViewingStudent={setViewingStudent} handleManualAward={handleManualAward} handleUpdateSquashClass={handleUpdateSquashClass} setEditingStudent={setEditingStudent} deleteItem={deleteItem} setShowAddPlayerModal={setShowAddPlayerModal} />
