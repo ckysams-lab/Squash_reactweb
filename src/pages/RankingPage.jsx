@@ -1,11 +1,10 @@
-// src/pages/RankingPage.jsx (Version 1.6)
-// 更新內容: 實裝對賽成績權重計算邏輯 (結合對手實力、局數差距及比賽類型)，並呼叫 adjustPoints 寫入資料庫
+// src/pages/RankingPage.jsx (Version 1.7)
+// 更新內容: 參考 SquashLevels，引入 Elo Rating System 演算法，根據「預期勝率」與「實際局數」動態計算積分增減
 
 import React, { useState } from 'react';
 import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords, X } from 'lucide-react';
 import { BADGE_DATA, ACHIEVEMENT_DATA } from '../constants/data';
 
-// 引入共用 UI 元件
 import { PageHeader, Card, DangerButton } from '../components/ui';
 
 export default function RankingPage({
@@ -17,14 +16,14 @@ export default function RankingPage({
     setShowPlayerCard,
     handleExternalComp,
     deleteItem,
-    adjustPoints // 確保把這個寫入資料庫的 function 加回來
+    adjustPoints 
 }) {
     const [matchModalData, setMatchModalData] = useState(null);
     const [opponentId, setOpponentId] = useState("");
     const [matchType, setMatchType] = useState("internal_challenge");
     const [score, setScore] = useState("3-0");
 
-    // 核心計算與提交邏輯
+    // 🏆 SquashLevels (Elo) 核心計算邏輯
     const handleMatchSubmit = () => {
         if (!opponentId) {
             alert("請選擇對手！");
@@ -35,68 +34,55 @@ export default function RankingPage({
         const opponent = rankedStudents.find(s => s.id === opponentId);
         if (!opponent) return;
 
-        // 計算當前梯隊排名索引 (0-based)
-        const playerRankIdx = rankedStudents.findIndex(s => s.id === player.id);
-        const oppRankIdx = rankedStudents.findIndex(s => s.id === opponentId);
+        const playerRating = player.totalPoints || 1000; // 預設積分
+        const oppRating = opponent.totalPoints || 1000;
 
-        // 解析比分
-        const [playerGamesStr, oppGamesStr] = score.split('-');
-        const playerGames = parseInt(playerGamesStr, 10);
-        const oppGames = parseInt(oppGamesStr, 10);
-        const isWin = playerGames > oppGames;
-
-        // 賽事權重設定
-        const matchWeights = {
-            'internal_challenge': 1.0,
-            'friendly_match': 1.2,
-            'inter_school': 1.5,
-            'regional_elite': 2.0
+        // 1. 計算主角的預期勝率 (Expected Score) - 基於積分差距
+        // 公式: 1 / (1 + 10 ^ ((對手積分 - 主角積分) / 400))
+        const expectedScorePlayer = 1 / (1 + Math.pow(10, (oppRating - playerRating) / 400));
+        
+        // 2. 將實際局數轉換為「實際表現得分 (Actual Score)」 0 到 1 之間
+        const scoreMapping = {
+            "3-0": 1.0,
+            "3-1": 0.85,
+            "3-2": 0.7,
+            "2-3": 0.3,
+            "1-3": 0.15,
+            "0-3": 0.0
         };
-        const matchWeight = matchWeights[matchType] || 1.0;
+        const actualScorePlayer = scoreMapping[score];
+        const actualScoreOpp = 1 - actualScorePlayer;
 
-        let playerDelta = 0;
-        let oppDelta = 0;
+        // 3. 賽事權重設定 (Match Weight / K-Factor)
+        // K值代表一場比賽最多能改變多少分。大賽的波動會更大。
+        const baseK = 30; 
+        const matchWeights = {
+            'internal_challenge': 1.0,  // 最大變動 ~30分
+            'friendly_match': 1.2,      // 最大變動 ~36分
+            'inter_school': 1.5,        // 最大變動 ~45分
+            'regional_elite': 2.0       // 最大變動 ~60分
+        };
+        const K = baseK * (matchWeights[matchType] || 1.0);
 
-        if (isWin) {
-            // 主角獲勝
-            let rankMultiplier = 1.0;
-            if (playerRankIdx > oppRankIdx) { // 數字越大代表原本排名越低 (爆冷加成)
-                rankMultiplier = 1.0 + ((playerRankIdx - oppRankIdx) * 0.05);
-            }
+        // 4. 計算積分變動 = K * (實際得分 - 預期得分)
+        const playerDeltaRaw = K * (actualScorePlayer - expectedScorePlayer);
+        // 對手的變動通常與主角相反 (零和遊戲)
+        const oppDeltaRaw = -playerDeltaRaw; 
 
-            let scoreMultiplier = 1.0;
-            const scoreDiff = playerGames - oppGames;
-            if (scoreDiff === 3) scoreMultiplier = 1.2;
-            else if (scoreDiff === 2) scoreMultiplier = 1.1;
+        // 四捨五入
+        const playerDelta = Math.round(playerDeltaRaw);
+        const oppDelta = Math.round(oppDeltaRaw);
 
-            playerDelta = Math.round(10 * rankMultiplier * scoreMultiplier * matchWeight);
-            oppDelta = -5; // 敗者基礎扣分
-        } else {
-            // 對手獲勝 (主角落敗)
-            let rankMultiplier = 1.0;
-            if (oppRankIdx > playerRankIdx) { // 對手原本排名較低卻獲勝
-                rankMultiplier = 1.0 + ((oppRankIdx - playerRankIdx) * 0.05);
-            }
-
-            let scoreMultiplier = 1.0;
-            const scoreDiff = oppGames - playerGames;
-            if (scoreDiff === 3) scoreMultiplier = 1.2;
-            else if (scoreDiff === 2) scoreMultiplier = 1.1;
-
-            oppDelta = Math.round(10 * rankMultiplier * scoreMultiplier * matchWeight);
-            playerDelta = -5;
-        }
-
-        // 呼叫上層傳進來的 adjustPoints 來更新 Firebase
+        // 寫入資料庫
         if (typeof adjustPoints === 'function') {
             adjustPoints(player.id, playerDelta);
             adjustPoints(opponent.id, oppDelta);
-            alert(`✅ 成績計算與寫入成功！\n\n【積分結算】\n${player.name}: ${playerDelta > 0 ? '+'+playerDelta : playerDelta} 分\n${opponent.name}: ${oppDelta > 0 ? '+'+oppDelta : oppDelta} 分`);
+            alert(`✅ SquashLevels 專業演算法計算成功！\n\n賽前積分: ${player.name}(${playerRating}) vs ${opponent.name}(${oppRating})\n預期勝率: ${(expectedScorePlayer*100).toFixed(1)}%\n\n【積分結算】\n${player.name}: ${playerDelta > 0 ? '+'+playerDelta : playerDelta} 分\n${opponent.name}: ${oppDelta > 0 ? '+'+oppDelta : oppDelta} 分`);
         } else {
-            alert(`⚠️ 計算完成，但找不到 adjustPoints 函數！請確保 Dashboard 有傳遞此 props。\n\n【模擬結算】\n${player.name}: ${playerDelta > 0 ? '+'+playerDelta : playerDelta} 分\n${opponent.name}: ${oppDelta > 0 ? '+'+oppDelta : oppDelta} 分`);
+            alert(`⚠️ 找不到 adjustPoints！\n\n【模擬結算】\n${player.name}: ${playerDelta > 0 ? '+'+playerDelta : playerDelta} 分\n${opponent.name}: ${oppDelta > 0 ? '+'+oppDelta : oppDelta} 分`);
         }
 
-        setMatchModalData(null); // 完成後關閉視窗
+        setMatchModalData(null);
     };
 
     return (
@@ -108,7 +94,7 @@ export default function RankingPage({
                 icon={TrophyIcon} 
             />
 
-            {/* 前三名頒獎台區塊 */}
+            {/* 前三名頒獎台區塊保持不變 */}
             <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
@@ -140,20 +126,19 @@ export default function RankingPage({
                 })}
             </div>
 
-            {/* 積分權重機制說明 */}
-            <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
-                <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Info size={24} /></div>
+            {/* 👉 更新：1.7 版本 SquashLevels 機制說明 👈 */}
+            <div className="bg-emerald-50/50 p-6 rounded-[2rem] border border-emerald-100 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
+                <div className="p-3 bg-emerald-100 text-emerald-600 rounded-2xl"><Info size={24} /></div>
                 <div className="flex-1">
-                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分權重機制說明 (v1.6)</h4>
+                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 SquashLevels 專業等級分機制 (v1.7)</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
                         <ul className="list-disc pl-4 space-y-1">
-                            <li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li>
-                            <li><span className="text-blue-600">基礎勝局</span>：勝方 +10分 / 敗方 -5分</li>
-                            <li><span className="text-indigo-500">局數權重</span>：3-0 完勝(x1.2) / 3-1(x1.1)</li>
+                            <li><span className="text-emerald-600">預期表現</span>：系統會根據雙方積分差距計算預期勝率。</li>
+                            <li><span className="text-amber-500">防刷分機制</span>：高分球員擊敗低分球員只會獲得極少積分。</li>
                         </ul>
                         <ul className="list-disc pl-4 space-y-1">
-                            <li><span className="text-yellow-600">實力權重</span>：擊敗高排名對手獲額外加成</li>
-                            <li><span className="text-red-500">賽事權重</span>：校內(x1.0) / 友誼賽(x1.2) / 學界(x1.5) / 區際(x2.0)</li>
+                            <li><span className="text-indigo-500">光榮落敗</span>：低分球員若表現超乎預期 (例如 2-3 惜敗高分球員)，積分將會**不跌反升**！</li>
+                            <li><span className="text-red-500">賽事權重</span>：學界與區際賽事會觸發更高的積分波幅。</li>
                         </ul>
                     </div>
                 </div>
@@ -253,7 +238,7 @@ export default function RankingPage({
                             </div>
 
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">比賽類型 (影響權重)</label>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">比賽類型 (決定最大積分波幅)</label>
                                 <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 transition-all" value={matchType} onChange={(e)=>setMatchType(e.target.value)}>
                                     <option value="internal_challenge">校內日常挑戰賽 (x1.0)</option>
                                     <option value="friendly_match">友誼賽/交流賽 (x1.2)</option>
@@ -263,20 +248,20 @@ export default function RankingPage({
                             </div>
 
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">局數比分 (影響權重)</label>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">局數比分</label>
                                 <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 transition-all" value={score} onChange={(e)=>setScore(e.target.value)}>
-                                    <option value="3-0">勝 3 - 0 (完勝 x1.2)</option>
-                                    <option value="3-1">勝 3 - 1 (優勢 x1.1)</option>
-                                    <option value="3-2">勝 3 - 2 (險勝 x1.0)</option>
-                                    <option value="2-3">負 2 - 3 (惜敗 -5分)</option>
-                                    <option value="1-3">負 1 - 3 (落敗 -5分)</option>
-                                    <option value="0-3">負 0 - 3 (完敗 -5分)</option>
+                                    <option value="3-0">勝 3 - 0 (表現評分: 100%)</option>
+                                    <option value="3-1">勝 3 - 1 (表現評分: 85%)</option>
+                                    <option value="3-2">勝 3 - 2 (表現評分: 70%)</option>
+                                    <option value="2-3">負 2 - 3 (表現評分: 30%)</option>
+                                    <option value="1-3">負 1 - 3 (表現評分: 15%)</option>
+                                    <option value="0-3">負 0 - 3 (表現評分: 0%)</option>
                                 </select>
                             </div>
                         </div>
                         <div className="p-6 bg-slate-50 border-t flex justify-end gap-3">
                             <button onClick={() => setMatchModalData(null)} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-200 transition-all">取消</button>
-                            <button onClick={handleMatchSubmit} className="px-6 py-3 rounded-xl font-black bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg transition-all">確認並計算積分</button>
+                            <button onClick={handleMatchSubmit} className="px-6 py-3 rounded-xl font-black bg-emerald-600 text-white hover:bg-emerald-700 shadow-md hover:shadow-lg transition-all">確認並計算 Elo 積分</button>
                         </div>
                     </div>
                 </div>
