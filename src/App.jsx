@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.11: 支援「校際混合聯賽」。重寫排行榜與 Elo 引擎，完美兼容未註冊的「外部對手」。
+// Version 1.12: 終極 Elo 演算法！實裝「跨年級越級挑戰加成」與「局數+小分混合統治力系數」。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -59,10 +59,17 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.11";
+const CURRENT_VERSION = "1.12";
 
 momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
+
+// 👉 輔助函數：解析班別中的年級數字 (例如 "4A" -> 4, "P6" -> 6) 👈
+const getGradeLevel = (classStr) => {
+    if (!classStr) return 0;
+    const match = classStr.match(/\d+/);
+    return match ? parseInt(match[0], 10) : 0;
+};
 
 const SchoolLogo = ({ size = 48, className = "", systemConfig }) => {
   const [error, setError] = useState(false);
@@ -151,17 +158,29 @@ export default function App() {
                     album.photos.forEach(photo => {
                         if (!existingDriveImageUrls.has(photo.url)) {
                             const newDocRef = doc(galleryColRef);
-                            batch.set(newDocRef, { type: 'image', url: photo.url, title: album.album, description: photo.name || `來自 ${album.album}`, isDrive: true, timestamp: serverTimestamp() });
+                            batch.set(newDocRef, {
+                                type: 'image', url: photo.url, title: album.album, description: photo.name || `來自 ${album.album}`,
+                                isDrive: true, timestamp: serverTimestamp()
+                            });
                             itemsToSyncCount++;
                         }
                     });
                 }
             });
 
-            if (itemsToSyncCount > 0) { await batch.commit(); alert(`✅ 成功從 Google Drive 同步並永久儲存了 ${itemsToSyncCount} 個新項目！`); } 
-            else { alert("ℹ️ Google Drive 中沒有找到新的照片可以同步。所有項目都已是最新狀態。"); }
-        } else { alert("同步失敗：" + (result.message || '無法解析來自 Google Drive 的資料。')); }
-    } catch (error) { console.error("Drive sync error:", error); alert("網路錯誤，無法連接 Google Drive。"); }
+            if (itemsToSyncCount > 0) {
+                await batch.commit();
+                alert(`✅ 成功從 Google Drive 同步並永久儲存了 ${itemsToSyncCount} 個新項目！`);
+            } else {
+                alert("ℹ️ Google Drive 中沒有找到新的照片可以同步。所有項目都已是最新狀態。");
+            }
+        } else {
+            alert("同步失敗：" + (result.message || '無法解析來自 Google Drive 的資料。'));
+        }
+    } catch (error) {
+        console.error("Drive sync error:", error);
+        alert("網路錯誤，無法連接 Google Drive。");
+    }
     setIsSyncingDrive(false);
   };
 
@@ -207,7 +226,10 @@ export default function App() {
         setCurrentUserInfo(prev => ({ ...prev, featuredBadges: selectedFeaturedBadges }));
         alert('✅ 你的勳章展示牆已成功更新！');
         setShowcaseEditorOpen(false);
-    } catch (e) { console.error("Failed to save featured badges:", e); alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網絡。`); }
+    } catch (e) {
+        console.error("Failed to save featured badges:", e);
+        alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網絡。`);
+    }
     setIsUpdating(false);
   };
 
@@ -393,19 +415,6 @@ export default function App() {
     } catch(e) { console.error("Favicon error", e); }
   }, [systemConfig?.schoolLogo]);
 
-  const handleCSVImportExternalTournaments = async (e) => {
-    const file = e.target.files[0]; if (!file) return; setIsUpdating(true);
-    try {
-      const text = await readCSVFile(file, importEncoding);
-      const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-      const batch = writeBatch(db); const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments');
-      let count = 0;
-      rows.forEach(row => { const name = row.split(',')[0]?.trim(); if (name) { batch.set(doc(colRef), { name, timestamp: serverTimestamp() }); count++; } });
-      await batch.commit(); alert(`✅ 成功匯入 ${count} 個校外賽事名稱！`);
-    } catch (err) { console.error("External tournament import failed:", err); alert('匯入失敗，請確認 CSV 格式 (單欄，第一行為標題)。'); }
-    setIsUpdating(false); e.target.value = null;
-  };
-
   const handleSaveAssessment = async () => {
     const { studentId, date, notes = '', situps = 0, shuttleRun = 0, enduranceRun = 0, gripStrength = 0, flexibility = 0, fhDrive = 0, bhDrive = 0, fhVolley = 0, bhVolley = 0, rankT1 = '', rankT2 = '', rankT3 = '', hoursT1 = '', hoursT2 = '', hoursT3 = '' } = newAssessment;
     if (!studentId || !date) { alert("請選擇學員並填寫評估日期！"); return; }
@@ -500,6 +509,7 @@ export default function App() {
         if (currentPoints > existing.totalPoints) { uniqueMap.set(key, { ...s, totalPoints: currentPoints }); }
       }
     });
+
     return Array.from(uniqueMap.values()).sort((a, b) => {
       const pointsA = Number(a.totalPoints) || 0; const pointsB = Number(b.totalPoints) || 0;
       if (pointsB !== pointsA) return pointsB - pointsA; 
@@ -741,61 +751,105 @@ export default function App() {
       } catch (error) { console.error("Cheer failed:", error); }
   };
 
-  // 👉 重大升級：支援校外生參與聯賽與 Elo 計算 👈
+  // 👉 重大升級：handleUpdateLeagueMatchScore (V1.12 終極 Elo 演算法) 👈
   const handleUpdateLeagueMatchScore = async (match) => {
       const p1Raw = prompt(`請輸入 ${match.player1Name} 該場「總得分」\n(例如：直落三贏11-5, 11-5, 11-5，則輸入 33)`);
       if (p1Raw === null) return;
       const p2Raw = prompt(`請輸入 ${match.player2Name || '對手'} 該場「總得分」\n(例如：輸了5分, 5分, 5分，則輸入 15)`);
       if (p2Raw === null) return;
       
-      const totalP1 = parseInt(p1Raw, 10); const totalP2 = parseInt(p2Raw, 10);
+      const totalP1 = parseInt(p1Raw, 10);
+      const totalP2 = parseInt(p2Raw, 10);
+
       if (isNaN(totalP1) || isNaN(totalP2)) { alert("總得分必須是數字！"); return; }
       if (totalP1 === totalP2) { alert("總得分不能相同，壁球比賽必須分出勝負。"); return; }
 
-      const winnerId = totalP1 > totalP2 ? match.player1Id : match.player2Id;
-      const loserId = totalP1 > totalP2 ? match.player2Id : match.player1Id;
-
       const gamesScoreString = prompt(`請輸入大局比分 (例如 3-0, 3-1, 3-2):\n(這將顯示在聯賽介面上)`, totalP1 > totalP2 ? "3-0" : "0-3");
       if (!gamesScoreString || !gamesScoreString.includes("-")) { alert("格式錯誤。"); return; }
-      const [g1, g2] = gamesScoreString.split('-'); const score1 = parseInt(g1, 10); const score2 = parseInt(g2, 10);
+      const [g1, g2] = gamesScoreString.split('-');
+      const score1 = parseInt(g1, 10);
+      const score2 = parseInt(g2, 10);
 
-      // 檢查身份：雙方是否為校內生
+      // 1. 判斷勝負與對手身分
+      const isP1Winner = totalP1 > totalP2;
+      const winnerId = isP1Winner ? match.player1Id : match.player2Id;
+      const loserId = isP1Winner ? match.player2Id : match.player1Id;
+
       const isP1Internal = students.some(s => s.id === match.player1Id);
       const isP2Internal = match.player2Id ? students.some(s => s.id === match.player2Id) : false;
 
-      // 如果兩邊都是外校，系統不結算 Elo
       if (!isP1Internal && !isP2Internal) { alert("雙方皆為外校選手，不進行本校 Elo 結算。"); return; }
 
-      // 提取雙方的當前 Elo 總分 (若為外部選手，則抓取預估的 extElo 或預設 1000)
-      const p1Elo = isP1Internal ? (students.find(s => s.id === match.player1Id)?.totalPoints || 1000) : (match.extElo || 1000);
-      const p2Elo = isP2Internal ? (students.find(s => s.id === match.player2Id)?.totalPoints || 1000) : (match.extElo || 1000);
+      const winner = students.find(s => s.id === winnerId);
+      const loser = students.find(s => s.id === loserId);
 
-      const expectedScoreP1 = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
+      // 提取 Elo
+      const p1Elo = isP1Internal ? (students.find(s=>s.id === match.player1Id)?.totalPoints || 1000) : (match.extElo || 1000);
+      const p2Elo = isP2Internal ? (students.find(s=>s.id === match.player2Id)?.totalPoints || 1000) : (match.extElo || 1000);
+      const winnerElo = isP1Winner ? p1Elo : p2Elo;
+      const loserElo = isP1Winner ? p2Elo : p1Elo;
+
+      // 2. 期望勝率
+      const expectedWinnerScore = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
+
+      // 👉 3. 混合統治力系數 (Hybrid Dominance Score) 👈
+      const winnerGames = isP1Winner ? score1 : score2;
+      const loserGames = isP1Winner ? score2 : score1;
+      const gameDiff = winnerGames - loserGames;
+
+      let gameFactor = 1.0;
+      if (gameDiff >= 3) gameFactor = 1.2;      // 3-0 完勝
+      else if (gameDiff === 2) gameFactor = 1.0; // 3-1 正常
+      else if (gameDiff <= 1) gameFactor = 0.8;  // 3-2 險勝
+
+      const winnerPoints = isP1Winner ? totalP1 : totalP2;
       const totalPointsMatch = totalP1 + totalP2;
-      const pointRatioP1 = totalPointsMatch > 0 ? totalP1 / totalPointsMatch : 0.5;
-      const actualScoreP1 = totalPointsMatch > 0 ? Math.max(0, Math.min(1, (pointRatioP1 - 0.3) / 0.4)) : 0.5;
+      const pointRatio = totalPointsMatch > 0 ? winnerPoints / totalPointsMatch : 0.5;
 
-      const K = 30; // 固定聯賽波幅
-      const p1DeltaRaw = K * (actualScoreP1 - expectedScoreP1);
-      const p1Delta = Math.round(p1DeltaRaw);
-      const p2Delta = -p1Delta;
+      let pointFactor = 1.0;
+      if (pointRatio > 0.6) pointFactor = 1.2;      // 小分碾壓
+      else if (pointRatio < 0.55) pointFactor = 0.8; // 小分緊咬
 
-      const winnerDelta = winnerId === match.player1Id ? p1Delta : p2Delta;
-      const loserDelta = loserId === match.player1Id ? p1Delta : p2Delta;
+      const hybridDominance = gameFactor * pointFactor; // (範圍 0.64 ~ 1.44)
 
-      const winnerInternal = students.find(s => s.id === winnerId);
-      const loserInternal = students.find(s => s.id === loserId);
+      // 👉 4. 跨年級越級加成 (Grade-Difference Multiplier) 👈
+      let gradeBonus = 1.0;
+      let gradeMsg = "";
+      if (winner && loser) {
+          const winnerGrade = getGradeLevel(winner.class);
+          const loserGrade = getGradeLevel(loser.class);
+          if (winnerGrade > 0 && loserGrade > 0 && winnerGrade < loserGrade) {
+              const diff = loserGrade - winnerGrade;
+              gradeBonus = 1.0 + (diff * 0.1); // 每差一年級多10%
+              gradeMsg = `\n👶 越級挑戰成功！(+${diff * 10}% 額外加成)`;
+          }
+      }
 
-      const winnerName = winnerInternal ? winnerInternal.name : (winnerId === match.player1Id ? match.player1Name : match.player2Name);
-      const loserName = loserInternal ? loserInternal.name : (loserId === match.player1Id ? match.player1Name : match.player2Name);
+      // 5. 最終 Elo 結算
+      const K = 30; // 基礎波幅
+      const baseDelta = K * (1 - expectedWinnerScore);
 
-      const confirmMsg = `✍️ 確認賽果與 Elo 結算？\n\n` +
+      // 贏家：基礎分 * 統治力 * 越級加成
+      const winnerDelta = Math.round(baseDelta * hybridDominance * gradeBonus);
+      
+      // 輸家：基礎分 * 統治力 (非對稱保護，高年級輸球不會因為越級加成而被多扣分)
+      const loserDelta = -Math.round(baseDelta * hybridDominance);
+
+      const p1Delta = isP1Winner ? winnerDelta : loserDelta;
+      const p2Delta = isP1Winner ? loserDelta : winnerDelta;
+
+      const winnerName = winner ? winner.name : (winnerId === match.player1Id ? match.player1Name : match.player2Name);
+      const loserName = loser ? loser.name : (loserId === match.player1Id ? match.player1Name : match.player2Name);
+
+      const confirmMsg = `✍️ 確認賽果與終極 Elo 結算？\n\n` +
                          `對戰: ${match.player1Name} vs ${match.player2Name}\n` +
                          `總得分: ${totalP1} : ${totalP2}\n` +
-                         `大局數: ${score1} - ${score2}\n\n` +
+                         `大局數: ${score1} - ${score2}\n` +
+                         `統治力系數: ${hybridDominance.toFixed(2)}x` +
+                         `${gradeMsg}\n\n` +
                          `【全校 Elo 積分變動】\n` +
-                         `${winnerInternal ? `${winnerName}: ${winnerDelta > 0 ? '+'+winnerDelta : winnerDelta} 分\n` : `(${winnerName} 為外校選手不紀錄)\n`}` +
-                         `${loserInternal ? `${loserName}: ${loserDelta > 0 ? '+'+loserDelta : loserDelta} 分\n\n` : `(${loserName} 為外校選手不紀錄)\n\n`}` +
+                         `${winner ? `${winnerName}: ${winnerDelta > 0 ? '+'+winnerDelta : winnerDelta} 分\n` : `(${winnerName} 為外校選手不紀錄)\n`}` +
+                         `${loser ? `${loserName}: ${loserDelta > 0 ? '+'+loserDelta : loserDelta} 分\n\n` : `(${loserName} 為外校選手不紀錄)\n\n`}` +
                          `(註: 聯賽榜仍會維持勝方 +3 聯賽積分)`;
 
       if (confirm(confirmMsg)) {
@@ -808,17 +862,17 @@ export default function App() {
                   score1, score2, totalPoints1: totalP1, totalPoints2: totalP2, winnerId, status: 'completed', updatedAt: serverTimestamp() 
               });
 
-              if (winnerInternal) {
-                  const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winnerInternal.id);
+              if (winner) {
+                  const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id);
                   batch.update(winnerRef, { points: increment(winnerDelta), lastUpdated: serverTimestamp() });
               }
-              if (loserInternal) {
-                  const loserRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', loserInternal.id);
+              if (loser) {
+                  const loserRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', loser.id);
                   batch.update(loserRef, { points: increment(loserDelta), lastUpdated: serverTimestamp() });
               }
               
               await batch.commit();
-              alert("✅ 賽果已成功儲存！聯賽積分與全校 Elo 已同步更新。");
+              alert("✅ 賽果已成功儲存！");
           } catch (e) { console.error("Update match score failed", e); alert("儲存失敗，請檢查網絡連線。"); }
           setIsUpdating(false);
       }
@@ -844,7 +898,6 @@ export default function App() {
     return leagueMatches.filter(match => match.tournamentName === selectedTournament);
   }, [leagueMatches, selectedTournament]);
 
-  // 👉 重大升級：排行榜兼容外校選手 👈
   const tournamentStandings = useMemo(() => {
     if (!trulyFilteredMatches || trulyFilteredMatches.length === 0) return {};
     const standingsData = {};
@@ -854,12 +907,8 @@ export default function App() {
         if (!standingsData[groupKey][playerId]) {
             const student = students?.find(s => s.id === playerId);
             standingsData[groupKey][playerId] = {
-                id: playerId,
-                name: student ? student.name : (playerName || '外部選手'),
-                class: student ? student.class : 'EXT',
-                classNo: student ? student.classNo : '-',
-                played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0,
-                isExternal: !student
+                id: playerId, name: student ? student.name : (playerName || '外部選手'), class: student ? student.class : 'EXT', classNo: student ? student.classNo : '-',
+                played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0, isExternal: !student
             };
         }
         return standingsData[groupKey][playerId];
@@ -869,9 +918,7 @@ export default function App() {
         if (match.status !== 'completed') return;
         const { player1Id, player2Id, groupName, player1Name, player2Name } = match;
         const groupKey = groupName || '所有比賽';
-        
-        const p1Score = parseInt(match.score1, 10) || 0;
-        const p2Score = parseInt(match.score2, 10) || 0;
+        const p1Score = parseInt(match.score1, 10) || 0; const p2Score = parseInt(match.score2, 10) || 0;
 
         const player1Standing = getOrCreateStanding(player1Id, player1Name, groupKey);
         player1Standing.played += 1;
@@ -884,16 +931,10 @@ export default function App() {
             player1Standing.pointsFor += p1Score; player1Standing.pointsAgainst += p2Score;
             player2Standing.pointsFor += p2Score; player2Standing.pointsAgainst += p1Score;
 
-            if (p1Score > p2Score) {
-                player1Standing.wins += 1; player1Standing.leaguePoints += 3; player2Standing.losses += 1;
-            } else if (p2Score > p1Score) {
-                player2Standing.wins += 1; player2Standing.leaguePoints += 3; player1Standing.losses += 1;
-            } else { 
-                player1Standing.leaguePoints += 1; player2Standing.leaguePoints += 1;
-            }
-        } else {
-            player1Standing.wins += 1; player1Standing.leaguePoints += 3;
-        }
+            if (p1Score > p2Score) { player1Standing.wins += 1; player1Standing.leaguePoints += 3; player2Standing.losses += 1; } 
+            else if (p2Score > p1Score) { player2Standing.wins += 1; player2Standing.leaguePoints += 3; player1Standing.losses += 1; } 
+            else { player1Standing.leaguePoints += 1; player2Standing.leaguePoints += 1; }
+        } else { player1Standing.wins += 1; player1Standing.leaguePoints += 3; }
     });
 
     const finalSortedResult = {};
@@ -1470,7 +1511,7 @@ export default function App() {
                   myTournamentStats={myTournamentStats} myUpcomingMatches={myUpcomingMatches} groupedMatches={groupedMatches}
                   tournamentStandings={tournamentStandings} handleCheerMatch={handleCheerMatch} handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore}
                   handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} schoolLogo={systemConfig.schoolLogo} students={students}
-                  db={db} appId={appId} /* 👉 傳入 db 讓 LeaguePage 可以建立單場賽事 */
+                  db={db} appId={appId} 
               />
           )}
             
