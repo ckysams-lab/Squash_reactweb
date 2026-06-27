@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.7: 升級 handleUpdateLeagueMatchScore，結合 LevelTech Elo 演算法與聯賽成績輸入。
+// Version 1.8: 移除「校外賽管理」及「球隊動態牆」以精簡系統，專注於核心訓練與賽事排名。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -27,9 +27,6 @@ import WallOfFamePage from './pages/WallOfFamePage';
 import FinancialPage from './pages/FinancialPage';
 import PlayerDashboard from './components/PlayerDashboard';
 import MyDashboardPage from './pages/MyDashboardPage';
-import CreatePostModal from './components/CreatePostModal';
-import ExternalMatchesPage from './pages/ExternalMatchesPage';
-import SocialFeedPage from './pages/SocialFeedPage';
 import RankingPage from './pages/RankingPage';
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
 import { useFirebaseData } from './hooks/useFirebaseData';
@@ -43,7 +40,7 @@ import {
   Key, LayoutDashboard, Layers, Link as LinkIcon, ListChecks, Loader2, Lock, LogIn, LogOut, Mail, MapPin, Medal,
   Megaphone, Menu, MinusCircle, Pencil, Percent, PlayCircle, Plus, PlusCircle, Printer, Rocket, Save, Search, Settings2,
   Shield as ShieldIcon, ShieldCheck, Sparkles, Star, Sun, Swords, Target, Trash2, TrendingUp, Trophy, Trophy as TrophyIcon,
-  Upload, User, UserCheck, UserCog, UserPlus, Users, X, Zap, MessageSquare, FilePenLine
+  Upload, User, UserCheck, UserCog, UserPlus, Users, X, Zap, FilePenLine
 } from 'lucide-react';
 
 import { 
@@ -63,7 +60,7 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.7";
+const CURRENT_VERSION = "1.8";
 
 momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
@@ -136,7 +133,6 @@ export default function App() {
     externalTournaments, 
     assessments, 
     tacticalShots,
-    feedPosts,
     trophies,
     alumni,
     playerJournals
@@ -148,7 +144,6 @@ export default function App() {
   const [liveMatches, setLiveMatches] = useState([]);
   const [showUmpirePanel, setShowUmpirePanel] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
-  const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
@@ -197,22 +192,6 @@ export default function App() {
     setIsSyncingDrive(false);
   };
 
-  const handleLikePost = async (postId) => {
-      if (!user) { alert("請先登入才能按讚喔！"); return; }
-      const userId = role === 'admin' ? 'admin' : currentUserInfo?.id;
-      if (!userId) return;
-
-      try {
-          const post = feedPosts.find(p => p.id === postId);
-          if (!post) return;
-          const isLiked = post.likes && post.likes.includes(userId);
-          const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'feed_posts', postId);
-
-          if (isLiked) { await updateDoc(postRef, { likes: arrayRemove(userId) }); } 
-          else { await updateDoc(postRef, { likes: arrayUnion(userId) }); }
-      } catch (error) { console.error("按讚失敗:", error); }
-  };
-
   const parseCsvRow = (row) => {
     const result = [];
     let current = '';
@@ -225,24 +204,6 @@ export default function App() {
     }
     result.push(current.trim());
     return result;
-  };
-
-  const handleAddComment = async (postId, commentText) => {
-      if (!user) { alert("請先登入才能留言喔！"); return; }
-      if (!commentText.trim()) return;
-
-      const userId = role === 'admin' ? 'admin' : currentUserInfo?.id;
-      const authorName = role === 'admin' ? '系統管理員 (教練)' : currentUserInfo?.name;
-      const authorPhotoUrl = currentUserInfo?.photoUrl || null;
-
-      try {
-          const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'feed_posts', postId);
-          const newComment = {
-              id: Date.now().toString(), userId: userId, authorName: authorName,
-              authorRole: role, authorPhotoUrl: authorPhotoUrl, text: commentText.trim(), createdAt: new Date().toISOString()
-          };
-          await updateDoc(postRef, { comments: arrayUnion(newComment) });
-      } catch (error) { console.error("留言失敗:", error); alert("留言失敗，請稍後再試。"); }
   };
 
   const [newAssessment, setNewAssessment] = useState({
@@ -314,9 +275,6 @@ export default function App() {
   const [isGeneratingPoster, setIsGeneratingPoster] = useState(false);
   const [posterData, setPosterData] = useState(null);
   const [showAddAwardModal, setShowAddAwardModal] = useState(false);
-  const [newExternalMatch, setNewExternalMatch] = useState({
-    tournamentName: '', date: new Date().toISOString().split('T')[0], player1Id: '', opponentSchool: '', opponentPlayerName: '', externalMatchScore: '', isWin: null,
-  });
   
   useEffect(() => {
     const storedVersion = localStorage.getItem('app_version');
@@ -582,29 +540,6 @@ export default function App() {
           await updateDoc(docRef, { studentReply: replyContent, repliedAt: serverTimestamp() });
       } catch (e) { console.error("Failed to reply journal entry:", e); alert("回覆失敗，請檢查網路。"); }
       setIsUpdating(false);
-  };
-
-  const handleSaveExternalMatch = async () => {
-    const { player1Id, tournamentName, date, isWin, externalMatchScore, opponentSchool, opponentPlayerName } = newExternalMatch;
-    if (!player1Id || !tournamentName || !date || isWin === null) {
-      alert('請填寫所有必填欄位：賽事、日期、我方隊員及本場結果。'); return;
-    }
-    const player = students.find(s => s.id === player1Id);
-    if (!player) { alert('找不到指定的學生資料！'); return; }
-
-    setIsUpdating(true);
-    try {
-      const matchData = {
-        tournamentName, date, player1Id, isWin, externalMatchScore, opponentSchool, opponentPlayerName,
-        matchType: 'external', player1Name: player.name, player2Id: null, player2Name: opponentPlayerName || 'N/A', 
-        winnerId: isWin ? player1Id : null, status: 'completed', timestamp: serverTimestamp(),
-      };
-      
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'), matchData);
-      alert('✅ 校外賽記錄已成功儲存！');
-      setNewExternalMatch({ tournamentName: '', date: new Date().toISOString().split('T')[0], player1Id: '', opponentSchool: '', opponentPlayerName: '', externalMatchScore: '', isWin: null, });
-    } catch (e) { console.error("Failed to save external match:", e); alert('儲存失敗，請檢查網絡連線。'); }
-    setIsUpdating(false);
   };
 
   const deleteItem = async (col, id) => {
@@ -1058,7 +993,6 @@ export default function App() {
       } catch (error) { console.error("Cheer failed:", error); }
   };
 
-  // 👉 重點升級：handleUpdateLeagueMatchScore 結合 Elo 小分制 👈
   const handleUpdateLeagueMatchScore = async (match) => {
       const p1Raw = prompt(`請輸入 ${match.player1Name} 該場「總得分」\n(例如：直落三贏11-5, 11-5, 11-5，則輸入 33)`);
       if (p1Raw === null) return;
@@ -1071,7 +1005,6 @@ export default function App() {
       if (isNaN(totalP1) || isNaN(totalP2)) { alert("總得分必須是數字！"); return; }
       if (totalP1 === totalP2) { alert("總得分不能相同，壁球比賽必須分出勝負。"); return; }
 
-      // 1. 判斷勝負與比分字串
       const winnerId = totalP1 > totalP2 ? match.player1Id : match.player2Id;
       const winner = students.find(s => s.id === winnerId);
       const loserId = (winnerId === match.player1Id ? match.player2Id : match.player1Id);
@@ -1086,28 +1019,21 @@ export default function App() {
       const score1 = parseInt(g1, 10);
       const score2 = parseInt(g2, 10);
 
-      // 2. 啟動 LevelTech Elo 演算法
-      // 提取雙方的當前 Elo 總分
       const p1Elo = winnerId === match.player1Id ? (winner.totalPoints || 1000) : (loser.totalPoints || 1000);
       const p2Elo = winnerId === match.player2Id ? (winner.totalPoints || 1000) : (loser.totalPoints || 1000);
 
-      // 預期勝率
       const expectedScoreP1 = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
       
-      // 得球率 (Point Ratio) 映射為實際表現分數 (0 到 1)
       const totalPointsMatch = totalP1 + totalP2;
       const pointRatioP1 = totalPointsMatch > 0 ? totalP1 / totalPointsMatch : 0.5;
       const actualScoreP1 = totalPointsMatch > 0 ? Math.max(0, Math.min(1, (pointRatioP1 - 0.3) / 0.4)) : 0.5;
 
-      // 賽事權重 K-Factor (聯賽我們固定用 1.0 的重要度，即 30)
       const K = 30;
 
-      // 計算 Elo 變動
       const p1DeltaRaw = K * (actualScoreP1 - expectedScoreP1);
       const p1Delta = Math.round(p1DeltaRaw);
       const p2Delta = -p1Delta;
 
-      // 將 Delta 綁定回正確的球員
       const winnerDelta = winnerId === match.player1Id ? p1Delta : p2Delta;
       const loserDelta = loserId === match.player1Id ? p1Delta : p2Delta;
 
@@ -1125,17 +1051,13 @@ export default function App() {
           try {
               const batch = writeBatch(db);
               
-              // A. 更新聯賽賽事記錄 (供 LeaguePage 的獨立排行榜抓取)
               const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
               batch.update(matchRef, { 
                   score1, score2, 
                   totalPoints1: totalP1, totalPoints2: totalP2, 
-                  winnerId, 
-                  status: 'completed', 
-                  updatedAt: serverTimestamp() 
+                  winnerId, status: 'completed', updatedAt: serverTimestamp() 
               });
 
-              // B. 更新雙方的全校 Elo 積分 (寫入 students 表的 points 欄位)
               const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id);
               batch.update(winnerRef, { points: increment(winnerDelta), lastUpdated: serverTimestamp() });
               
@@ -1205,7 +1127,6 @@ export default function App() {
         const { player1Id, player2Id, groupName } = match;
         const groupKey = groupName || '所有比賽';
         
-        // 這裡的 p1Score 和 p2Score 是指大局數 (3-0, 3-2 等)
         const p1Score = parseInt(match.score1, 10) || 0;
         const p2Score = parseInt(match.score2, 10) || 0;
 
@@ -1541,7 +1462,6 @@ export default function App() {
                     <NavButton tabName="monthlyStars" icon={<Star size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>每月之星</NavButton>
                     <NavButton tabName="rankings" icon={<Trophy size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>積分排行</NavButton>
                     <NavButton tabName="league" icon={<Swords size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>聯賽專區</NavButton>
-                    <NavButton tabName="socialFeed" icon={<MessageSquare size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>球隊動態</NavButton>
                     <NavButton tabName="gallery" icon={<ImageIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>精彩花絮</NavButton>
                     <NavButton tabName="wallOfFame" icon={<Trophy size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>榮譽殿堂</NavButton>
                     <NavButton tabName="awards" icon={<Award size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>獎項成就</NavButton>
@@ -1556,7 +1476,6 @@ export default function App() {
                     <NavButton tabName="assessments" icon={<Activity size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>綜合能力評估</NavButton>
                     <NavButton tabName="monthlyStarsAdmin" icon={<Crown size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>每月之星管理</NavButton>
                     <NavButton tabName="students" icon={<Users size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>隊員管理</NavButton>
-                    <NavButton tabName="externalMatches" icon={<BookMarked size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>校外賽管理</NavButton>
                     <NavButton tabName="attendance" icon={<ClipboardCheck size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>快速點名</NavButton>
                     <NavButton tabName="financial" icon={<DollarSign size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>財務收支</NavButton>
                     <NavButton tabName="settings" icon={<Settings2 size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>系統設定</NavButton>
@@ -1601,13 +1520,11 @@ export default function App() {
                  activeTab === 'gallery' ? "📸 精彩花絮" :
                  activeTab === 'awards' ? "🏆 獎項成就" :
                  activeTab === 'league' ? "🗓️ 聯賽專區" :
-                 activeTab === 'socialFeed' ? "💬 球隊動態牆" :
                  activeTab === 'wallOfFame' ? "🏛️ 榮譽殿堂" :
                  activeTab === 'financial' ? "💰 財務收支管理" :
                  activeTab === 'settings' ? "⚙️ 系統核心設定" :
                  activeTab === 'monthlyStarsAdmin' ? "🌟 每月之星管理" :
                  activeTab === 'monthlyStars' ? "🌟 每月之星" :
-                 activeTab === 'externalMatches' ? "📝 校外賽記錄管理" :
                  activeTab === 'assessments' ? "📋 綜合能力評估" : ""}
               </h1>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
@@ -1729,15 +1646,11 @@ export default function App() {
           )}
 
           {!viewingStudent && activeTab === 'rankings' && (
-              <RankingPage role={role} rankedStudents={rankedStudents} filteredStudents={filteredStudents} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setShowPlayerCard={setShowPlayerCard} adjustPoints={adjustPoints} handleExternalComp={handleExternalComp} deleteItem={deleteItem} />
+              <RankingPage role={role} rankedStudents={rankedStudents} filteredStudents={filteredStudents} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setShowPlayerCard={setShowPlayerCard} adjustPoints={adjustPoints} deleteItem={deleteItem} />
           )}
 
           {!viewingStudent && activeTab === 'students' && role === 'admin' && (
             <RosterPage students={students} filteredStudents={filteredStudents} birthYearStats={birthYearStats} selectedYearFilter={selectedYearFilter} setSelectedYearFilter={setSelectedYearFilter} handleCSVImportStudents={handleCSVImportStudents} setViewingStudent={setViewingStudent} handleManualAward={handleManualAward} handleUpdateSquashClass={handleUpdateSquashClass} setEditingStudent={setEditingStudent} deleteItem={deleteItem} setShowAddPlayerModal={setShowAddPlayerModal} />
-          )}
-
-          {!viewingStudent && activeTab === 'socialFeed' && (
-              <SocialFeedPage role={role} currentUserInfo={currentUserInfo} feedPosts={feedPosts} setShowCreatePostModal={setShowCreatePostModal} handleLikePost={handleLikePost} handleAddComment={handleAddComment} />
           )}
 
           {!viewingStudent && activeTab === 'monthlyStarsAdmin' && role === 'admin' && (
@@ -1818,11 +1731,9 @@ export default function App() {
               />
           )}
             
-          {!viewingStudent && activeTab === 'externalMatches' && role === 'admin' && (<ExternalMatchesPage newExternalMatch={newExternalMatch} setNewExternalMatch={setNewExternalMatch} externalTournaments={externalTournaments} students={students} handleSaveExternalMatch={handleSaveExternalMatch} isUpdating={isUpdating} />)}
           {!viewingStudent && activeTab === 'settings' && role === 'admin' && (<SettingsPage systemConfig={systemConfig} setSystemConfig={setSystemConfig} importEncoding={importEncoding} setImportEncoding={setImportEncoding} externalTournaments={externalTournaments} handleCSVImportExternalTournaments={handleCSVImportExternalTournaments} deleteItem={deleteItem} handleSeasonReset={handleSeasonReset} setIsUpdating={setIsUpdating} db={db} appId={appId} handleCSVImportTrophies={handleCSVImportTrophies} handleCSVImportAlumni={handleCSVImportAlumni} />)}
           
           {showAddPlayerModal && (<AddPlayerModal onClose={() => setShowAddPlayerModal(false)} db={db} appId={appId} compressImage={compressImage} />)}
-          {showCreatePostModal && (<CreatePostModal onClose={() => setShowCreatePostModal(false)} currentUserInfo={currentUserInfo} role={role} appId={appId} compressImage={compressImage} />)}
           {editingStudent && (<EditPlayerModal student={editingStudent} onClose={() => setEditingStudent(null)} db={db} appId={appId} compressImage={compressImage} handleSetupStudentAuth={handleSetupStudentAuth} />)}        
         </div>
       </main>
