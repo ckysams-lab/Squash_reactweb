@@ -1,14 +1,10 @@
-// src/pages/LeaguePage.jsx (Version 5.0 — Hybrid League Update)
-// 更新內容: 支援手動加入「單場賽程」，允許輸入外校對手並給予預估 Elo 積分。
+// src/pages/LeaguePage.jsx (Version 5.1 — Esports Matchup Cards Update)
+// 更新內容: 將「待開賽」的賽程從原本的表格中抽出，升級為深色電競風的「對戰卡片 (Matchup Cards)」。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
-import {
-  Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus
-} from 'lucide-react';
+import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
-
-// 👉 引入 Firebase 方法以新增賽事 👈
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const TrendIndicator = ({ trend }) => {
@@ -82,7 +78,6 @@ const TeamTieBoard = ({ groupName, matches }) => {
   );
 };
 
-// 👉 更新：排行榜顯示外校生徽章 👈
 const StandingsTable = ({ players }) => (
   <div className="overflow-x-auto mb-1">
     <table className="w-full text-sm">
@@ -121,7 +116,90 @@ const StandingsTable = ({ players }) => (
   </div>
 );
 
-const MatchRow = ({ match, role, tournamentStandings, groupName, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students }) => {
+// 👉 全新：電競風對戰卡片 (Matchup Card) - 專供 Scheduled Matches 使用 👈
+const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students }) => {
+    const cheersCount = match.cheers?.length || 0;
+    const hasCheered = match.cheers?.includes(currentUserInfo?.id || 'admin');
+
+    const p1Internal = students?.find(s => s.id === match.player1Id);
+    const p2Internal = students?.find(s => s.id === match.player2Id);
+    const p1Elo = p1Internal ? (p1Internal.totalPoints || 1000) : (match.extElo || 1000);
+    const p2Elo = p2Internal ? (p2Internal.totalPoints || 1000) : (match.extElo || 1000);
+    const p1WinProb = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
+    const p2WinProb = 1 - p1WinProb;
+
+    return (
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-[2rem] p-6 shadow-xl relative overflow-hidden border border-slate-700 hover:-translate-y-1 transition-transform group">
+            <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+            
+            {/* Header: Date & Tag */}
+            <div className="flex justify-between items-center mb-5 relative z-10">
+                <span className="text-xs font-black text-slate-400 bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700 shadow-inner">
+                    {match.date} {match.time}
+                </span>
+                <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest px-2.5 py-1 border border-amber-500/30 rounded-lg bg-amber-500/10 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+                    {match.matchOrder || match.venue || '即將開戰'}
+                </span>
+            </div>
+
+            {/* Fighters */}
+            <div className="flex justify-between items-center mb-6 relative z-10">
+                <div className="text-center w-5/12">
+                    <div className="w-14 h-14 mx-auto bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center font-black text-2xl mb-2 border border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                        {match.player1Name[0]}
+                    </div>
+                    <p className="font-black text-white text-sm truncate">{match.player1Name}</p>
+                    <p className="text-[10px] text-blue-400 font-bold mt-1">Elo {p1Elo}</p>
+                </div>
+                <div className="w-2/12 text-center">
+                    <span className="text-xl font-black italic text-slate-500 drop-shadow-lg">VS</span>
+                </div>
+                <div className="text-center w-5/12">
+                    <div className="w-14 h-14 mx-auto bg-orange-500/20 text-orange-400 rounded-full flex items-center justify-center font-black text-2xl mb-2 border border-orange-500/30 shadow-[0_0_15px_rgba(249,115,22,0.3)]">
+                        {match.player2Name?.[0] || '?'}
+                    </div>
+                    <p className="font-black text-white text-sm truncate">
+                        {match.player2Name} {!p2Internal && <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1 py-0.5 rounded ml-1">外</span>}
+                    </p>
+                    <p className="text-[10px] text-orange-400 font-bold mt-1">Elo {p2Elo}</p>
+                </div>
+            </div>
+
+            {/* Tale of the Tape Bar */}
+            <div className="bg-slate-950/50 rounded-xl p-3.5 mb-6 border border-slate-800 relative z-10">
+                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                    <span className="text-blue-400">{(p1WinProb*100).toFixed(0)}%</span>
+                    <span className="text-slate-500 text-[9px]">勝率預測</span>
+                    <span className="text-orange-400">{(p2WinProb*100).toFixed(0)}%</span>
+                </div>
+                <div className="flex h-2 w-full rounded-full overflow-hidden bg-slate-800">
+                    <div className="bg-blue-500 h-full shadow-[0_0_10px_rgba(59,130,246,0.8)]" style={{ width: `${p1WinProb * 100}%` }}></div>
+                    <div className="bg-orange-500 h-full shadow-[0_0_10px_rgba(249,115,22,0.8)]" style={{ width: `${p2WinProb * 100}%` }}></div>
+                </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-between items-center pt-4 border-t border-slate-700/50 relative z-10">
+                <button onClick={(e) => handleCheerMatch(match.id, e)} className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black transition-all active:scale-95 shadow-lg ${hasCheered ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-orange-500/50' : 'bg-slate-800 text-slate-400 hover:text-orange-400 hover:bg-slate-700'}`}>
+                    <Zap size={14} className={hasCheered ? 'fill-white' : ''} /> {cheersCount > 0 ? cheersCount : '支持'}
+                </button>
+                {role === 'admin' && (
+                    <div className="flex gap-2">
+                        {!match.player2Id?.startsWith('ext_') && (
+                            <button onClick={() => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }} className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"><PlayCircle size={14} /></button>
+                        )}
+                        <button onClick={() => handleUpdateLeagueMatchScore(match)} className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all"><Swords size={14} /></button>
+                        <button onClick={() => handleEditLeagueMatch(match)} className="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center hover:bg-slate-600 hover:text-white transition-all opacity-0 group-hover:opacity-100"><Pencil size={12} /></button>
+                        <button onClick={() => deleteItem('league_matches', match.id)} className="w-8 h-8 rounded-full bg-slate-700 text-red-400 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"><Trash2 size={12} /></button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// 這是留給 Completed Matches 的傳統表格行
+const CompletedMatchRow = ({ match, tournamentStandings, groupName, students }) => {
   const isGiantSlayer = useMemo(() => {
     if (match.status !== 'completed' || !match.winnerId) return false;
     const group = tournamentStandings?.[groupName];
@@ -132,76 +210,29 @@ const MatchRow = ({ match, role, tournamentStandings, groupName, currentUserInfo
     return winnerRank !== -1 && loserRank !== -1 && winnerRank > loserRank;
   }, [match, tournamentStandings, groupName]);
 
-  const cheersCount = match.cheers?.length || 0;
-  const hasCheered = match.cheers?.includes(currentUserInfo?.id || 'admin');
-  const isDone = match.status === 'completed';
-  const scoreStr = isDone ? (match.matchType === 'external' ? match.externalMatchScore : `${match.score1} : ${match.score2}`) : null;
-
-  // 👉 Elo 預測：若對手為外校，讀取 match.extElo 👈
-  const p1Internal = students?.find(s => s.id === match.player1Id);
+  const scoreStr = match.matchType === 'external' ? match.externalMatchScore : `${match.score1} : ${match.score2}`;
   const p2Internal = students?.find(s => s.id === match.player2Id);
-  const p1Elo = p1Internal ? (p1Internal.totalPoints || 1000) : (match.extElo || 1000);
-  const p2Elo = p2Internal ? (p2Internal.totalPoints || 1000) : (match.extElo || 1000);
-  
-  const p1WinProb = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
-  const p2WinProb = 1 - p1WinProb;
 
   return (
-    <tr className={`transition-colors ${isDone ? '' : 'hover:bg-slate-50'}`}>
-      <td className="px-4 py-4 whitespace-nowrap align-top pt-5">
+    <tr className="hover:bg-slate-50 transition-colors">
+      <td className="px-4 py-4 whitespace-nowrap align-middle">
         <p className="font-bold text-slate-700 text-sm">{match.date}</p>
         <p className="font-mono text-xs text-slate-400 mt-0.5">{match.time}</p>
-        {(match.matchOrder || match.venue) && (<p className="text-[10px] text-blue-500 font-bold mt-1 uppercase tracking-wider">{match.matchOrder || match.venue}</p>)}
       </td>
-      <td className="px-4 py-4 min-w-[200px]">
-        <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`font-black text-sm ${match.winnerId === match.player1Id ? 'text-blue-600' : 'text-slate-700'}`}>{match.player1Name}</span>
-              <span className="text-[10px] font-black text-slate-300 italic px-1">vs</span>
-              <span className={`font-black text-sm flex items-center gap-1 ${match.winnerId === match.player2Id ? 'text-blue-600' : 'text-slate-700'}`}>
-                {match.player2Name} {!p2Internal && <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded uppercase tracking-wider">外校</span>}
-              </span>
-              {isGiantSlayer && (<span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded uppercase tracking-wider"><ShieldAlert size={10} /> 爆冷</span>)}
-            </div>
-            {!isDone && (
-                <div className="mt-1 w-full max-w-[220px]">
-                   <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                      <span className="text-blue-500">勝率預測 {(p1WinProb*100).toFixed(0)}%</span>
-                      <span className="text-orange-500">{(p2WinProb*100).toFixed(0)}%</span>
-                   </div>
-                   <div className="flex h-1.5 w-full rounded-full overflow-hidden bg-slate-100 shadow-inner">
-                      <div className="bg-blue-500 h-full" style={{ width: `${p1WinProb * 100}%` }}></div>
-                      <div className="bg-orange-400 h-full" style={{ width: `${p2WinProb * 100}%` }}></div>
-                   </div>
-                </div>
-            )}
-        </div>
-      </td>
-      <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5">
-        {scoreStr ? <span className="font-mono font-black text-xl text-slate-800 tracking-wider bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">{scoreStr}</span> : <span className="text-slate-300 font-bold text-lg">—</span>}
-      </td>
-      <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5"><StatusPill status={match.status} /></td>
-      <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5">
-        <button onClick={(e) => handleCheerMatch(match.id, e)} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black border transition-all active:scale-95 shadow-sm ${hasCheered ? 'bg-gradient-to-r from-orange-50 to-red-50 text-orange-600 border-orange-200' : 'bg-white text-slate-400 border-slate-200 hover:text-orange-500 hover:border-orange-300'}`}>
-          <Zap size={12} className={hasCheered ? 'fill-orange-500' : ''} />{cheersCount > 0 ? cheersCount : '支持'}
-        </button>
-      </td>
-      {role === 'admin' && (
-        <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5">
-          <div className="flex justify-center gap-1.5">
-            {match.status === 'scheduled' && (
-              <>
-                {!match.player2Id?.startsWith('ext_') && (
-                    <button onClick={() => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }} className="p-2.5 rounded-xl bg-red-50 text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all shadow-sm" title="即時轉播"><PlayCircle size={14} /></button>
-                )}
-                <button onClick={() => handleUpdateLeagueMatchScore(match)} className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="結算聯賽與 Elo 積分"><Swords size={14} /></button>
-                <button onClick={() => handleEditLeagueMatch(match)} className="p-2.5 rounded-xl bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-600 hover:text-white transition-all shadow-sm" title="編輯"><Pencil size={14} /></button>
-              </>
-            )}
-            <button onClick={() => deleteItem('league_matches', match.id)} className="p-2.5 rounded-xl bg-white text-red-400 border border-slate-200 hover:bg-red-50 hover:border-red-200 transition-all shadow-sm" title="刪除"><Trash2 size={14} /></button>
+      <td className="px-4 py-4 min-w-[200px] align-middle">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`font-black text-sm ${match.winnerId === match.player1Id ? 'text-blue-600' : 'text-slate-700'}`}>{match.player1Name}</span>
+            <span className="text-[10px] font-black text-slate-300 italic px-1">vs</span>
+            <span className={`font-black text-sm flex items-center gap-1 ${match.winnerId === match.player2Id ? 'text-blue-600' : 'text-slate-700'}`}>
+              {match.player2Name} {!p2Internal && match.player2Id && <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded uppercase tracking-wider">外校</span>}
+            </span>
+            {isGiantSlayer && (<span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded uppercase tracking-wider"><ShieldAlert size={10} /> 爆冷</span>)}
           </div>
-        </td>
-      )}
+      </td>
+      <td className="px-4 py-4 text-center whitespace-nowrap align-middle">
+        <span className="font-mono font-black text-xl text-slate-800 tracking-wider bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">{scoreStr}</span>
+      </td>
+      <td className="px-4 py-4 text-center whitespace-nowrap align-middle"><StatusPill status={match.status} /></td>
     </tr>
   );
 };
@@ -210,32 +241,74 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
   const isTeamTie = groupName.includes(' vs ');
   const players = enrichedStandings?.[groupName] || [];
   const sortedMatches = [...matches].sort((a, b) => a.date.localeCompare(b.date) || (a.matchOrder || '').localeCompare(b.matchOrder || ''));
-  const completed = matches.filter(m => m.status === 'completed').length; const total = matches.length;
+  
+  // 👉 拆分已完賽與未開賽 👈
+  const completedMatches = sortedMatches.filter(m => m.status === 'completed');
+  const scheduledMatches = sortedMatches.filter(m => m.status === 'scheduled');
+  
+  const completedCount = completedMatches.length; 
+  const totalCount = matches.length;
 
   return (
-    <div className="mb-10">
+    <div className="mb-12">
       {!isTeamTie && (
         <div className="flex items-center gap-3 mb-4 px-1">
           <h4 className="text-xl font-black text-slate-800">{groupName}</h4>
           <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-widest border border-slate-200">{players.length} Players</span>
-          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-widest border border-slate-200">{completed}/{total} Completed</span>
+          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-widest border border-slate-200">{completedCount}/{totalCount} Completed</span>
         </div>
       )}
-      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-6 md:p-8">
+
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden p-6 md:p-8">
           <TeamTieBoard groupName={groupName} matches={matches} />
-          {!isTeamTie && players.length > 0 && (<><PodiumStrip players={players} /><StandingsTable players={players} /><div className="border-t-2 border-dashed border-slate-100 mt-6 pt-6 mb-2"><p className="text-[11px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2"><Activity size={14}/> 賽事記錄與預測</p></div></>)}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100"><th className="px-4 py-3 text-left whitespace-nowrap">日期 / 場次</th><th className="px-4 py-3 text-left whitespace-nowrap">對賽球員</th><th className="px-4 py-3 text-center whitespace-nowrap">比分</th><th className="px-4 py-3 text-center whitespace-nowrap">狀態</th><th className="px-4 py-3 text-center whitespace-nowrap">人氣</th>{role === 'admin' && <th className="px-4 py-3 text-center whitespace-nowrap">操作</th>}</tr></thead>
-              <tbody className="divide-y divide-slate-50">
-                {sortedMatches.map(match => (
-                  <MatchRow key={match.id} match={match} role={role} groupName={groupName} tournamentStandings={tournamentStandings} currentUserInfo={currentUserInfo} handleCheerMatch={handleCheerMatch} setActiveLeagueMatch={setActiveLeagueMatch} setShowUmpirePanel={setShowUmpirePanel} handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore} handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} students={students} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+
+          {!isTeamTie && players.length > 0 && (
+            <>
+              <PodiumStrip players={players} />
+              <StandingsTable players={players} />
+              <div className="border-t-2 border-dashed border-slate-100 mt-6 pt-6 mb-6"></div>
+            </>
+          )}
+
+          {/* 👉 賽前對戰卡片區 (Main Events) 👈 */}
+          {scheduledMatches.length > 0 && (
+              <div className="mb-10">
+                  <p className="text-[11px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2 mb-4">
+                      <Zap size={14}/> 即將上演 (Main Events)
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                      {scheduledMatches.map(match => (
+                          <MatchupCard key={match.id} match={match} role={role} currentUserInfo={currentUserInfo} handleCheerMatch={handleCheerMatch} setActiveLeagueMatch={setActiveLeagueMatch} setShowUmpirePanel={setShowUmpirePanel} handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore} handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} students={students} />
+                      ))}
+                  </div>
+              </div>
+          )}
+
+          {/* 👉 完賽紀錄表格 (Results) 👈 */}
+          {completedMatches.length > 0 && (
+              <div>
+                  <p className="text-[11px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2 mb-4">
+                      <Activity size={14}/> 完賽紀錄 (Results)
+                  </p>
+                  <div className="overflow-x-auto bg-slate-50/50 rounded-2xl border border-slate-100">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 bg-slate-50">
+                          <th className="px-4 py-3 text-left whitespace-nowrap">日期 / 場次</th>
+                          <th className="px-4 py-3 text-left whitespace-nowrap">對戰組合</th>
+                          <th className="px-4 py-3 text-center whitespace-nowrap">最終比分</th>
+                          <th className="px-4 py-3 text-center whitespace-nowrap">狀態</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {completedMatches.map(match => (
+                          <CompletedMatchRow key={match.id} match={match} tournamentStandings={tournamentStandings} groupName={groupName} students={students}/>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+              </div>
+          )}
       </div>
     </div>
   );
@@ -254,19 +327,6 @@ const MyStatsBanner = ({ stats, upcomingMatches, selectedTournament, currentUser
         <div className="bg-white rounded-2xl py-4 border border-slate-100 shadow-sm"><p className={`text-3xl font-black ${stats.pointsDiff >= 0 ? 'text-blue-500' : 'text-rose-500'}`}>{stats.pointsDiff > 0 ? `+${stats.pointsDiff}` : stats.pointsDiff}</p><p className="text-[10px] font-black text-slate-400 mt-1 uppercase tracking-widest">淨得局</p></div>
         <div className="bg-gradient-to-b from-blue-600 to-indigo-700 rounded-2xl py-4 shadow-md text-white"><p className="text-3xl font-black font-mono tracking-tighter">{stats.leaguePoints}</p><p className="text-[10px] font-black text-blue-200 mt-1 uppercase tracking-widest">聯賽積分</p></div>
       </div>
-      {upcomingMatches.length > 0 && (
-        <div className="border-t border-slate-100 pt-5">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Activity size={12}/> 即將對陣 (Tale of the Tape)</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {upcomingMatches.map(m => (
-              <div key={m.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
-                <div className="flex flex-col"><span className="text-[10px] font-bold text-slate-400">{m.date} {m.time}</span><span className="text-sm font-black text-slate-700 mt-0.5">vs {m.player1Id === currentUserInfo.id ? m.player2Name : m.player1Name}</span></div>
-                <StatusPill status="scheduled" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -277,19 +337,14 @@ export default function LeaguePage({
   setSelectedTournament, tournamentList, leagueMatches, myTournamentStats,
   myUpcomingMatches, groupedMatches, tournamentStandings, handleCheerMatch,
   handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, schoolLogo,
-  students, db, appId // 👈 接收 db, appId 用於寫入
+  students, db, appId 
 }) {
   const posterRef = useRef();
   const [isRenderingPoster, setIsRenderingPoster] = useState(false);
   const [previousStandings, setPreviousStandings] = useState({});
   const [showAddSingleMatch, setShowAddSingleMatch] = useState(false);
   const [isUpdatingMatch, setIsUpdatingMatch] = useState(false);
-
-  // 👉 新增賽程的狀態
-  const [newMatch, setNewMatch] = useState({
-    groupName: 'Group A', date: new Date().toISOString().split('T')[0], time: '16:00',
-    player1Id: '', isExternal: false, player2Id: '', extName: '', extElo: '1000'
-  });
+  const [newMatch, setNewMatch] = useState({ groupName: 'Group A', date: new Date().toISOString().split('T')[0], time: '16:00', player1Id: '', isExternal: false, player2Id: '', extName: '', extElo: '1000' });
 
   const handleSaveSingleMatch = async () => {
       if (!newMatch.player1Id) return alert("必須選擇一位本校出賽球員！");
@@ -299,39 +354,25 @@ export default function LeaguePage({
       setIsUpdatingMatch(true);
       try {
           const p1 = students.find(s => s.id === newMatch.player1Id);
-          let p2Id = null;
-          let p2Name = "";
+          let p2Id = null; let p2Name = "";
           
           if (newMatch.isExternal) {
-              p2Id = `ext_${Date.now()}`;
-              p2Name = newMatch.extName.trim();
+              p2Id = `ext_${Date.now()}`; p2Name = newMatch.extName.trim();
           } else {
               const p2 = students.find(s => s.id === newMatch.player2Id);
-              p2Id = p2.id;
-              p2Name = p2.name;
+              p2Id = p2.id; p2Name = p2.name;
           }
 
           const matchData = {
-              tournamentName: selectedTournament,
-              groupName: newMatch.groupName || '預設組別',
-              date: newMatch.date,
-              time: newMatch.time,
-              player1Id: p1.id,
-              player1Name: p1.name,
-              player2Id: p2Id,
-              player2Name: p2Name,
-              matchType: newMatch.isExternal ? 'friendly_match' : 'internal_challenge',
-              status: 'scheduled',
-              timestamp: serverTimestamp()
+              tournamentName: selectedTournament, groupName: newMatch.groupName || '預設組別', date: newMatch.date, time: newMatch.time,
+              player1Id: p1.id, player1Name: p1.name, player2Id: p2Id, player2Name: p2Name,
+              matchType: newMatch.isExternal ? 'friendly_match' : 'internal_challenge', status: 'scheduled', timestamp: serverTimestamp()
           };
 
-          if (newMatch.isExternal) {
-              matchData.extElo = parseInt(newMatch.extElo, 10) || 1000;
-          }
+          if (newMatch.isExternal) { matchData.extElo = parseInt(newMatch.extElo, 10) || 1000; }
 
           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'), matchData);
-          alert("✅ 成功加入一場新賽程！");
-          setShowAddSingleMatch(false);
+          alert("✅ 成功加入一場新賽程！"); setShowAddSingleMatch(false);
       } catch(e) { console.error(e); alert("新增失敗，請檢查網絡。"); }
       setIsUpdatingMatch(false);
   };
@@ -411,7 +452,6 @@ export default function LeaguePage({
 
             {role === 'admin' && (
               <>
-                {/* 👉 新增：加入單場賽事按鈕 👈 */}
                 {selectedTournament && (
                     <button onClick={() => setShowAddSingleMatch(true)} className="p-3 bg-white border border-slate-200 text-emerald-600 rounded-xl hover:bg-emerald-50 hover:border-emerald-300 transition-all shadow-sm" title={`新增單場賽程至 ${selectedTournament}`}>
                       <UserPlus size={18} />
@@ -448,7 +488,6 @@ export default function LeaguePage({
         </div>
       )}
 
-      {/* 👉 5.0 版新增：單場賽事輸入 Modal 👈 */}
       {showAddSingleMatch && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100">
