@@ -1,76 +1,49 @@
-// src/pages/RankingPage.jsx (Version 2.3)
-// 更新內容: 
-// 1. 新增獨立的「外校對手」勾選框，完美支援跨校賽事的 Elo 結算。
-// 2. 在操作列新增手動 ➕ / ➖ 按鈕，讓教練能隨時手動微調學員積分。
+// src/pages/RankingPage.jsx (Version 2.4)
+// 更新內容: 新增「實時狀態指示燈 (Form Guide)」，顯示學員近 5 場比賽的勝負軌跡 (🟢🔴)。
 
 import React, { useState } from 'react';
-import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords, X, Target, Zap, Plus, Minus } from 'lucide-react';
+import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords, X, Target, Zap, Plus, Minus, Activity } from 'lucide-react';
 import { BADGE_DATA, ACHIEVEMENT_DATA } from '../constants/data';
 
 import { PageHeader, Card } from '../components/ui';
 
 export default function RankingPage({
-    role,
-    rankedStudents,
-    filteredStudents,
-    searchTerm,
-    setSearchTerm,
-    setShowPlayerCard,
-    handleExternalComp,
-    deleteItem,
-    adjustPoints,
-    leagueMatches 
+    role, rankedStudents, filteredStudents, searchTerm, setSearchTerm, setShowPlayerCard, handleExternalComp, deleteItem, adjustPoints, leagueMatches 
 }) {
     const [matchModalData, setMatchModalData] = useState(null);
     const [matchType, setMatchType] = useState("internal_challenge");
-    
-    // 👉 獨立的「外校對手」狀態 👈
     const [isExternal, setIsExternal] = useState(false);
     const [opponentId, setOpponentId] = useState("");
     const [externalOppName, setExternalOppName] = useState("");
     const [externalOppRating, setExternalOppRating] = useState("1000");
 
-    const [gameScores, setGameScores] = useState([
-        { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }
-    ]);
-
+    const [gameScores, setGameScores] = useState([{ p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }]);
     const [calibrationModalData, setCalibrationModalData] = useState(null);
     const [calibrationTier, setCalibrationTier] = useState("1000");
 
     const openMatchModal = (student) => {
         setMatchModalData(student);
         setGameScores([{ p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }]);
-        setOpponentId(""); 
-        setIsExternal(false); // 重置為校內
-        setExternalOppName("");
+        setOpponentId(""); setIsExternal(false); setExternalOppName("");
     };
 
     const handleScoreChange = (idx, field, val) => {
-        const newScores = [...gameScores];
-        newScores[idx][field] = val;
-        setGameScores(newScores);
+        const newScores = [...gameScores]; newScores[idx][field] = val; setGameScores(newScores);
     };
 
-    // 👉 手動加減分功能 👈
     const handleManualAdjust = (student, isAdd) => {
         const actionStr = isAdd ? '加分' : '扣分';
         const valStr = prompt(`請輸入要為 ${student.name} ${actionStr}的數值 (正整數):`, "10");
         if (valStr === null) return;
-        
         const val = parseInt(valStr, 10);
-        if (isNaN(val) || val <= 0) {
-            alert("請輸入有效的正整數！");
-            return;
-        }
+        if (isNaN(val) || val <= 0) { alert("請輸入有效的正整數！"); return; }
 
         const finalVal = isAdd ? val : -val;
         if (confirm(`確認為 ${student.name} ${actionStr} ${val} 分？`)) {
             if (typeof adjustPoints === 'function') {
                 adjustPoints(student.id, finalVal, `教練手動${actionStr}`);
                 alert(`✅ 成功為 ${student.name} ${actionStr} ${val} 分！`);
-            } else {
-                alert("⚠️ 系統錯誤：找不到 adjustPoints 函數。");
-            }
+            } else { alert("⚠️ 系統錯誤：找不到 adjustPoints 函數。"); }
         }
     };
 
@@ -80,23 +53,16 @@ export default function RankingPage({
     const pointRatio = totalPointsMatch > 0 ? totalP / totalPointsMatch : 0.5;
     const actualScorePlayer = totalPointsMatch > 0 ? Math.max(0, Math.min(1, (pointRatio - 0.3) / 0.4)) : 0.5;
 
-    // 🏆 Elo 勝率預測
-    let currentOpponent = null;
-    let oppRatingForPredict = 1000;
-    
+    let currentOpponent = null; let oppRatingForPredict = 1000;
     if (!isExternal && opponentId) {
         currentOpponent = rankedStudents.find(s => s.id === opponentId);
         if (currentOpponent) oppRatingForPredict = currentOpponent.totalPoints || 1000;
-    } else if (isExternal) {
-        oppRatingForPredict = parseInt(externalOppRating, 10);
-    }
+    } else if (isExternal) { oppRatingForPredict = parseInt(externalOppRating, 10); }
 
     const playerRatingForPredict = matchModalData?.totalPoints || 1000;
     const predictedWinRate = 1 / (1 + Math.pow(10, (oppRatingForPredict - playerRatingForPredict) / 400));
 
-    // 🏆 H2H (歷史對戰) 掃描引擎 (僅限校內對手)
-    let h2hP1Wins = 0;
-    let h2hP2Wins = 0;
+    let h2hP1Wins = 0; let h2hP2Wins = 0;
     if (matchModalData && !isExternal && opponentId && Array.isArray(leagueMatches)) {
         leagueMatches.forEach(m => {
             if (m.status === 'completed') {
@@ -111,69 +77,49 @@ export default function RankingPage({
 
     const handleMatchSubmit = () => {
         if (totalPointsMatch === 0) return alert("請輸入至少一局的比分！");
-
-        const player = matchModalData;
-        const playerRating = player.totalPoints || 1000;
-        let oppRating;
-        let opponentNameForAlert;
+        const player = matchModalData; const playerRating = player.totalPoints || 1000;
+        let oppRating; let opponentNameForAlert;
 
         if (!isExternal) {
             if (!opponentId) return alert("請選擇校內對手！");
             const opponent = rankedStudents.find(s => s.id === opponentId);
             if (!opponent) return;
-            oppRating = opponent.totalPoints || 1000;
-            opponentNameForAlert = opponent.name;
+            oppRating = opponent.totalPoints || 1000; opponentNameForAlert = opponent.name;
         } else {
             if (!externalOppRating) return alert("請選擇外部對手的預估實力！");
-            oppRating = parseInt(externalOppRating, 10);
-            opponentNameForAlert = externalOppName.trim() || "未知外部對手";
+            oppRating = parseInt(externalOppRating, 10); opponentNameForAlert = externalOppName.trim() || "未知外部對手";
         }
 
         const expectedScorePlayer = 1 / (1 + Math.pow(10, (oppRating - playerRating) / 400));
-        const baseK = 30; 
-        const matchWeights = { 'internal_challenge': 1.0, 'friendly_match': 1.2, 'inter_school': 1.5, 'regional_elite': 2.0 };
+        const baseK = 30; const matchWeights = { 'internal_challenge': 1.0, 'friendly_match': 1.2, 'inter_school': 1.5, 'regional_elite': 2.0 };
         const K = baseK * (matchWeights[matchType] || 1.0);
 
         const playerDeltaRaw = K * (actualScorePlayer - expectedScorePlayer);
-        const playerDelta = Math.round(playerDeltaRaw);
-        const oppDelta = Math.round(-playerDeltaRaw); 
+        const playerDelta = Math.round(playerDeltaRaw); const oppDelta = Math.round(-playerDeltaRaw); 
 
         if (typeof adjustPoints === 'function') {
             adjustPoints(player.id, playerDelta);
             if (!isExternal) adjustPoints(opponentId, oppDelta);
-            
             alert(`✅ 小分制 Elo 結算成功！\n\n【積分變動】\n${player.name}: ${playerDelta > 0 ? '+'+playerDelta : playerDelta} 分\n${!isExternal ? opponentNameForAlert + ': ' + (oppDelta > 0 ? '+'+oppDelta : oppDelta) + ' 分' : '(外校生不紀錄積分)'}`);
-        } else {
-            alert("⚠️ 找不到 adjustPoints 函數！");
-        }
+        } else { alert("⚠️ 找不到 adjustPoints 函數！"); }
         setMatchModalData(null);
     };
 
     const handleCalibrationSubmit = () => {
-        const player = calibrationModalData;
-        const currentPoints = player.totalPoints || 1000;
-        const targetPoints = parseInt(calibrationTier, 10);
+        const player = calibrationModalData; const currentPoints = player.totalPoints || 1000; const targetPoints = parseInt(calibrationTier, 10);
         const delta = targetPoints - currentPoints;
-        if (delta === 0) {
-            alert("目標積分與目前積分相同，無需調整！");
-            setCalibrationModalData(null);
-            return;
-        }
+        if (delta === 0) { alert("目標積分與目前積分相同，無需調整！"); setCalibrationModalData(null); return; }
         if (typeof adjustPoints === 'function') {
-            adjustPoints(player.id, delta);
-            alert(`✅ 初始評級設定成功！\n\n${player.name} 的積分已從 ${currentPoints} 分調整為 ${targetPoints} 分。`);
-        } else {
-            alert("⚠️ 找不到 adjustPoints 函數！");
-        }
+            adjustPoints(player.id, delta); alert(`✅ 初始評級設定成功！\n\n${player.name} 的積分已從 ${currentPoints} 分調整為 ${targetPoints} 分。`);
+        } else { alert("⚠️ 找不到 adjustPoints 函數！"); }
         setCalibrationModalData(null);
     };
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 relative">
-            
             <PageHeader title="積分排行榜" subtitle="查看全隊排名與積分變動" icon={TrophyIcon} />
 
-            {/* 頒獎台區塊 */}
+            {/* 頒獎台區塊保持原樣... */}
             <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
@@ -199,7 +145,6 @@ export default function RankingPage({
                 })}
             </div>
 
-            {/* 隊員列表 */}
             <Card noPadding>
                 <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
@@ -213,19 +158,20 @@ export default function RankingPage({
                   <table className="w-full text-left">
                     <thead className="text-[10px] text-slate-400 uppercase tracking-[0.2em] bg-slate-50 border-b font-black">
                         <tr>
-                            <th className="px-8 py-6 text-center">排名</th>
-                            <th className="px-8 py-6">隊員資料</th>
-                            <th className="px-8 py-6">目前章別</th>
-                            <th className="px-8 py-6 text-right">總分</th>
-                            {role === 'admin' && <th className="px-8 py-6 text-center">教練操作 (Elo / 微調)</th>}
+                            <th className="px-6 py-6 text-center">排名</th>
+                            <th className="px-6 py-6">隊員資料</th>
+                            <th className="px-6 py-6 text-center">近期狀態 (Form)</th>
+                            <th className="px-6 py-6 text-center">目前章別</th>
+                            <th className="px-6 py-6 text-right">總分</th>
+                            {role === 'admin' && <th className="px-6 py-6 text-center">教練操作 (Elo / 微調)</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {filteredStudents.map((s, i) => (
                         <tr key={s.id} className="group hover:bg-blue-50/30 transition-all cursor-pointer" onClick={() => setShowPlayerCard(s)}>
-                          <td className="px-8 py-8 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
+                          <td className="px-6 py-6 text-center"><span className={`inline-flex w-10 h-10 items-center justify-center rounded-xl text-sm font-black ${i < 3 ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>{i+1}</span></td>
                           
-                          <td className="px-8 py-8 max-w-[250px]">
+                          <td className="px-6 py-6 max-w-[200px]">
                               <div className="flex items-center gap-4">
                                   <div className="w-12 h-12 bg-slate-50 rounded-2xl flex shrink-0 items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase shadow-inner">{s.name[0]}</div>
                                   <div className="min-w-0">
@@ -235,33 +181,46 @@ export default function RankingPage({
                               </div>
                           </td>
 
-                          <td className="px-8 py-8"><div className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}><span className="text-lg">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black">{s.badge}</span></div></td>
-                          <td className="px-8 py-8 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
+                          {/* 👉 全新：實時狀態指示燈 (Form Guide) 👈 */}
+                          <td className="px-6 py-6 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                  {(() => {
+                                      const sMatches = leagueMatches
+                                          .filter(m => m.status === 'completed' && (m.player1Id === s.id || m.player2Id === s.id))
+                                          .sort((a,b) => new Date(b.date) - new Date(a.date) || (b.time || "").localeCompare(a.time || ""))
+                                          .slice(0, 5).reverse(); // 反轉讓最新的一場在最右側
+                                      
+                                      if (sMatches.length === 0) return <span className="text-[10px] text-slate-300 font-bold tracking-widest">- - - - -</span>;
+                                      
+                                      const dots = sMatches.map(m => {
+                                          const isWin = m.winnerId === s.id;
+                                          return (
+                                              <div key={m.id} title={`${m.date} ${isWin ? '勝' : '負'}`} 
+                                                   className={`w-3 h-3 rounded-full border border-white shadow-sm transition-all group-hover:scale-110 ${isWin ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.4)]' : 'bg-rose-500 shadow-[0_0_5px_rgba(244,63,94,0.4)]'}`}>
+                                              </div>
+                                          );
+                                      });
+                                      
+                                      const emptyDots = Array.from({ length: 5 - sMatches.length }).map((_, i) => (
+                                          <div key={`empty-${i}`} className="w-3 h-3 rounded-full bg-slate-100 border border-slate-200"></div>
+                                      ));
+                                      
+                                      return [...dots, ...emptyDots];
+                                  })()}
+                              </div>
+                          </td>
+
+                          <td className="px-6 py-6 text-center"><div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-2xl border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color} ${BADGE_DATA[s.badge]?.border} shadow-sm`}><span className="text-base">{BADGE_DATA[s.badge]?.icon}</span><span className="text-xs font-black">{s.badge}</span></div></td>
+                          <td className="px-6 py-6 text-right font-mono text-3xl text-blue-600 font-black">{s.totalPoints}</td>
                           
                           {role === 'admin' && (
-                            <td className="px-8 py-8">
+                            <td className="px-6 py-6">
                                 <div className="flex justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                    
-                                    {/* 1. 對賽成績輸入 (Elo) */}
-                                    <button onClick={()=>openMatchModal(s)} className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="輸入對賽成績 (Elo計算)">
-                                        <Swords size={16}/>
-                                    </button>
-
-                                    {/* 2. 👉 全新：手動加分 / 扣分按鈕 👈 */}
-                                    <button onClick={()=>handleManualAdjust(s, true)} className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="手動加分">
-                                        <Plus size={16}/>
-                                    </button>
-                                    <button onClick={()=>handleManualAdjust(s, false)} className="p-2.5 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all shadow-sm" title="手動扣分">
-                                        <Minus size={16}/>
-                                    </button>
-                                    
-                                    {/* 3. 其他管理功能 */}
-                                    <button onClick={()=>setCalibrationModalData(s)} className="p-2.5 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-600 hover:text-white transition-all shadow-sm" title="設定初始評級 (定級)">
-                                        <Target size={16}/>
-                                    </button>
-                                    <button onClick={()=>deleteItem('students', s.id)} className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm" title="永久刪除">
-                                        <Trash2 size={16}/>
-                                    </button>
+                                    <button onClick={()=>openMatchModal(s)} className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="輸入對賽成績 (Elo計算)"><Swords size={16}/></button>
+                                    <button onClick={()=>handleManualAdjust(s, true)} className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="手動加分"><Plus size={16}/></button>
+                                    <button onClick={()=>handleManualAdjust(s, false)} className="p-2.5 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all shadow-sm" title="手動扣分"><Minus size={16}/></button>
+                                    <button onClick={()=>setCalibrationModalData(s)} className="p-2.5 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-600 hover:text-white transition-all shadow-sm" title="設定初始評級 (定級)"><Target size={16}/></button>
+                                    <button onClick={()=>deleteItem('students', s.id)} className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm" title="永久刪除"><Trash2 size={16}/></button>
                                 </div>
                             </td>
                           )}
@@ -272,9 +231,10 @@ export default function RankingPage({
                 </div>
             </Card>
 
-            {/* 👉 包含 Tale of the Tape (外校獨立選項) 的 Modal 👈 */}
+            {/* Match Modal (包含 Tale of the Tape) */}
             {matchModalData && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    {/* (保持之前的模態框代碼) */}
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden border border-slate-100 max-h-[90vh] overflow-y-auto">
                         <div className="p-6 bg-slate-50 border-b flex justify-between items-center sticky top-0 z-10">
                             <div className="flex items-center gap-3"><div className="p-2 bg-blue-600 text-white rounded-xl shadow-md"><Swords size={20}/></div><h3 className="text-xl font-black text-slate-800">賽前預測與對戰室</h3></div>
@@ -297,7 +257,7 @@ export default function RankingPage({
                                     </label>
                                     
                                     {!isExternal ? (
-                                        <select className="w-full p-3 bg-orange-50 border border-orange-100 rounded-xl font-black text-orange-700 outline-none focus:border-orange-500 transition-all" value={opponentId} onChange={(e)=>setOpponentId(e.target.value)}>
+                                        <select className="w-full p-3 bg-orange-50 border border-orange-100 rounded-xl font-black text-orange-700 outline-none focus:border-orange-500 transition-all" value={opponentId} onChange={(e)=> { setOpponentId(e.target.value); setMatchType("internal_challenge"); }}>
                                             <option value="">-- 點擊選擇校內對手 --</option>
                                             {rankedStudents.filter(s => s.id !== matchModalData.id).map(s => (<option key={s.id} value={s.id}>{s.name} (積分: {s.totalPoints || 1000})</option>))}
                                         </select>
@@ -315,7 +275,6 @@ export default function RankingPage({
                                 </div>
                             </div>
 
-                            {/* 👉 Tale of the Tape (預測區塊) 👈 */}
                             {(opponentId || isExternal) && (
                                 <div className="bg-slate-900 rounded-2xl p-5 shadow-inner relative overflow-hidden animate-in zoom-in-95 duration-300">
                                     <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
@@ -333,7 +292,6 @@ export default function RankingPage({
                                         </div>
                                     </div>
 
-                                    {/* Win Probability Bar */}
                                     <div className="mt-6 relative z-10">
                                         <div className="flex justify-between text-[10px] font-bold text-white mb-1 uppercase tracking-wider">
                                             <span className="text-blue-400">勝率預測: {(predictedWinRate * 100).toFixed(1)}%</span>
@@ -345,18 +303,11 @@ export default function RankingPage({
                                         </div>
                                     </div>
 
-                                    {/* H2H (僅限校內對決顯示) */}
                                     {!isExternal && (
                                         <div className="mt-5 pt-4 border-t border-slate-700 flex justify-center items-center gap-8 relative z-10 animate-in fade-in">
-                                            <div className="text-center">
-                                                <div className="text-lg font-black text-blue-400">{h2hP1Wins}</div>
-                                                <div className="text-[9px] text-slate-500 uppercase tracking-widest">Wins</div>
-                                            </div>
+                                            <div className="text-center"><div className="text-lg font-black text-blue-400">{h2hP1Wins}</div><div className="text-[9px] text-slate-500 uppercase tracking-widest">Wins</div></div>
                                             <div className="text-[10px] text-slate-400 font-bold bg-slate-800 px-3 py-1 rounded-full">歷史對戰 (H2H)</div>
-                                            <div className="text-center">
-                                                <div className="text-lg font-black text-orange-400">{h2hP2Wins}</div>
-                                                <div className="text-[9px] text-slate-500 uppercase tracking-widest">Wins</div>
-                                            </div>
+                                            <div className="text-center"><div className="text-lg font-black text-orange-400">{h2hP2Wins}</div><div className="text-[9px] text-slate-500 uppercase tracking-widest">Wins</div></div>
                                         </div>
                                     )}
                                 </div>
@@ -400,7 +351,7 @@ export default function RankingPage({
                 </div>
             )}
 
-            {/* 初始評級 Modal */}
+            {/* Calibration Modal */}
             {calibrationModalData && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-100">
