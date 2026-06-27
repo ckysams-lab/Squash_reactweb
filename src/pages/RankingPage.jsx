@@ -1,6 +1,5 @@
-// src/pages/RankingPage.jsx (Version 2.1)
-// 更新內容: 引入「賽前預測與 H2H 歷史對戰室 (Tale of the Tape)」。
-// 在選擇對手後，實時顯示雙方 Elo 勝率預測條，提升系統專業度與競技儀式感。
+// src/pages/RankingPage.jsx (Version 2.2)
+// 更新內容: 修復並激活 H2H 歷史對戰引擎，實時計算雙方過去的交手勝負紀錄。
 
 import React, { useState } from 'react';
 import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords, X, Target, Zap } from 'lucide-react';
@@ -17,7 +16,8 @@ export default function RankingPage({
     setShowPlayerCard,
     handleExternalComp,
     deleteItem,
-    adjustPoints 
+    adjustPoints,
+    leagueMatches // 👉 接收從 App.jsx 傳來的比賽紀錄
 }) {
     const [matchModalData, setMatchModalData] = useState(null);
     const [matchType, setMatchType] = useState("internal_challenge");
@@ -35,7 +35,7 @@ export default function RankingPage({
     const openMatchModal = (student) => {
         setMatchModalData(student);
         setGameScores([{ p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }]);
-        setOpponentId(""); // 重置對手
+        setOpponentId(""); 
     };
 
     const handleScoreChange = (idx, field, val) => {
@@ -50,7 +50,7 @@ export default function RankingPage({
     const pointRatio = totalPointsMatch > 0 ? totalP / totalPointsMatch : 0.5;
     const actualScorePlayer = totalPointsMatch > 0 ? Math.max(0, Math.min(1, (pointRatio - 0.3) / 0.4)) : 0.5;
 
-    // 🏆 動態取得目前選擇的對手資料，以進行賽前預測
+    // 🏆 Elo 勝率預測
     let currentOpponent = null;
     let oppRatingForPredict = 1000;
     if (matchType === "internal_challenge" && opponentId) {
@@ -61,8 +61,23 @@ export default function RankingPage({
     }
 
     const playerRatingForPredict = matchModalData?.totalPoints || 1000;
-    // 預測勝率公式
     const predictedWinRate = 1 / (1 + Math.pow(10, (oppRatingForPredict - playerRatingForPredict) / 400));
+
+    // 🏆 H2H (歷史對戰) 掃描引擎
+    let h2hP1Wins = 0;
+    let h2hP2Wins = 0;
+    if (matchModalData && opponentId && Array.isArray(leagueMatches)) {
+        leagueMatches.forEach(m => {
+            // 找出他們兩人已完賽的校內對戰
+            if (m.status === 'completed' && m.matchType !== 'external') {
+                const matchPlayers = [m.player1Id, m.player2Id];
+                if (matchPlayers.includes(matchModalData.id) && matchPlayers.includes(opponentId)) {
+                    if (m.winnerId === matchModalData.id) h2hP1Wins++;
+                    if (m.winnerId === opponentId) h2hP2Wins++;
+                }
+            }
+        });
+    }
 
     const handleMatchSubmit = () => {
         if (totalPointsMatch === 0) return alert("請輸入至少一局的比分！");
@@ -128,7 +143,7 @@ export default function RankingPage({
             
             <PageHeader title="積分排行榜" subtitle="查看全隊排名與積分變動" icon={TrophyIcon} />
 
-            {/* 頒獎台區塊省略細節，保持原樣 */}
+            {/* 頒獎台區塊 */}
             <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
@@ -154,13 +169,13 @@ export default function RankingPage({
                 })}
             </div>
 
-            {/* v2.1 機制說明 */}
+            {/* 機制說明 */}
             <div className="bg-slate-900 text-slate-100 p-6 rounded-[2rem] border border-slate-700 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-xl relative overflow-hidden">
                 <div className="absolute -right-10 -top-10 text-slate-800 opacity-50"><Zap size={150} /></div>
                 <div className="p-3 bg-blue-600/20 text-blue-400 rounded-2xl relative z-10"><Zap size={24} /></div>
                 <div className="flex-1 relative z-10">
-                    <h4 className="text-lg font-black text-white mb-2">💡 Tale of the Tape 賽前預測系統 (v2.1)</h4>
-                    <p className="text-sm text-slate-400 font-bold">在記錄對賽成績時，系統會自動生成「賽前預測與 H2H 歷史對戰室」。透過實時計算雙方 Elo 積分差距，展示勝率預測，讓比賽更具職業電競氛圍！</p>
+                    <h4 className="text-lg font-black text-white mb-2">💡 Tale of the Tape 賽前預測與對戰室</h4>
+                    <p className="text-sm text-slate-400 font-bold">在記錄對賽成績時，系統會自動生成「賽前預測與 H2H 歷史對戰」。透過實時計算雙方 Elo 積分差距，展示勝率預測，讓比賽更具職業電競氛圍！</p>
                 </div>
             </div>
 
@@ -212,7 +227,7 @@ export default function RankingPage({
                 </div>
             </Card>
 
-            {/* 👉 更新：2.1 版 包含 Tale of the Tape 的 Modal 👈 */}
+            {/* 👉 包含 Tale of the Tape (預測與真實H2H) 的 Modal 👈 */}
             {matchModalData && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden border border-slate-100 max-h-[90vh] overflow-y-auto">
@@ -236,7 +251,7 @@ export default function RankingPage({
                                 </div>
                             </div>
 
-                            {/* 👉 核心：Tale of the Tape (H2H & 預測區塊) 👈 */}
+                            {/* 👉 核心：Tale of the Tape (動態 H2H & 預測區塊) 👈 */}
                             {opponentId && (
                                 <div className="bg-slate-900 rounded-2xl p-5 shadow-inner relative overflow-hidden animate-in zoom-in-95 duration-300">
                                     <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
@@ -266,13 +281,18 @@ export default function RankingPage({
                                         </div>
                                     </div>
 
-                                    {/* H2H 歷史對戰 (目前為視覺預留，需日後連接 DB) */}
+                                    {/* 👉 即時 H2H 歷史對戰紀錄 👈 */}
                                     <div className="mt-5 pt-4 border-t border-slate-700 flex justify-center items-center gap-8 relative z-10">
-                                        <div className="text-center"><div className="text-lg font-black text-blue-400">0</div><div className="text-[9px] text-slate-500 uppercase tracking-widest">Wins</div></div>
+                                        <div className="text-center">
+                                            <div className="text-lg font-black text-blue-400">{h2hP1Wins}</div>
+                                            <div className="text-[9px] text-slate-500 uppercase tracking-widest">Wins</div>
+                                        </div>
                                         <div className="text-[10px] text-slate-400 font-bold bg-slate-800 px-3 py-1 rounded-full">歷史對戰 (H2H)</div>
-                                        <div className="text-center"><div className="text-lg font-black text-orange-400">0</div><div className="text-[9px] text-slate-500 uppercase tracking-widest">Wins</div></div>
+                                        <div className="text-center">
+                                            <div className="text-lg font-black text-orange-400">{h2hP2Wins}</div>
+                                            <div className="text-[9px] text-slate-500 uppercase tracking-widest">Wins</div>
+                                        </div>
                                     </div>
-                                    <div className="text-center mt-2 text-[8px] text-slate-600">*需於日後版本連接資料庫以獲取歷史對陣數據</div>
                                 </div>
                             )}
 
@@ -314,7 +334,7 @@ export default function RankingPage({
                 </div>
             )}
 
-            {/* 初始評級 Modal 省略細節，保持原樣 */}
+            {/* 初始評級 Modal */}
             {calibrationModalData && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-100">
