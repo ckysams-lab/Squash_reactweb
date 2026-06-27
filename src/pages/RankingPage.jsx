@@ -1,5 +1,6 @@
-// src/pages/RankingPage.jsx (Version 1.9)
-// 更新內容: 新增「初始評級 (Calibration)」機制，解決 Elo 系統冷啟動問題，讓教練能依據學生真實實力設定起步分數。
+// src/pages/RankingPage.jsx (Version 2.0)
+// 更新內容: 重大升級！引入「細化至每球小分」的表現系數 (Point-for-Point Granularity)。
+// 透過計算總得分比例，精準反映「險勝/大炒」對 Elo 積分的微細影響。
 
 import React, { useState } from 'react';
 import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords, X, Target } from 'lucide-react';
@@ -18,20 +19,50 @@ export default function RankingPage({
     deleteItem,
     adjustPoints 
 }) {
-    // 對賽成績 Modal 狀態 (v1.8)
+    // 賽事 Modal 狀態
     const [matchModalData, setMatchModalData] = useState(null);
     const [matchType, setMatchType] = useState("internal_challenge");
-    const [score, setScore] = useState("3-0");
     const [opponentId, setOpponentId] = useState("");
     const [externalOppName, setExternalOppName] = useState("");
     const [externalOppRating, setExternalOppRating] = useState("1000");
 
-    // 👉 新增：初始評級 (Calibration) Modal 狀態 (v1.9) 👈
+    // 👉 新增：每局小分狀態 (支援 5 局 3 勝制) 👈
+    const [gameScores, setGameScores] = useState([
+        { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }
+    ]);
+
+    // 初始評級 Modal 狀態
     const [calibrationModalData, setCalibrationModalData] = useState(null);
     const [calibrationTier, setCalibrationTier] = useState("1000");
 
-    // Elo 賽事結算邏輯
+    // 打開成績輸入窗時，重置比分
+    const openMatchModal = (student) => {
+        setMatchModalData(student);
+        setGameScores([{ p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }, { p: "", o: "" }]);
+    };
+
+    // 處理比分輸入
+    const handleScoreChange = (idx, field, val) => {
+        const newScores = [...gameScores];
+        newScores[idx][field] = val;
+        setGameScores(newScores);
+    };
+
+    // 👉 實時計算總得分與表現評分 (Point Ratio Math) 👈
+    const totalP = gameScores.reduce((sum, g) => sum + (parseInt(g.p) || 0), 0);
+    const totalO = gameScores.reduce((sum, g) => sum + (parseInt(g.o) || 0), 0);
+    const totalPointsMatch = totalP + totalO;
+    
+    // 計算得球率 (Point Ratio)。假設範圍約落在 0.3 (被大炒) 到 0.7 (大炒對手) 之間
+    const pointRatio = totalPointsMatch > 0 ? totalP / totalPointsMatch : 0.5;
+    
+    // 將得球率映射為 Elo 實際得分 (0 到 1)。公式: (Ratio - 0.3) / 0.4，並限制在 0-1 之間
+    const actualScorePlayer = totalPointsMatch > 0 ? Math.max(0, Math.min(1, (pointRatio - 0.3) / 0.4)) : 0.5;
+
+    // 🏆 精細化 Elo 賽事結算邏輯
     const handleMatchSubmit = () => {
+        if (totalPointsMatch === 0) return alert("請輸入至少一局的比分！");
+
         const player = matchModalData;
         const playerRating = player.totalPoints || 1000;
         
@@ -52,13 +83,12 @@ export default function RankingPage({
         }
 
         const expectedScorePlayer = 1 / (1 + Math.pow(10, (oppRating - playerRating) / 400));
-        const scoreMapping = { "3-0": 1.0, "3-1": 0.85, "3-2": 0.7, "2-3": 0.3, "1-3": 0.15, "0-3": 0.0 };
-        const actualScorePlayer = scoreMapping[score];
-
+        
         const baseK = 30; 
         const matchWeights = { 'internal_challenge': 1.0, 'friendly_match': 1.2, 'inter_school': 1.5, 'regional_elite': 2.0 };
         const K = baseK * (matchWeights[matchType] || 1.0);
 
+        // 使用「小分映射」出來的 actualScorePlayer 計算 Delta
         const playerDeltaRaw = K * (actualScorePlayer - expectedScorePlayer);
         const playerDelta = Math.round(playerDeltaRaw);
         const oppDelta = Math.round(-playerDeltaRaw); 
@@ -66,33 +96,28 @@ export default function RankingPage({
         if (typeof adjustPoints === 'function') {
             adjustPoints(player.id, playerDelta);
             if (isInternal) adjustPoints(opponentId, oppDelta);
-            alert(`✅ 賽事結算成功！\n\n【積分變動】\n${player.name}: ${playerDelta > 0 ? '+'+playerDelta : playerDelta} 分\n${isInternal ? opponentNameForAlert + ': ' + (oppDelta > 0 ? '+'+oppDelta : oppDelta) + ' 分' : ''}`);
+            alert(`✅ 小分制 Elo 結算成功！\n\n【比賽數據】\n總得分: ${player.name} (${totalP}) vs 對手 (${totalO})\n得球率: ${(pointRatio*100).toFixed(1)}%\n表現評分: ${(actualScorePlayer*100).toFixed(1)} / 100\n預期勝率: ${(expectedScorePlayer*100).toFixed(1)}%\n\n【積分變動】\n${player.name}: ${playerDelta > 0 ? '+'+playerDelta : playerDelta} 分\n${isInternal ? opponentNameForAlert + ': ' + (oppDelta > 0 ? '+'+oppDelta : oppDelta) + ' 分' : ''}`);
         } else {
             alert("⚠️ 找不到 adjustPoints 函數！");
         }
         setMatchModalData(null);
     };
 
-    // 👉 新增：處理初始評級提交邏輯 👈
     const handleCalibrationSubmit = () => {
         const player = calibrationModalData;
         const currentPoints = player.totalPoints || 1000;
         const targetPoints = parseInt(calibrationTier, 10);
-        
-        // 計算差額 (Delta)，以便使用現有的 adjustPoints 函數
         const delta = targetPoints - currentPoints;
-
         if (delta === 0) {
             alert("目標積分與目前積分相同，無需調整！");
             setCalibrationModalData(null);
             return;
         }
-
         if (typeof adjustPoints === 'function') {
             adjustPoints(player.id, delta);
             alert(`✅ 初始評級設定成功！\n\n${player.name} 的積分已從 ${currentPoints} 分調整為 ${targetPoints} 分。`);
         } else {
-            alert("⚠️ 找不到 adjustPoints 函數，無法寫入資料庫！");
+            alert("⚠️ 找不到 adjustPoints 函數！");
         }
         setCalibrationModalData(null);
     };
@@ -102,7 +127,7 @@ export default function RankingPage({
             
             <PageHeader title="積分排行榜" subtitle="查看全隊排名與積分變動" icon={TrophyIcon} />
 
-            {/* 前三名頒獎台區塊 */}
+            {/* 頒獎台維持不變 */}
             <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
@@ -134,7 +159,24 @@ export default function RankingPage({
                 })}
             </div>
 
-            {/* 全體隊員列表 */}
+            {/* 👉 更新：2.0 版本小分制說明 👈 */}
+            <div className="bg-emerald-50/50 p-6 rounded-[2rem] border border-emerald-100 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
+                <div className="p-3 bg-emerald-100 text-emerald-600 rounded-2xl"><Info size={24} /></div>
+                <div className="flex-1">
+                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 SquashLevels 積分機制 (v2.0 每球小分制)</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
+                        <ul className="list-disc pl-4 space-y-1">
+                            <li><span className="text-emerald-600">小分精算</span>：系統會記錄每局小分 (如 11-9)，精確計算得球率。</li>
+                            <li><span className="text-amber-500">險勝與大勝</span>：同樣是 3-0，比分越懸殊獲得的加分越多；若多次刁時險勝，加分會相應減少。</li>
+                        </ul>
+                        <ul className="list-disc pl-4 space-y-1">
+                            <li><span className="text-indigo-500">光榮落敗</span>：即使 0-3 落敗，若每局都打到 9-11，系統會判定實力接近，大幅減少扣分！</li>
+                            <li><span className="text-red-500">初始校準</span>：教練可為新隊員設定初始梯隊積分 (800~2000)。</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <Card noPadding>
                 <div className="p-8 border-b bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-4">
                   <h3 className="text-xl font-black">全體隊員排名表</h3>
@@ -156,9 +198,7 @@ export default function RankingPage({
                               <div className="flex items-center gap-4">
                                   <div className="w-12 h-12 bg-slate-50 rounded-2xl flex shrink-0 items-center justify-center text-lg font-black text-slate-300 border group-hover:bg-white group-hover:text-blue-600 transition-all uppercase shadow-inner">{s.name[0]}</div>
                                   <div className="min-w-0">
-                                      <div className="flex flex-wrap items-center gap-2">
-                                          <div className="font-black text-lg text-slate-800 truncate" title={s.name}>{s.name}</div>
-                                      </div>
+                                      <div className="flex flex-wrap items-center gap-2"><div className="font-black text-lg text-slate-800 truncate" title={s.name}>{s.name}</div></div>
                                       <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">Class {s.class} • No.{s.classNo}</div>
                                   </div>
                               </div>
@@ -171,10 +211,9 @@ export default function RankingPage({
                           {role === 'admin' && (
                             <td className="px-8 py-8">
                                 <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                    {/* 👉 新增：初始評級按鈕 👈 */}
-                                    <button onClick={()=>setCalibrationModalData(s)} className="p-3 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="設定初始評級 (定級/校準)"><Target size={18}/></button>
-
-                                    <button onClick={()=>setMatchModalData(s)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="輸入對賽成績 (Elo計算)"><Swords size={18}/></button>
+                                    <button onClick={()=>setCalibrationModalData(s)} className="p-3 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="設定初始評級 (定級)"><Target size={18}/></button>
+                                    {/* 👉 點擊打開成績輸入 Modal 👈 */}
+                                    <button onClick={()=>openMatchModal(s)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="輸入對賽成績 (小分制Elo)"><Swords size={18}/></button>
                                     <button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="純紀錄校外賽成績"><Globe size={18}/></button>
                                 </div>
                             </td>
@@ -186,12 +225,12 @@ export default function RankingPage({
                 </div>
             </Card>
 
-            {/* 對賽成績 Modal (維持 v1.8 邏輯) */}
+            {/* 👉 更新：2.0 版 小分制輸入 Modal 👈 */}
             {matchModalData && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 max-h-[90vh] overflow-y-auto">
                         <div className="p-6 bg-slate-50 border-b flex justify-between items-center sticky top-0 z-10">
-                            <div className="flex items-center gap-3"><div className="p-2 bg-blue-100 text-blue-600 rounded-xl"><Swords size={20}/></div><h3 className="text-xl font-black text-slate-800">輸入對賽成績</h3></div>
+                            <div className="flex items-center gap-3"><div className="p-2 bg-blue-100 text-blue-600 rounded-xl"><Swords size={20}/></div><h3 className="text-xl font-black text-slate-800">輸入每局成績</h3></div>
                             <button onClick={() => setMatchModalData(null)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-all"><X size={20}/></button>
                         </div>
                         <div className="p-6 space-y-5">
@@ -230,57 +269,73 @@ export default function RankingPage({
                                 </div>
                             )}
 
-                            <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block mt-2">主角局數比分</label>
-                                <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500" value={score} onChange={(e)=>setScore(e.target.value)}>
-                                    <option value="3-0">勝 3 - 0 (表現評分: 100%)</option><option value="3-1">勝 3 - 1 (表現評分: 85%)</option><option value="3-2">勝 3 - 2 (表現評分: 70%)</option><option value="2-3">負 2 - 3 (表現評分: 30%)</option><option value="1-3">負 1 - 3 (表現評分: 15%)</option><option value="0-3">負 0 - 3 (表現評分: 0%)</option>
-                                </select>
+                            {/* 👉 核心機制：每局小分輸入區塊 👈 */}
+                            <div className="pt-2">
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">輸入每局分數 (無需打滿5局可留空)</label>
+                                <div className="space-y-3 bg-slate-50 p-5 rounded-[1.5rem] border border-slate-200 shadow-inner">
+                                    <div className="flex text-[10px] font-black text-slate-400 uppercase tracking-widest text-center px-4 mb-2">
+                                        <div className="flex-1 text-blue-600 text-left">主角得分</div>
+                                        <div className="w-12">VS</div>
+                                        <div className="flex-1 text-orange-600 text-right">對手得分</div>
+                                    </div>
+                                    {[1, 2, 3, 4, 5].map((gameNum, idx) => (
+                                        <div key={gameNum} className="flex items-center justify-between gap-3">
+                                            <span className="text-xs font-black text-slate-300 w-6">G{gameNum}</span>
+                                            <input type="number" min="0" placeholder="-" className="w-full p-3 text-center bg-white border border-slate-200 rounded-xl font-black text-blue-600 focus:border-blue-500 shadow-sm" value={gameScores[idx].p} onChange={(e) => handleScoreChange(idx, 'p', e.target.value)} />
+                                            <span className="text-slate-300 font-bold">-</span>
+                                            <input type="number" min="0" placeholder="-" className="w-full p-3 text-center bg-white border border-slate-200 rounded-xl font-black text-orange-600 focus:border-orange-500 shadow-sm" value={gameScores[idx].o} onChange={(e) => handleScoreChange(idx, 'o', e.target.value)} />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* 實時表現計算器面板 */}
+                                <div className="mt-4 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex flex-col gap-2">
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="font-bold text-slate-500">總得分比例:</span>
+                                        <span className="font-black text-slate-700">
+                                            <span className="text-blue-600">{totalP}</span> : <span className="text-orange-500">{totalO}</span> 
+                                            <span className="text-slate-400 ml-2">({totalPointsMatch > 0 ? (pointRatio * 100).toFixed(1) : 0}%)</span>
+                                        </span>
+                                    </div>
+                                    <div className="h-px bg-emerald-200/50 w-full my-1"></div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-bold text-emerald-700">實時表現評分:</span>
+                                        <span className="text-xl font-black text-emerald-600">{(actualScorePlayer * 100).toFixed(1)} <span className="text-sm text-emerald-500">/ 100</span></span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div className="p-6 bg-slate-50 border-t flex justify-end gap-3 sticky bottom-0">
                             <button onClick={() => setMatchModalData(null)} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-200 transition-all">取消</button>
-                            <button onClick={handleMatchSubmit} className="px-6 py-3 rounded-xl font-black bg-emerald-600 text-white hover:bg-emerald-700 shadow-md hover:shadow-lg transition-all">確認並計算 Elo</button>
+                            <button onClick={handleMatchSubmit} className="px-6 py-3 rounded-xl font-black bg-emerald-600 text-white hover:bg-emerald-700 shadow-md hover:shadow-lg transition-all">確認並計算精細 Elo</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* 👉 新增：初始評級彈出視窗 (Calibration Modal) 👈 */}
+            {/* 初始評級彈出視窗保持不變 */}
             {calibrationModalData && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-100">
                         <div className="p-6 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-amber-200 text-amber-700 rounded-xl"><Target size={20}/></div>
-                                <h3 className="text-xl font-black text-slate-800">設定初始評級 (定級)</h3>
-                            </div>
+                            <div className="flex items-center gap-3"><div className="p-2 bg-amber-200 text-amber-700 rounded-xl"><Target size={20}/></div><h3 className="text-xl font-black text-slate-800">設定初始評級 (定級)</h3></div>
                             <button onClick={() => setCalibrationModalData(null)} className="p-2 text-slate-400 hover:bg-amber-200/50 rounded-full transition-all"><X size={20}/></button>
                         </div>
                         <div className="p-6 space-y-6">
                             <div className="text-sm text-slate-600 font-bold bg-slate-50 p-4 rounded-xl border">
-                                教練可以根據 <span className="text-amber-600"> {calibrationModalData.name} </span> 目前的真實技術水平，為其設定一個合理的基準積分，以解決 Elo 系統初期的不平衡問題。
-                                <br/><br/>
+                                為 <span className="text-amber-600"> {calibrationModalData.name} </span> 設定基準積分。<br/><br/>
                                 該生目前的積分：<span className="text-lg text-blue-600 font-black">{calibrationModalData.totalPoints || 1000} 分</span>
                             </div>
-                            
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">選擇對應的實力梯隊</label>
-                                <select 
-                                    className="w-full p-4 bg-white border-2 border-amber-200 rounded-xl font-bold text-slate-700 outline-none focus:border-amber-500 transition-all text-lg" 
-                                    value={calibrationTier} 
-                                    onChange={(e)=>setCalibrationTier(e.target.value)}
-                                >
-                                    <option value="800">800 分 - 發展梯隊 (新手起步)</option>
-                                    <option value="1000">1000 分 - 基礎梯隊 (掌握基本擊球)</option>
-                                    <option value="1300">1300 分 - 校隊儲備 (具備戰術意識)</option>
-                                    <option value="1600">1600 分 - 校隊常規主力 (學界代表)</option>
-                                    <option value="2000">2000 分 - 精英梯隊 (全港排名前列)</option>
+                                <select className="w-full p-4 bg-white border-2 border-amber-200 rounded-xl font-bold text-slate-700 outline-none focus:border-amber-500 text-lg" value={calibrationTier} onChange={(e)=>setCalibrationTier(e.target.value)}>
+                                    <option value="800">800 分 - 發展梯隊 (新手起步)</option><option value="1000">1000 分 - 基礎梯隊 (掌握基本擊球)</option><option value="1300">1300 分 - 校隊儲備 (具備戰術意識)</option><option value="1600">1600 分 - 校隊常規主力 (學界代表)</option><option value="2000">2000 分 - 精英梯隊 (全港排名前列)</option>
                                 </select>
                             </div>
                         </div>
                         <div className="p-6 bg-slate-50 border-t flex justify-end gap-3">
                             <button onClick={() => setCalibrationModalData(null)} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-200 transition-all">取消</button>
-                            <button onClick={handleCalibrationSubmit} className="px-6 py-3 rounded-xl font-black bg-amber-500 text-white hover:bg-amber-600 shadow-md hover:shadow-lg transition-all">確認套用新積分</button>
+                            <button onClick={handleCalibrationSubmit} className="px-6 py-3 rounded-xl font-black bg-amber-500 text-white hover:bg-amber-600 shadow-md transition-all">確認套用</button>
                         </div>
                     </div>
                 </div>
