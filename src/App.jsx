@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.8: 移除「校外賽管理」及「球隊動態牆」以精簡系統，專注於核心訓練與賽事排名。
+// Version 1.9: 移除「榮譽殿堂」，極致精簡系統選單，專注於賽事、排名與訓練核心。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -23,7 +23,6 @@ import AttendancePage from './pages/AttendancePage';
 import AssessmentsPage from './pages/AssessmentsPage';
 import SettingsPage from './pages/SettingsPage';
 import CompetitionsPage from './pages/CompetitionsPage';
-import WallOfFamePage from './pages/WallOfFamePage';
 import FinancialPage from './pages/FinancialPage';
 import PlayerDashboard from './components/PlayerDashboard';
 import MyDashboardPage from './pages/MyDashboardPage';
@@ -60,7 +59,7 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.8";
+const CURRENT_VERSION = "1.9";
 
 momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
@@ -133,8 +132,6 @@ export default function App() {
     externalTournaments, 
     assessments, 
     tacticalShots,
-    trophies,
-    alumni,
     playerJournals
   } = useFirebaseData();
 
@@ -684,20 +681,6 @@ export default function App() {
     }
   };
 
-  const handleExternalComp = (student) => {
-    const option = prompt(
-        `請為 ${student.name} 選擇校外賽成績 (輸入代號):\n\n` +
-        `1. 🔵 代表學校參賽 (+20)\n` + `2. ⚔️ 單場勝出 (+20)\n` + `3. 🥇 冠軍 (+100)\n` + `4. 🥈 亞軍 (+50)\n` + `5. 🥉 季軍/殿軍 (+30)`
-    );
-    let points = 0; let reason = "";
-    switch(option) {
-        case '1': points = 20; reason = "校外賽參與"; break; case '2': points = 20; reason = "校外賽勝場"; break;
-        case '3': points = 100; reason = "校外賽冠軍"; break; case '4': points = 50; reason = "校外賽亞軍"; break; case '5': points = 30; reason = "校外賽季殿軍"; break;
-        default: return; 
-    }
-    if(confirm(`確認給予 ${student.name} 「${reason}」獎勵 (總分 +${points})?`)) { adjustPoints(student.id, points, reason); }
-  };
-
   const handleSeasonReset = async () => {
     const confirmText = prompt("⚠️ 警告：這將重置所有學員的積分！\n\n系統將根據學員的「章別」重新賦予底分：\n金章: 200, 銀章: 100, 銅章: 30, 無章: 0\n\n請輸入 'RESET' 確認執行：");
     if (confirmText !== 'RESET') return;
@@ -848,68 +831,6 @@ export default function App() {
     } catch (err) { alert('匯入失敗'); }
     setIsUpdating(false);
     e.target.value = null;
-  };
-
-  const handleCSVImportTrophies = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setIsUpdating(true);
-    try {
-      const text = await readCSVFile(file, importEncoding);
-      const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-      const batch = writeBatch(db);
-      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'trophies');
-      let count = 0;
-
-      rows.forEach(row => {
-        const cols = parseCsvRow(row);
-        if (cols.length >= 4) {
-          const [year, tournamentName, award, roster] = cols;
-          if (year && tournamentName && award) {
-            const newDocRef = doc(colRef);
-            batch.set(newDocRef, {
-              year: Number(year) || 0, tournamentName, award, roster: roster ? roster.split(',').map(name => name.trim()) : [], createdAt: serverTimestamp()
-            });
-            count++;
-          }
-        }
-      });
-
-      if (count > 0) { await batch.commit(); alert(`✅ 成功匯入 ${count} 筆團隊獎項紀錄！`); } 
-      else { alert("⚠️ 匯入 0 筆紀錄。請檢查您的 CSV 檔案內容是否為空，或格式是否完全符合範本要求 (包含標題行)。"); }
-    } catch (err) { console.error("Trophy import failed:", err); alert('獎項紀錄匯入失敗，請檢查檔案格式或內容。'); }
-    setIsUpdating(false);
-    if (e.target) e.target.value = null;
-  };
-
-  const handleCSVImportAlumni = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setIsUpdating(true);
-    try {
-      const text = await readCSVFile(file, importEncoding);
-      const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-      const batch = writeBatch(db);
-      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'alumni');
-      let count = 0;
-
-      rows.forEach(row => {
-        const cols = parseCsvRow(row);
-        if (cols.length >= 3) {
-          const [name, graduationYear, achievement] = cols;
-          if (name && graduationYear) {
-            const newDocRef = doc(colRef);
-            batch.set(newDocRef, { name, graduationYear: Number(graduationYear) || 0, achievement, createdAt: serverTimestamp() });
-            count++;
-          }
-        }
-      });
-
-      if (count > 0) { await batch.commit(); alert(`✅ 成功匯入 ${count} 筆傳奇校友紀錄！`); } 
-      else { alert("⚠️ 匯入 0 筆紀錄。請檢查您的 CSV 檔案內容是否為空，或格式是否完全符合範本要求 (包含標題行)。"); }
-    } catch (err) { console.error("Alumni import failed:", err); alert('傳奇校友匯入失敗，請檢查檔案格式或內容。'); }
-    setIsUpdating(false);
-    if (e.target) e.target.value = null;
   };
 
   const uniqueTrainingClasses = useMemo(() => {
@@ -1463,7 +1384,6 @@ export default function App() {
                     <NavButton tabName="rankings" icon={<Trophy size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>積分排行</NavButton>
                     <NavButton tabName="league" icon={<Swords size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>聯賽專區</NavButton>
                     <NavButton tabName="gallery" icon={<ImageIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>精彩花絮</NavButton>
-                    <NavButton tabName="wallOfFame" icon={<Trophy size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>榮譽殿堂</NavButton>
                     <NavButton tabName="awards" icon={<Award size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>獎項成就</NavButton>
                     <NavButton tabName="schedules" icon={<CalendarIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>訓練日程</NavButton>
                     <NavButton tabName="competitions" icon={<Megaphone size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>比賽與公告</NavButton>
@@ -1520,7 +1440,6 @@ export default function App() {
                  activeTab === 'gallery' ? "📸 精彩花絮" :
                  activeTab === 'awards' ? "🏆 獎項成就" :
                  activeTab === 'league' ? "🗓️ 聯賽專區" :
-                 activeTab === 'wallOfFame' ? "🏛️ 榮譽殿堂" :
                  activeTab === 'financial' ? "💰 財務收支管理" :
                  activeTab === 'settings' ? "⚙️ 系統核心設定" :
                  activeTab === 'monthlyStarsAdmin' ? "🌟 每月之星管理" :
@@ -1646,18 +1565,8 @@ export default function App() {
           )}
 
           {!viewingStudent && activeTab === 'rankings' && (
-              <RankingPage 
-        role={role} 
-        rankedStudents={rankedStudents} 
-        filteredStudents={filteredStudents} 
-        searchTerm={searchTerm} 
-        setSearchTerm={setSearchTerm} 
-        setShowPlayerCard={setShowPlayerCard} 
-        adjustPoints={adjustPoints} 
-        deleteItem={deleteItem} 
-        leagueMatches={leagueMatches} /* 👉 加上這行，傳入比賽資料 */
-    />
-)}
+              <RankingPage role={role} rankedStudents={rankedStudents} filteredStudents={filteredStudents} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setShowPlayerCard={setShowPlayerCard} adjustPoints={adjustPoints} deleteItem={deleteItem} leagueMatches={leagueMatches} />
+          )}
 
           {!viewingStudent && activeTab === 'students' && role === 'admin' && (
             <RosterPage students={students} filteredStudents={filteredStudents} birthYearStats={birthYearStats} selectedYearFilter={selectedYearFilter} setSelectedYearFilter={setSelectedYearFilter} handleCSVImportStudents={handleCSVImportStudents} setViewingStudent={setViewingStudent} handleManualAward={handleManualAward} handleUpdateSquashClass={handleUpdateSquashClass} setEditingStudent={setEditingStudent} deleteItem={deleteItem} setShowAddPlayerModal={setShowAddPlayerModal} />
@@ -1727,7 +1636,6 @@ export default function App() {
           {!viewingStudent && activeTab === 'financial' && role === 'admin' && (<FinancialPage financeConfig={financeConfig} setFinanceConfig={setFinanceConfig} financialSummary={financialSummary} saveFinanceConfig={saveFinanceConfig} />)}
           {!viewingStudent && activeTab === 'competitions' && (<CompetitionsPage role={role} competitions={competitions} generateCompetitionRoster={generateCompetitionRoster} deleteItem={deleteItem} db={db} appId={appId} />)}
           {!viewingStudent && activeTab === 'gallery' && (<GalleryPage role={role} currentAlbum={currentAlbum} setCurrentAlbum={setCurrentAlbum} isUploading={isUploading} isSyncingDrive={isSyncingDrive} syncGoogleDriveGallery={syncGoogleDriveGallery} handleAddMedia={handleAddMedia} galleryAlbums={galleryAlbums} setViewingImage={setViewingImage} getYouTubeEmbedUrl={getYouTubeEmbedUrl} deleteItem={deleteItem} />)}
-          {!viewingStudent && activeTab === 'wallOfFame' && (<WallOfFamePage trophies={trophies} alumni={alumni} />)}
           {!viewingStudent && activeTab === 'awards' && (<AwardsPage role={role} awards={awards} students={students} awardsViewMode={awardsViewMode} setAwardsViewMode={setAwardsViewMode} setShowAddAwardModal={setShowAddAwardModal} deleteItem={deleteItem} />)}
           
           {!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
