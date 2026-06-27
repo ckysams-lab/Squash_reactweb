@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.9: 移除「榮譽殿堂」，極致精簡系統選單，專注於賽事、排名與訓練核心。
+// Version 1.10: 修復移除了榮譽殿堂後，SettingsPage 殘留 handleCSVImportTrophies 導致的崩潰問題。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -59,7 +59,7 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.9";
+const CURRENT_VERSION = "1.10";
 
 momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
@@ -187,20 +187,6 @@ export default function App() {
         alert("網路錯誤，無法連接 Google Drive。");
     }
     setIsSyncingDrive(false);
-  };
-
-  const parseCsvRow = (row) => {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < row.length; i++) {
-        const char = row[i];
-        if (char === '"') { inQuotes = !inQuotes; } 
-        else if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; } 
-        else { current += char; }
-    }
-    result.push(current.trim());
-    return result;
   };
 
   const [newAssessment, setNewAssessment] = useState({
@@ -1649,7 +1635,13 @@ export default function App() {
               />
           )}
             
-          {!viewingStudent && activeTab === 'settings' && role === 'admin' && (<SettingsPage systemConfig={systemConfig} setSystemConfig={setSystemConfig} importEncoding={importEncoding} setImportEncoding={setImportEncoding} externalTournaments={externalTournaments} handleCSVImportExternalTournaments={handleCSVImportExternalTournaments} deleteItem={deleteItem} handleSeasonReset={handleSeasonReset} setIsUpdating={setIsUpdating} db={db} appId={appId} handleCSVImportTrophies={handleCSVImportTrophies} handleCSVImportAlumni={handleCSVImportAlumni} />)}
+          {!viewingStudent && activeTab === 'settings' && role === 'admin' && (
+              <SettingsPage 
+                  systemConfig={systemConfig} setSystemConfig={setSystemConfig} importEncoding={importEncoding} setImportEncoding={setImportEncoding} 
+                  externalTournaments={externalTournaments} handleCSVImportExternalTournaments={handleCSVImportExternalTournaments} deleteItem={deleteItem} 
+                  handleSeasonReset={handleSeasonReset} setIsUpdating={setIsUpdating} db={db} appId={appId} 
+              />
+          )}
           
           {showAddPlayerModal && (<AddPlayerModal onClose={() => setShowAddPlayerModal(false)} db={db} appId={appId} compressImage={compressImage} />)}
           {editingStudent && (<EditPlayerModal student={editingStudent} onClose={() => setEditingStudent(null)} db={db} appId={appId} compressImage={compressImage} handleSetupStudentAuth={handleSetupStudentAuth} />)}        
