@@ -1,5 +1,5 @@
-// src/pages/RankingPage.jsx (Version 1.5)
-// 更新內容: 修復 onClick 錯誤，並在當前頁面新增「對賽成績輸入 (Match Record Modal)」的彈出式版面設計
+// src/pages/RankingPage.jsx (Version 1.6)
+// 更新內容: 實裝對賽成績權重計算邏輯 (結合對手實力、局數差距及比賽類型)，並呼叫 adjustPoints 寫入資料庫
 
 import React, { useState } from 'react';
 import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords, X } from 'lucide-react';
@@ -16,18 +16,87 @@ export default function RankingPage({
     setSearchTerm,
     setShowPlayerCard,
     handleExternalComp,
-    deleteItem
+    deleteItem,
+    adjustPoints // 確保把這個寫入資料庫的 function 加回來
 }) {
-    // 新增：控制「對賽成績輸入」彈出視窗的狀態
     const [matchModalData, setMatchModalData] = useState(null);
     const [opponentId, setOpponentId] = useState("");
     const [matchType, setMatchType] = useState("internal_challenge");
     const [score, setScore] = useState("3-0");
 
-    // 預留給下一步整合 1.2 版本計算機制的 function
+    // 核心計算與提交邏輯
     const handleMatchSubmit = () => {
-        alert(`即將整合權重計算機制！\n主角: ${matchModalData.name}\n對手ID: ${opponentId}\n賽事類型: ${matchType}\n局數比分: ${score}`);
-        setMatchModalData(null); // 關閉視窗
+        if (!opponentId) {
+            alert("請選擇對手！");
+            return;
+        }
+
+        const player = matchModalData;
+        const opponent = rankedStudents.find(s => s.id === opponentId);
+        if (!opponent) return;
+
+        // 計算當前梯隊排名索引 (0-based)
+        const playerRankIdx = rankedStudents.findIndex(s => s.id === player.id);
+        const oppRankIdx = rankedStudents.findIndex(s => s.id === opponentId);
+
+        // 解析比分
+        const [playerGamesStr, oppGamesStr] = score.split('-');
+        const playerGames = parseInt(playerGamesStr, 10);
+        const oppGames = parseInt(oppGamesStr, 10);
+        const isWin = playerGames > oppGames;
+
+        // 賽事權重設定
+        const matchWeights = {
+            'internal_challenge': 1.0,
+            'friendly_match': 1.2,
+            'inter_school': 1.5,
+            'regional_elite': 2.0
+        };
+        const matchWeight = matchWeights[matchType] || 1.0;
+
+        let playerDelta = 0;
+        let oppDelta = 0;
+
+        if (isWin) {
+            // 主角獲勝
+            let rankMultiplier = 1.0;
+            if (playerRankIdx > oppRankIdx) { // 數字越大代表原本排名越低 (爆冷加成)
+                rankMultiplier = 1.0 + ((playerRankIdx - oppRankIdx) * 0.05);
+            }
+
+            let scoreMultiplier = 1.0;
+            const scoreDiff = playerGames - oppGames;
+            if (scoreDiff === 3) scoreMultiplier = 1.2;
+            else if (scoreDiff === 2) scoreMultiplier = 1.1;
+
+            playerDelta = Math.round(10 * rankMultiplier * scoreMultiplier * matchWeight);
+            oppDelta = -5; // 敗者基礎扣分
+        } else {
+            // 對手獲勝 (主角落敗)
+            let rankMultiplier = 1.0;
+            if (oppRankIdx > playerRankIdx) { // 對手原本排名較低卻獲勝
+                rankMultiplier = 1.0 + ((oppRankIdx - playerRankIdx) * 0.05);
+            }
+
+            let scoreMultiplier = 1.0;
+            const scoreDiff = oppGames - playerGames;
+            if (scoreDiff === 3) scoreMultiplier = 1.2;
+            else if (scoreDiff === 2) scoreMultiplier = 1.1;
+
+            oppDelta = Math.round(10 * rankMultiplier * scoreMultiplier * matchWeight);
+            playerDelta = -5;
+        }
+
+        // 呼叫上層傳進來的 adjustPoints 來更新 Firebase
+        if (typeof adjustPoints === 'function') {
+            adjustPoints(player.id, playerDelta);
+            adjustPoints(opponent.id, oppDelta);
+            alert(`✅ 成績計算與寫入成功！\n\n【積分結算】\n${player.name}: ${playerDelta > 0 ? '+'+playerDelta : playerDelta} 分\n${opponent.name}: ${oppDelta > 0 ? '+'+oppDelta : oppDelta} 分`);
+        } else {
+            alert(`⚠️ 計算完成，但找不到 adjustPoints 函數！請確保 Dashboard 有傳遞此 props。\n\n【模擬結算】\n${player.name}: ${playerDelta > 0 ? '+'+playerDelta : playerDelta} 分\n${opponent.name}: ${oppDelta > 0 ? '+'+oppDelta : oppDelta} 分`);
+        }
+
+        setMatchModalData(null); // 完成後關閉視窗
     };
 
     return (
@@ -75,7 +144,7 @@ export default function RankingPage({
             <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 flex flex-col md:flex-row items-start md:items-center gap-6 shadow-sm">
                 <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl"><Info size={24} /></div>
                 <div className="flex-1">
-                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分權重機制說明 (v1.5)</h4>
+                    <h4 className="text-lg font-black text-slate-800 mb-2">💡 積分權重機制說明 (v1.6)</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 font-bold">
                         <ul className="list-disc pl-4 space-y-1">
                             <li><span className="text-slate-400">出席訓練</span>：只作紀錄 (不加分)</li>
@@ -143,9 +212,7 @@ export default function RankingPage({
                           {role === 'admin' && (
                             <td className="px-8 py-8">
                                 <div className="flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                    {/* 👉 更新：點擊後觸發打開 local Modal 狀態 👈 */}
                                     <button onClick={()=>setMatchModalData(s)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="輸入對賽成績 (計算權重)"><Swords size={18}/></button>
-                                    
                                     <button onClick={()=> handleExternalComp(s)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="校外賽成績錄入"><Globe size={18}/></button>
                                     <button onClick={()=>deleteItem('students', s.id)} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm hover:shadow-md" title="永久刪除"><Trash2 size={18}/></button>
                                 </div>
@@ -158,7 +225,7 @@ export default function RankingPage({
                 </div>
             </Card>
 
-            {/* 👉 新增：對賽成績彈出視窗 (Modal) 👈 */}
+            {/* 對賽成績彈出視窗 (Modal) */}
             {matchModalData && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100">
