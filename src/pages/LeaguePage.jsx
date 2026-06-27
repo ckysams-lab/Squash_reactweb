@@ -1,5 +1,6 @@
-// src/pages/LeaguePage.jsx (Version 4.1 — Professional Elo Redesign)
-// 更新內容: 完美融合 Elo 系統。新增賽前預測條 (Mini Tale of the Tape)、勝率分析，並將聯賽積分替換為專業 Elo 積分展示。
+// src/pages/LeaguePage.jsx (Version 4.2 — Separate League Points & Elo)
+// 更新內容: 修復排行榜混淆問題。聯賽排行榜嚴格採用「聯賽積分(+3分)」與「淨得局」進行排序。
+// 保留「賽前 Elo 勝率預測條」，實現聯賽與梯隊 Elo 的完美分離展示。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import {
@@ -66,7 +67,7 @@ const PodiumStrip = ({ players }) => {
           <span className="text-2xl leading-none drop-shadow-sm">{medals[i].icon}</span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-black text-slate-800 truncate">{p.name}</p>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Elo: {p.totalPoints || p.leaguePoints}</p>
+            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">聯賽積分: {p.leaguePoints}</p>
           </div>
           {p.hotStreak >= 3 && (
             <span title={`${p.hotStreak} 連勝`} className="text-orange-500 text-lg animate-pulse">🔥</span>
@@ -77,7 +78,7 @@ const PodiumStrip = ({ players }) => {
   );
 };
 
-// ─── Team Tie scoreboard (保持不變) ───────────────────────────────────────────
+// ─── Team Tie scoreboard ───────────────────────────────────────────
 const TeamTieBoard = ({ groupName, matches }) => {
   if (!groupName?.includes(' vs ')) return null;
   const [teamA, teamB] = groupName.split(' vs ');
@@ -139,7 +140,7 @@ const StandingsTable = ({ players }) => (
           <th className="px-3 py-3 text-center w-16">已賽/勝</th>
           <th className="px-3 py-3 text-center w-16">勝率</th>
           <th className="px-3 py-3 text-center w-16">淨得局</th>
-          <th className="px-3 py-3 text-center w-20">Elo 積分</th>
+          <th className="px-3 py-3 text-center w-20">聯賽積分</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-slate-100">
@@ -173,8 +174,8 @@ const StandingsTable = ({ players }) => (
                 </span>
               </td>
               <td className="px-3 py-3.5 text-center">
-                {/* 顯示 Elo 積分取代傳統聯賽分 */}
-                <span className="text-blue-600 font-black text-lg">{player.totalPoints || player.leaguePoints}</span>
+                {/* 恢復為獨立的聯賽積分 (+3制) */}
+                <span className="text-blue-600 font-black text-lg">{player.leaguePoints}</span>
               </td>
             </tr>
           )
@@ -184,7 +185,7 @@ const StandingsTable = ({ players }) => (
   </div>
 );
 
-// ─── Match row (引入賽前預測條) ───────────────────────────────────────────────
+// ─── Match row (保留賽前預測條) ───────────────────────────────────────────────
 
 const MatchRow = ({
   match, role, tournamentStandings, groupName, currentUserInfo,
@@ -209,7 +210,8 @@ const MatchRow = ({
     ? (match.matchType === 'external' ? match.externalMatchScore : `${match.score1} : ${match.score2}`)
     : null;
 
-  // 👉 Elo 賽前預測邏輯 (Mini Tale of the Tape) 👈
+  // 👉 保留：Elo 賽前預測邏輯 (Mini Tale of the Tape) 👈
+  // 這裡使用的是學生的 Elo 總分 (totalPoints)，不會影響聯賽積分榜的排序
   const p1Elo = useMemo(() => students?.find(s => s.id === match.player1Id)?.totalPoints || 1000, [students, match.player1Id]);
   const p2Elo = useMemo(() => students?.find(s => s.id === match.player2Id)?.totalPoints || 1000, [students, match.player2Id]);
   const p1WinProb = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
@@ -246,7 +248,7 @@ const MatchRow = ({
             {!isDone && match.matchType !== 'external' && (
                 <div className="mt-1 w-full max-w-[220px]">
                    <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                      <span className="text-blue-500">勝率 {(p1WinProb*100).toFixed(0)}%</span>
+                      <span className="text-blue-500">勝率預測 {(p1WinProb*100).toFixed(0)}%</span>
                       <span className="text-orange-500">{(p2WinProb*100).toFixed(0)}%</span>
                    </div>
                    <div className="flex h-1.5 w-full rounded-full overflow-hidden bg-slate-100 shadow-inner">
@@ -298,7 +300,7 @@ const MatchRow = ({
                 <button
                   onClick={() => handleUpdateLeagueMatchScore(match)}
                   className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
-                  title="結算 Elo 積分"
+                  title="結算聯賽與 Elo 積分"
                 >
                   <Swords size={14} />
                 </button>
@@ -365,7 +367,7 @@ const GroupSection = ({
               <StandingsTable players={players} />
               <div className="border-t-2 border-dashed border-slate-100 mt-6 pt-6 mb-2">
                 <p className="text-[11px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
-                  <Activity size={14}/> 賽事預測與記錄
+                  <Activity size={14}/> 賽事記錄與預測
                 </p>
               </div>
             </>
@@ -376,7 +378,7 @@ const GroupSection = ({
               <thead>
                 <tr className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">
                   <th className="px-4 py-3 text-left whitespace-nowrap">日期 / 場次</th>
-                  <th className="px-4 py-3 text-left whitespace-nowrap">對賽球員 (預測勝率)</th>
+                  <th className="px-4 py-3 text-left whitespace-nowrap">對賽球員</th>
                   <th className="px-4 py-3 text-center whitespace-nowrap">比分</th>
                   <th className="px-4 py-3 text-center whitespace-nowrap">狀態</th>
                   <th className="px-4 py-3 text-center whitespace-nowrap">人氣</th>
@@ -410,7 +412,7 @@ const GroupSection = ({
   );
 };
 
-// ─── My stats banner (升級版) ────────────────────────────────────────────────
+// ─── My stats banner (修復為聯賽積分) ────────────────────────────────────────────────
 
 const MyStatsBanner = ({ stats, upcomingMatches, selectedTournament, currentUserInfo }) => {
   const winRate = stats.played > 0 ? Math.round((stats.wins / stats.played) * 100) : 0;
@@ -441,11 +443,11 @@ const MyStatsBanner = ({ stats, upcomingMatches, selectedTournament, currentUser
           <p className={`text-3xl font-black ${stats.pointsDiff >= 0 ? 'text-blue-500' : 'text-rose-500'}`}>
             {stats.pointsDiff > 0 ? `+${stats.pointsDiff}` : stats.pointsDiff}
           </p>
-          <p className="text-[10px] font-black text-slate-400 mt-1 uppercase tracking-widest">得失局差</p>
+          <p className="text-[10px] font-black text-slate-400 mt-1 uppercase tracking-widest">淨得局</p>
         </div>
         <div className="bg-gradient-to-b from-blue-600 to-indigo-700 rounded-2xl py-4 shadow-md text-white">
           <p className="text-3xl font-black font-mono tracking-tighter">{stats.leaguePoints}</p>
-          <p className="text-[10px] font-black text-blue-200 mt-1 uppercase tracking-widest">目前 Elo 積分</p>
+          <p className="text-[10px] font-black text-blue-200 mt-1 uppercase tracking-widest">聯賽積分</p>
         </div>
       </div>
 
@@ -520,11 +522,13 @@ export default function LeaguePage({
       const current = tournamentStandings[group];
       if (!Array.isArray(current)) continue;
       
-      // Update the points mapping to ensure Elo is respected
-      result[group] = current.map((player, index) => {
-        const studentInfo = students?.find(s => s.id === player.id);
-        const actualElo = studentInfo?.totalPoints || player.leaguePoints || 1000;
-        
+      // 👉 修復：嚴格按照聯賽積分 (leaguePoints) 及 淨得局 (pointsDiff) 排序 👈
+      const sortedGroup = [...current].sort((a, b) => {
+        if (b.leaguePoints !== a.leaguePoints) return b.leaguePoints - a.leaguePoints;
+        return (b.pointsDiff || 0) - (a.pointsDiff || 0);
+      });
+
+      result[group] = sortedGroup.map((player, index) => {
         const pMatches = safeMatches
           .filter(m =>
             m.status === 'completed' &&
@@ -543,13 +547,13 @@ export default function LeaguePage({
         const prevGroup = Array.isArray(prevData?.[group]) ? prevData[group] : [];
         const prevRank = prevGroup.findIndex(p => p.id === player.id);
         const trend = prevRank !== -1 ? prevRank - index : 0;
-        return { ...player, hotStreak, trend, totalPoints: actualElo };
+        
+        // 返回原始 player 資料，確保 leaguePoints 原封不動
+        return { ...player, hotStreak, trend };
       });
-      // Re-sort based on Elo (highest first)
-      result[group].sort((a, b) => b.totalPoints - a.totalPoints);
     }
     return result;
-  }, [tournamentStandings, leagueMatches, previousStandings, selectedTournament, students]);
+  }, [tournamentStandings, leagueMatches, previousStandings, selectedTournament]);
 
   const safeTournamentList  = Array.isArray(tournamentList) ? tournamentList : [];
   const safeGroupedMatches  = groupedMatches && typeof groupedMatches === 'object' ? groupedMatches : {};
@@ -567,7 +571,7 @@ export default function LeaguePage({
              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Medal size={28}/></div>
              <div>
                <h3 className="text-3xl font-black text-slate-800 tracking-tight">聯賽專區</h3>
-               <p className="text-slate-500 text-sm mt-1 font-bold">預測分析與 Elo 職業積分榜</p>
+               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析</p>
              </div>
           </div>
 
@@ -629,16 +633,6 @@ export default function LeaguePage({
             currentUserInfo={currentUserInfo}
           />
         )}
-
-        {/* Empty state */}
-        {Object.keys(safeGroupedMatches).length === 0 && (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-300">
-            <div className="p-6 bg-slate-50 rounded-full mb-4"><Trophy size={48} strokeWidth={1.5} className="text-slate-300" /></div>
-            <p className="font-black text-slate-400 text-lg">
-              {safeLeagueMatches.length > 0 ? '請選擇上方的一個賽事' : '暫無賽事，教練可建立新賽事'}
-            </p>
-          </div>
-        )}
       </div>
 
       {/* ── Group sections ───────────────────────────────────────────────── */}
@@ -660,23 +654,6 @@ export default function LeaguePage({
           students={students}
         />
       ))}
-
-      {/* Hidden poster renderer */}
-      {isRenderingPoster && (
-        <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100 }}>
-          <LeagueStandingsPoster
-            ref={posterRef}
-            tournamentName={selectedTournament}
-            standings={
-              hasStandings
-                ? Object.values(tournamentStandings).flat().sort((a, b) => b.leaguePoints - a.leaguePoints)
-                : []
-            }
-            upcomingMatches={safeLeagueMatches}
-            schoolLogo={schoolLogo}
-          />
-        </div>
-      )}
     </div>
   );
 }
