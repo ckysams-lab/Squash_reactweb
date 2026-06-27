@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.12: 終極 Elo 演算法！實裝「跨年級越級挑戰加成」與「局數+小分混合統治力系數」。
+// Version 1.13: 修復子頁面缺失 Props (handleExternalComp, leagueMatches, setShowPlayerCard) 導致的 onClick 崩潰問題。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -59,12 +59,11 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.12";
+const CURRENT_VERSION = "1.13";
 
 momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
 
-// 👉 輔助函數：解析班別中的年級數字 (例如 "4A" -> 4, "P6" -> 6) 👈
 const getGradeLevel = (classStr) => {
     if (!classStr) return 0;
     const match = classStr.match(/\d+/);
@@ -573,6 +572,21 @@ export default function App() {
     }
   };
 
+  // 👉 重大修復：恢復 handleExternalComp 並傳遞給 RankingPage 👈
+  const handleExternalComp = (student) => {
+    const option = prompt(
+        `請為 ${student.name} 選擇校外賽成績 (輸入代號):\n\n` +
+        `1. 🔵 代表學校參賽 (+20)\n` + `2. ⚔️ 單場勝出 (+20)\n` + `3. 🥇 冠軍 (+100)\n` + `4. 🥈 亞軍 (+50)\n` + `5. 🥉 季軍/殿軍 (+30)`
+    );
+    let points = 0; let reason = "";
+    switch(option) {
+        case '1': points = 20; reason = "校外賽參與"; break; case '2': points = 20; reason = "校外賽勝場"; break;
+        case '3': points = 100; reason = "校外賽冠軍"; break; case '4': points = 50; reason = "校外賽亞軍"; break; case '5': points = 30; reason = "校外賽季殿軍"; break;
+        default: return; 
+    }
+    if(confirm(`確認給予 ${student.name} 「${reason}」獎勵 (總分 +${points})?`)) { adjustPoints(student.id, points, reason); }
+  };
+
   const handleSeasonReset = async () => {
     const confirmText = prompt("⚠️ 警告：這將重置所有學員的積分！\n\n系統將根據學員的「章別」重新賦予底分：\n金章: 200, 銀章: 100, 銅章: 30, 無章: 0\n\n請輸入 'RESET' 確認執行：");
     if (confirmText !== 'RESET') return;
@@ -587,16 +601,6 @@ export default function App() {
         await batch.commit(); alert("✅ 新賽季已開啟！所有積分已重置。");
     } catch(e) { console.error(e); alert("重置失敗"); }
     setIsUpdating(false);
-  };
-
-  const generateCompetitionRoster = () => {
-    const topStudents = rankedStudents.slice(0, 5);
-    if (topStudents.length === 0) { alert('目前沒有學員資料可生成名單。'); return; }
-    let rosterText = "🏆 BCKLAS 壁球校隊 - 推薦出賽名單 🏆\n\n";
-    topStudents.forEach((s, i) => { rosterText += `${i+1}. ${s.name} (${s.class} ${s.classNo}) - 積分: ${s.totalPoints}\n`; });
-    rosterText += "\n(由系統自動依據積分生成)";
-    navigator.clipboard.writeText(rosterText).then(() => { alert('✅ 推薦名單已生成並複製到剪貼簿！\n\n你可以直接貼上到 Word 或 WhatsApp。'); })
-    .catch(err => { console.error('複製失敗', err); alert('複製失敗，請手動選取：\n\n' + rosterText); });
   };
 
   const exportMatrixAttendanceCSV = (targetClass) => {
@@ -751,26 +755,20 @@ export default function App() {
       } catch (error) { console.error("Cheer failed:", error); }
   };
 
-  // 👉 重大升級：handleUpdateLeagueMatchScore (V1.12 終極 Elo 演算法) 👈
   const handleUpdateLeagueMatchScore = async (match) => {
       const p1Raw = prompt(`請輸入 ${match.player1Name} 該場「總得分」\n(例如：直落三贏11-5, 11-5, 11-5，則輸入 33)`);
       if (p1Raw === null) return;
       const p2Raw = prompt(`請輸入 ${match.player2Name || '對手'} 該場「總得分」\n(例如：輸了5分, 5分, 5分，則輸入 15)`);
       if (p2Raw === null) return;
       
-      const totalP1 = parseInt(p1Raw, 10);
-      const totalP2 = parseInt(p2Raw, 10);
-
+      const totalP1 = parseInt(p1Raw, 10); const totalP2 = parseInt(p2Raw, 10);
       if (isNaN(totalP1) || isNaN(totalP2)) { alert("總得分必須是數字！"); return; }
       if (totalP1 === totalP2) { alert("總得分不能相同，壁球比賽必須分出勝負。"); return; }
 
       const gamesScoreString = prompt(`請輸入大局比分 (例如 3-0, 3-1, 3-2):\n(這將顯示在聯賽介面上)`, totalP1 > totalP2 ? "3-0" : "0-3");
       if (!gamesScoreString || !gamesScoreString.includes("-")) { alert("格式錯誤。"); return; }
-      const [g1, g2] = gamesScoreString.split('-');
-      const score1 = parseInt(g1, 10);
-      const score2 = parseInt(g2, 10);
+      const [g1, g2] = gamesScoreString.split('-'); const score1 = parseInt(g1, 10); const score2 = parseInt(g2, 10);
 
-      // 1. 判斷勝負與對手身分
       const isP1Winner = totalP1 > totalP2;
       const winnerId = isP1Winner ? match.player1Id : match.player2Id;
       const loserId = isP1Winner ? match.player2Id : match.player1Id;
@@ -783,36 +781,32 @@ export default function App() {
       const winner = students.find(s => s.id === winnerId);
       const loser = students.find(s => s.id === loserId);
 
-      // 提取 Elo
       const p1Elo = isP1Internal ? (students.find(s=>s.id === match.player1Id)?.totalPoints || 1000) : (match.extElo || 1000);
       const p2Elo = isP2Internal ? (students.find(s=>s.id === match.player2Id)?.totalPoints || 1000) : (match.extElo || 1000);
       const winnerElo = isP1Winner ? p1Elo : p2Elo;
       const loserElo = isP1Winner ? p2Elo : p1Elo;
 
-      // 2. 期望勝率
       const expectedWinnerScore = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
 
-      // 👉 3. 混合統治力系數 (Hybrid Dominance Score) 👈
       const winnerGames = isP1Winner ? score1 : score2;
       const loserGames = isP1Winner ? score2 : score1;
       const gameDiff = winnerGames - loserGames;
 
       let gameFactor = 1.0;
-      if (gameDiff >= 3) gameFactor = 1.2;      // 3-0 完勝
-      else if (gameDiff === 2) gameFactor = 1.0; // 3-1 正常
-      else if (gameDiff <= 1) gameFactor = 0.8;  // 3-2 險勝
+      if (gameDiff >= 3) gameFactor = 1.2;      
+      else if (gameDiff === 2) gameFactor = 1.0; 
+      else if (gameDiff <= 1) gameFactor = 0.8;  
 
       const winnerPoints = isP1Winner ? totalP1 : totalP2;
       const totalPointsMatch = totalP1 + totalP2;
       const pointRatio = totalPointsMatch > 0 ? winnerPoints / totalPointsMatch : 0.5;
 
       let pointFactor = 1.0;
-      if (pointRatio > 0.6) pointFactor = 1.2;      // 小分碾壓
-      else if (pointRatio < 0.55) pointFactor = 0.8; // 小分緊咬
+      if (pointRatio > 0.6) pointFactor = 1.2;      
+      else if (pointRatio < 0.55) pointFactor = 0.8; 
 
-      const hybridDominance = gameFactor * pointFactor; // (範圍 0.64 ~ 1.44)
+      const hybridDominance = gameFactor * pointFactor; 
 
-      // 👉 4. 跨年級越級加成 (Grade-Difference Multiplier) 👈
       let gradeBonus = 1.0;
       let gradeMsg = "";
       if (winner && loser) {
@@ -820,19 +814,14 @@ export default function App() {
           const loserGrade = getGradeLevel(loser.class);
           if (winnerGrade > 0 && loserGrade > 0 && winnerGrade < loserGrade) {
               const diff = loserGrade - winnerGrade;
-              gradeBonus = 1.0 + (diff * 0.1); // 每差一年級多10%
+              gradeBonus = 1.0 + (diff * 0.1); 
               gradeMsg = `\n👶 越級挑戰成功！(+${diff * 10}% 額外加成)`;
           }
       }
 
-      // 5. 最終 Elo 結算
-      const K = 30; // 基礎波幅
+      const K = 30; 
       const baseDelta = K * (1 - expectedWinnerScore);
-
-      // 贏家：基礎分 * 統治力 * 越級加成
       const winnerDelta = Math.round(baseDelta * hybridDominance * gradeBonus);
-      
-      // 輸家：基礎分 * 統治力 (非對稱保護，高年級輸球不會因為越級加成而被多扣分)
       const loserDelta = -Math.round(baseDelta * hybridDominance);
 
       const p1Delta = isP1Winner ? winnerDelta : loserDelta;
@@ -1423,8 +1412,20 @@ export default function App() {
               <AssessmentsPage students={students} assessments={assessments} newAssessment={newAssessment} setNewAssessment={setNewAssessment} handleSaveAssessment={handleSaveAssessment} isUpdating={isUpdating} />
           )}
 
+          {/* 👉 修復重點：加入 handleExternalComp, leagueMatches, setShowPlayerCard 👈 */}
           {!viewingStudent && activeTab === 'rankings' && (
-              <RankingPage role={role} rankedStudents={rankedStudents} filteredStudents={filteredStudents} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setShowPlayerCard={setShowPlayerCard} adjustPoints={adjustPoints} deleteItem={deleteItem} leagueMatches={leagueMatches} />
+              <RankingPage 
+                  role={role} 
+                  rankedStudents={rankedStudents} 
+                  filteredStudents={filteredStudents} 
+                  searchTerm={searchTerm} 
+                  setSearchTerm={setSearchTerm} 
+                  setShowPlayerCard={setShowPlayerCard} 
+                  adjustPoints={adjustPoints} 
+                  handleExternalComp={handleExternalComp} 
+                  deleteItem={deleteItem} 
+                  leagueMatches={leagueMatches} 
+              />
           )}
 
           {!viewingStudent && activeTab === 'students' && role === 'admin' && (
@@ -1496,6 +1497,7 @@ export default function App() {
           {!viewingStudent && activeTab === 'competitions' && (<CompetitionsPage role={role} competitions={competitions} generateCompetitionRoster={generateCompetitionRoster} deleteItem={deleteItem} db={db} appId={appId} />)}
           {!viewingStudent && activeTab === 'gallery' && (<GalleryPage role={role} currentAlbum={currentAlbum} setCurrentAlbum={setCurrentAlbum} isUploading={isUploading} isSyncingDrive={isSyncingDrive} syncGoogleDriveGallery={syncGoogleDriveGallery} handleAddMedia={handleAddMedia} galleryAlbums={galleryAlbums} setViewingImage={setViewingImage} getYouTubeEmbedUrl={getYouTubeEmbedUrl} deleteItem={deleteItem} />)}
           
+          {/* 👉 修復重點：加入 setShowPlayerCard 👈 */}
           {!viewingStudent && activeTab === 'awards' && (
             <AwardsPage 
                 role={role} awards={awards} students={students} awardsViewMode={awardsViewMode} setAwardsViewMode={setAwardsViewMode} 
