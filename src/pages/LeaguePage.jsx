@@ -1,5 +1,5 @@
-// src/pages/LeaguePage.jsx (Version 5.1 — Esports Matchup Cards Update)
-// 更新內容: 將「待開賽」的賽程從原本的表格中抽出，升級為深色電競風的「對戰卡片 (Matchup Cards)」。
+// src/pages/LeaguePage.jsx (Version 5.2 — Elo Read Bug Fix)
+// 更新內容: 修復了對戰卡片與賽程表中，無法正確讀取學生 Elo 積分 (錯誤讀取 totalPoints 導致全部顯示 1000) 的問題。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus } from 'lucide-react';
@@ -116,15 +116,17 @@ const StandingsTable = ({ players }) => (
   </div>
 );
 
-// 👉 全新：電競風對戰卡片 (Matchup Card) - 專供 Scheduled Matches 使用 👈
+// 👉 修復點 1：MatchupCard 內讀取 Elo 的欄位更正為 points 👈
 const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students }) => {
     const cheersCount = match.cheers?.length || 0;
     const hasCheered = match.cheers?.includes(currentUserInfo?.id || 'admin');
 
     const p1Internal = students?.find(s => s.id === match.player1Id);
     const p2Internal = students?.find(s => s.id === match.player2Id);
-    const p1Elo = p1Internal ? (p1Internal.totalPoints || 1000) : (match.extElo || 1000);
-    const p2Elo = p2Internal ? (p2Internal.totalPoints || 1000) : (match.extElo || 1000);
+    
+    // 將 totalPoints 修正為 points
+    const p1Elo = p1Internal ? (p1Internal.points || 1000) : (match.extElo || 1000);
+    const p2Elo = p2Internal ? (p2Internal.points || 1000) : (match.extElo || 1000);
     const p1WinProb = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
     const p2WinProb = 1 - p1WinProb;
 
@@ -132,7 +134,6 @@ const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActive
         <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-[2rem] p-6 shadow-xl relative overflow-hidden border border-slate-700 hover:-translate-y-1 transition-transform group">
             <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
             
-            {/* Header: Date & Tag */}
             <div className="flex justify-between items-center mb-5 relative z-10">
                 <span className="text-xs font-black text-slate-400 bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700 shadow-inner">
                     {match.date} {match.time}
@@ -142,7 +143,6 @@ const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActive
                 </span>
             </div>
 
-            {/* Fighters */}
             <div className="flex justify-between items-center mb-6 relative z-10">
                 <div className="text-center w-5/12">
                     <div className="w-14 h-14 mx-auto bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center font-black text-2xl mb-2 border border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
@@ -165,7 +165,6 @@ const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActive
                 </div>
             </div>
 
-            {/* Tale of the Tape Bar */}
             <div className="bg-slate-950/50 rounded-xl p-3.5 mb-6 border border-slate-800 relative z-10">
                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
                     <span className="text-blue-400">{(p1WinProb*100).toFixed(0)}%</span>
@@ -178,7 +177,6 @@ const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActive
                 </div>
             </div>
 
-            {/* Actions */}
             <div className="flex justify-between items-center pt-4 border-t border-slate-700/50 relative z-10">
                 <button onClick={(e) => handleCheerMatch(match.id, e)} className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black transition-all active:scale-95 shadow-lg ${hasCheered ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-orange-500/50' : 'bg-slate-800 text-slate-400 hover:text-orange-400 hover:bg-slate-700'}`}>
                     <Zap size={14} className={hasCheered ? 'fill-white' : ''} /> {cheersCount > 0 ? cheersCount : '支持'}
@@ -198,7 +196,96 @@ const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActive
     );
 };
 
-// 這是留給 Completed Matches 的傳統表格行
+// 👉 修復點 2：傳統表格中的預測條也是使用 points 👈
+const MatchRow = ({ match, role, tournamentStandings, groupName, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students }) => {
+  const isGiantSlayer = useMemo(() => {
+    if (match.status !== 'completed' || !match.winnerId) return false;
+    const group = tournamentStandings?.[groupName];
+    if (!Array.isArray(group)) return false;
+    const winnerRank = group.findIndex(p => p.id === match.winnerId);
+    const loserId = match.winnerId === match.player1Id ? match.player2Id : match.player1Id;
+    const loserRank = group.findIndex(p => p.id === loserId);
+    return winnerRank !== -1 && loserRank !== -1 && winnerRank > loserRank;
+  }, [match, tournamentStandings, groupName]);
+
+  const cheersCount = match.cheers?.length || 0;
+  const hasCheered = match.cheers?.includes(currentUserInfo?.id || 'admin');
+  const isDone = match.status === 'completed';
+  const scoreStr = isDone ? (match.matchType === 'external' ? match.externalMatchScore : `${match.score1} : ${match.score2}`) : null;
+
+  const p1Elo = useMemo(() => {
+      const s = students?.find(s => s.id === match.player1Id);
+      return s ? (s.points || 1000) : (match.extElo || 1000);
+  }, [students, match.player1Id, match.extElo]);
+
+  const p2Elo = useMemo(() => {
+      const s = students?.find(s => s.id === match.player2Id);
+      return s ? (s.points || 1000) : (match.extElo || 1000);
+  }, [students, match.player2Id, match.extElo]);
+  
+  const p1WinProb = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
+  const p2WinProb = 1 - p1WinProb;
+
+  return (
+    <tr className={`transition-colors ${isDone ? '' : 'hover:bg-slate-50'}`}>
+      <td className="px-4 py-4 whitespace-nowrap align-top pt-5">
+        <p className="font-bold text-slate-700 text-sm">{match.date}</p>
+        <p className="font-mono text-xs text-slate-400 mt-0.5">{match.time}</p>
+        {(match.matchOrder || match.venue) && (<p className="text-[10px] text-blue-500 font-bold mt-1 uppercase tracking-wider">{match.matchOrder || match.venue}</p>)}
+      </td>
+      <td className="px-4 py-4 min-w-[200px]">
+        <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`font-black text-sm ${match.winnerId === match.player1Id ? 'text-blue-600' : 'text-slate-700'}`}>{match.player1Name}</span>
+              <span className="text-[10px] font-black text-slate-300 italic px-1">vs</span>
+              <span className={`font-black text-sm flex items-center gap-1 ${match.winnerId === match.player2Id ? 'text-blue-600' : 'text-slate-700'}`}>
+                {match.player2Name} {(!students?.find(s => s.id === match.player2Id) && match.player2Id) && <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded uppercase tracking-wider">外校</span>}
+              </span>
+              {isGiantSlayer && (<span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded uppercase tracking-wider"><ShieldAlert size={10} /> 爆冷</span>)}
+            </div>
+            {!isDone && match.matchType !== 'external' && (
+                <div className="mt-1 w-full max-w-[220px]">
+                   <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                      <span className="text-blue-500">勝率預測 {(p1WinProb*100).toFixed(0)}%</span>
+                      <span className="text-orange-500">{(p2WinProb*100).toFixed(0)}%</span>
+                   </div>
+                   <div className="flex h-1.5 w-full rounded-full overflow-hidden bg-slate-100 shadow-inner">
+                      <div className="bg-blue-500 h-full" style={{ width: `${p1WinProb * 100}%` }}></div>
+                      <div className="bg-orange-400 h-full" style={{ width: `${p2WinProb * 100}%` }}></div>
+                   </div>
+                </div>
+            )}
+        </div>
+      </td>
+      <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5">
+        {scoreStr ? <span className="font-mono font-black text-xl text-slate-800 tracking-wider bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">{scoreStr}</span> : <span className="text-slate-300 font-bold text-lg">—</span>}
+      </td>
+      <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5"><StatusPill status={match.status} /></td>
+      <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5">
+        <button onClick={(e) => handleCheerMatch(match.id, e)} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black border transition-all active:scale-95 shadow-sm ${hasCheered ? 'bg-gradient-to-r from-orange-50 to-red-50 text-orange-600 border-orange-200' : 'bg-white text-slate-400 border-slate-200 hover:text-orange-500 hover:border-orange-300'}`}>
+          <Zap size={12} className={hasCheered ? 'fill-orange-500' : ''} />{cheersCount > 0 ? cheersCount : '支持'}
+        </button>
+      </td>
+      {role === 'admin' && (
+        <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5">
+          <div className="flex justify-center gap-1.5">
+            {match.status === 'scheduled' && match.matchType !== 'external' && (
+              <>
+                {!match.player2Id?.startsWith('ext_') && (
+                    <button onClick={() => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }} className="p-2.5 rounded-xl bg-red-50 text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all shadow-sm" title="即時轉播"><PlayCircle size={14} /></button>
+                )}
+                <button onClick={() => handleUpdateLeagueMatchScore(match)} className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="結算聯賽與 Elo 積分"><Swords size={14} /></button>
+                <button onClick={() => handleEditLeagueMatch(match)} className="p-2.5 rounded-xl bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-600 hover:text-white transition-all shadow-sm" title="編輯"><Pencil size={14} /></button>
+              </>
+            )}
+            <button onClick={() => deleteItem('league_matches', match.id)} className="p-2.5 rounded-xl bg-white text-red-400 border border-slate-200 hover:bg-red-50 hover:border-red-200 transition-all shadow-sm" title="刪除"><Trash2 size={14} /></button>
+          </div>
+        </td>
+      )}
+    </tr>
+  );
+};
+
 const CompletedMatchRow = ({ match, tournamentStandings, groupName, students }) => {
   const isGiantSlayer = useMemo(() => {
     if (match.status !== 'completed' || !match.winnerId) return false;
@@ -242,7 +329,6 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
   const players = enrichedStandings?.[groupName] || [];
   const sortedMatches = [...matches].sort((a, b) => a.date.localeCompare(b.date) || (a.matchOrder || '').localeCompare(b.matchOrder || ''));
   
-  // 👉 拆分已完賽與未開賽 👈
   const completedMatches = sortedMatches.filter(m => m.status === 'completed');
   const scheduledMatches = sortedMatches.filter(m => m.status === 'scheduled');
   
@@ -270,7 +356,6 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
             </>
           )}
 
-          {/* 👉 賽前對戰卡片區 (Main Events) 👈 */}
           {scheduledMatches.length > 0 && (
               <div className="mb-10">
                   <p className="text-[11px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2 mb-4">
@@ -284,7 +369,6 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
               </div>
           )}
 
-          {/* 👉 完賽紀錄表格 (Results) 👈 */}
           {completedMatches.length > 0 && (
               <div>
                   <p className="text-[11px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2 mb-4">
@@ -327,6 +411,19 @@ const MyStatsBanner = ({ stats, upcomingMatches, selectedTournament, currentUser
         <div className="bg-white rounded-2xl py-4 border border-slate-100 shadow-sm"><p className={`text-3xl font-black ${stats.pointsDiff >= 0 ? 'text-blue-500' : 'text-rose-500'}`}>{stats.pointsDiff > 0 ? `+${stats.pointsDiff}` : stats.pointsDiff}</p><p className="text-[10px] font-black text-slate-400 mt-1 uppercase tracking-widest">淨得局</p></div>
         <div className="bg-gradient-to-b from-blue-600 to-indigo-700 rounded-2xl py-4 shadow-md text-white"><p className="text-3xl font-black font-mono tracking-tighter">{stats.leaguePoints}</p><p className="text-[10px] font-black text-blue-200 mt-1 uppercase tracking-widest">聯賽積分</p></div>
       </div>
+      {upcomingMatches.length > 0 && (
+        <div className="border-t border-slate-100 pt-5">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Activity size={12}/> 即將對陣 (Tale of the Tape)</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {upcomingMatches.map(m => (
+              <div key={m.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
+                <div className="flex flex-col"><span className="text-[10px] font-bold text-slate-400">{m.date} {m.time}</span><span className="text-sm font-black text-slate-700 mt-0.5">vs {m.player1Id === currentUserInfo.id ? m.player2Name : m.player1Name}</span></div>
+                <StatusPill status="scheduled" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
