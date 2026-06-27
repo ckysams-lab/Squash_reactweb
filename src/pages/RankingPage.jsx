@@ -1,5 +1,6 @@
-// src/pages/RankingPage.jsx (Version 2.4)
-// 更新內容: 新增「實時狀態指示燈 (Form Guide)」，顯示學員近 5 場比賽的勝負軌跡 (🟢🔴)。
+// src/pages/RankingPage.jsx (Version 2.5)
+// 更新內容: 強化「實時狀態指示燈 (Form Guide)」的搜尋引擎。
+// 加入「雙重比對機制 (ID + 姓名)」，確保早期未綁定 ID 的賽事紀錄也能正確轉換為狀態燈。
 
 import React, { useState } from 'react';
 import { Search, Trophy as TrophyIcon, Crown, Info, Globe, Trash2, Swords, X, Target, Zap, Plus, Minus, Activity } from 'lucide-react';
@@ -66,10 +67,16 @@ export default function RankingPage({
     if (matchModalData && !isExternal && opponentId && Array.isArray(leagueMatches)) {
         leagueMatches.forEach(m => {
             if (m.status === 'completed') {
-                const matchPlayers = [m.player1Id, m.player2Id];
-                if (matchPlayers.includes(matchModalData.id) && matchPlayers.includes(opponentId)) {
-                    if (m.winnerId === matchModalData.id) h2hP1Wins++;
-                    if (m.winnerId === opponentId) h2hP2Wins++;
+                // 雙重比對：ID 或是 名字 相符皆可
+                const matchPlayersId = [m.player1Id, m.player2Id];
+                const matchPlayersName = [m.player1Name, m.player2Name];
+                
+                const isP1InMatch = matchPlayersId.includes(matchModalData.id) || matchPlayersName.includes(matchModalData.name);
+                const isP2InMatch = matchPlayersId.includes(opponentId) || matchPlayersName.includes(currentOpponent?.name);
+                
+                if (isP1InMatch && isP2InMatch) {
+                    if (m.winnerId === matchModalData.id || m.player1Name === matchModalData.name && m.winnerId === m.player1Id) h2hP1Wins++;
+                    else h2hP2Wins++;
                 }
             }
         });
@@ -119,7 +126,7 @@ export default function RankingPage({
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 relative">
             <PageHeader title="積分排行榜" subtitle="查看全隊排名與積分變動" icon={TrophyIcon} />
 
-            {/* 頒獎台區塊保持原樣... */}
+            {/* 頒獎台區塊 */}
             <div className="flex flex-col md:flex-row justify-center items-end gap-6 mb-12 mt-10 md:mt-24">
                 {rankedStudents.slice(0, 3).map((s, i) => {
                    let orderClass = "", sizeClass = "", gradientClass = "", iconColor = "", shadowClass = "", label = "", labelBg = "";
@@ -181,19 +188,25 @@ export default function RankingPage({
                               </div>
                           </td>
 
-                          {/* 👉 全新：實時狀態指示燈 (Form Guide) 👈 */}
+                          {/* 👉 雙重比對狀態指示燈 (Form Guide) 👈 */}
                           <td className="px-6 py-6 text-center">
                               <div className="flex items-center justify-center gap-1.5">
                                   {(() => {
-                                      const sMatches = leagueMatches
-                                          .filter(m => m.status === 'completed' && (m.player1Id === s.id || m.player2Id === s.id))
-                                          .sort((a,b) => new Date(b.date) - new Date(a.date) || (b.time || "").localeCompare(a.time || ""))
-                                          .slice(0, 5).reverse(); // 反轉讓最新的一場在最右側
+                                      const sMatches = (leagueMatches || [])
+                                          .filter(m => m.status === 'completed' && (m.player1Id === s.id || m.player2Id === s.id || m.player1Name === s.name || m.player2Name === s.name))
+                                          .sort((a,b) => {
+                                              const dateA = new Date(a.date || 0).getTime() || 0;
+                                              const dateB = new Date(b.date || 0).getTime() || 0;
+                                              if (dateB !== dateA) return dateB - dateA;
+                                              return (b.time || "").localeCompare(a.time || "");
+                                          })
+                                          .slice(0, 5).reverse(); 
                                       
                                       if (sMatches.length === 0) return <span className="text-[10px] text-slate-300 font-bold tracking-widest">- - - - -</span>;
                                       
                                       const dots = sMatches.map(m => {
-                                          const isWin = m.winnerId === s.id;
+                                          // 判斷是否獲勝 (考慮舊資料沒記錄 winnerId 的情況，可透過名稱判斷)
+                                          const isWin = m.winnerId === s.id || (m.winnerId === m.player1Id && m.player1Name === s.name);
                                           return (
                                               <div key={m.id} title={`${m.date} ${isWin ? '勝' : '負'}`} 
                                                    className={`w-3 h-3 rounded-full border border-white shadow-sm transition-all group-hover:scale-110 ${isWin ? 'bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.4)]' : 'bg-rose-500 shadow-[0_0_5px_rgba(244,63,94,0.4)]'}`}>
@@ -234,7 +247,6 @@ export default function RankingPage({
             {/* Match Modal (包含 Tale of the Tape) */}
             {matchModalData && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    {/* (保持之前的模態框代碼) */}
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden border border-slate-100 max-h-[90vh] overflow-y-auto">
                         <div className="p-6 bg-slate-50 border-b flex justify-between items-center sticky top-0 z-10">
                             <div className="flex items-center gap-3"><div className="p-2 bg-blue-600 text-white rounded-xl shadow-md"><Swords size={20}/></div><h3 className="text-xl font-black text-slate-800">賽前預測與對戰室</h3></div>
