@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.10: 修復移除了榮譽殿堂後，SettingsPage 殘留 handleCSVImportTrophies 導致的崩潰問題。
+// Version 1.11: 支援「校際混合聯賽」。重寫排行榜與 Elo 引擎，完美兼容未註冊的「外部對手」。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -59,7 +59,7 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.10";
+const CURRENT_VERSION = "1.11";
 
 momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
@@ -120,19 +120,7 @@ export default function App() {
   const [user, setUser] = useState(null);
 
   const { 
-    students, 
-    competitions, 
-    monthlyStars, 
-    leagueMatches,
-    attendanceLogs, 
-    schedules, 
-    galleryItems,
-    awards, 
-    achievements, 
-    externalTournaments, 
-    assessments, 
-    tacticalShots,
-    playerJournals
+    students, competitions, monthlyStars, leagueMatches, attendanceLogs, schedules, galleryItems, awards, achievements, externalTournaments, assessments, tacticalShots, playerJournals
   } = useFirebaseData();
 
   const [role, setRole] = useState(null);
@@ -163,30 +151,30 @@ export default function App() {
                     album.photos.forEach(photo => {
                         if (!existingDriveImageUrls.has(photo.url)) {
                             const newDocRef = doc(galleryColRef);
-                            batch.set(newDocRef, {
-                                type: 'image', url: photo.url, title: album.album, description: photo.name || `來自 ${album.album}`,
-                                isDrive: true, timestamp: serverTimestamp()
-                            });
+                            batch.set(newDocRef, { type: 'image', url: photo.url, title: album.album, description: photo.name || `來自 ${album.album}`, isDrive: true, timestamp: serverTimestamp() });
                             itemsToSyncCount++;
                         }
                     });
                 }
             });
 
-            if (itemsToSyncCount > 0) {
-                await batch.commit();
-                alert(`✅ 成功從 Google Drive 同步並永久儲存了 ${itemsToSyncCount} 個新項目！`);
-            } else {
-                alert("ℹ️ Google Drive 中沒有找到新的照片可以同步。所有項目都已是最新狀態。");
-            }
-        } else {
-            alert("同步失敗：" + (result.message || '無法解析來自 Google Drive 的資料。'));
-        }
-    } catch (error) {
-        console.error("Drive sync error:", error);
-        alert("網路錯誤，無法連接 Google Drive。");
-    }
+            if (itemsToSyncCount > 0) { await batch.commit(); alert(`✅ 成功從 Google Drive 同步並永久儲存了 ${itemsToSyncCount} 個新項目！`); } 
+            else { alert("ℹ️ Google Drive 中沒有找到新的照片可以同步。所有項目都已是最新狀態。"); }
+        } else { alert("同步失敗：" + (result.message || '無法解析來自 Google Drive 的資料。')); }
+    } catch (error) { console.error("Drive sync error:", error); alert("網路錯誤，無法連接 Google Drive。"); }
     setIsSyncingDrive(false);
+  };
+
+  const parseCsvRow = (row) => {
+    const result = []; let current = ''; let inQuotes = false;
+    for (let i = 0; i < row.length; i++) {
+        const char = row[i];
+        if (char === '"') { inQuotes = !inQuotes; } 
+        else if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; } 
+        else { current += char; }
+    }
+    result.push(current.trim());
+    return result;
   };
 
   const [newAssessment, setNewAssessment] = useState({
@@ -219,10 +207,7 @@ export default function App() {
         setCurrentUserInfo(prev => ({ ...prev, featuredBadges: selectedFeaturedBadges }));
         alert('✅ 你的勳章展示牆已成功更新！');
         setShowcaseEditorOpen(false);
-    } catch (e) {
-        console.error("Failed to save featured badges:", e);
-        alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網絡。`);
-    }
+    } catch (e) { console.error("Failed to save featured badges:", e); alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網絡。`); }
     setIsUpdating(false);
   };
 
@@ -316,27 +301,16 @@ export default function App() {
                 await updateDoc(docRef, { level: level, timestamp: serverTimestamp() });
                 const badgeName = ACHIEVEMENT_DATA[badgeId].levels[level].name;
                 alert(`✅ 成功將學員徽章更新為「${badgeName}」！`);
-            } else {
-                alert("該學員已擁有此等級的徽章，無需重複授予。");
-            }
+            } else { alert("該學員已擁有此等級的徽章，無需重複授予。"); }
             return;
         }
-
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'), {
-            studentId, badgeId, level: level, timestamp: serverTimestamp()
-        });
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'), { studentId, badgeId, level: level, timestamp: serverTimestamp() });
         const badgeName = ACHIEVEMENT_DATA[badgeId].levels[level].name;
         alert(`✅ 成功授予學員「${badgeName}」徽章！`);
-    } catch (e) {
-        console.error("Failed to award achievement:", e);
-        alert("授予失敗，請檢查網絡連線。");
-    }
+    } catch (e) { console.error("Failed to award achievement:", e); alert("授予失敗，請檢查網絡連線。"); }
   };
 
-  const handleManualAward = (student) => {
-      setStudentToAward(student);
-      setShowAwardModal(true);
-  };
+  const handleManualAward = (student) => { setStudentToAward(student); setShowAwardModal(true); };
 
   const togglePendingAttendance = (studentId) => { 
       setPendingAttendance(prev => prev.includes(studentId) ? prev.filter(id => id !== studentId) : [...prev, studentId] );
@@ -377,63 +351,35 @@ export default function App() {
   const financialSummary = useMemo(() => {
     if (!financeConfig) return { revenue: 0, expense: 0, profit: 0 };
     const revenue = (Number(financeConfig.totalStudents) || 0) * (Number(financeConfig.feePerStudent) || 0);
-    const expense = ((Number(financeConfig.nTeam) || 0) * (Number(financeConfig.costTeam) || 0)) + 
-                    ((Number(financeConfig.nTrain) || 0) * (Number(financeConfig.costTrain) || 0)) + 
-                    ((Number(financeConfig.nHobby) || 0) * (Number(financeConfig.costHobby) || 0));
+    const expense = ((Number(financeConfig.nTeam) || 0) * (Number(financeConfig.costTeam) || 0)) + ((Number(financeConfig.nTrain) || 0) * (Number(financeConfig.costTrain) || 0)) + ((Number(financeConfig.nHobby) || 0) * (Number(financeConfig.costHobby) || 0));
     return { revenue, expense, profit: revenue - expense };
   }, [financeConfig]);
 
   const dashboardStats = useMemo(() => {
-    const now = new Date();
-    const todayZero = new Date(now.setHours(0,0,0,0));
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    const currentAcademicYear = getAcademicYear(now); 
-    const safeSchedules = Array.isArray(schedules) ? schedules : [];
-    const safeCompetitions = Array.isArray(competitions) ? competitions : [];
-    const safeAwards = Array.isArray(awards) ? awards : [];
+    const now = new Date(); const todayZero = new Date(now.setHours(0,0,0,0)); const currentMonth = now.getMonth(); const currentYear = now.getFullYear(); const currentAcademicYear = getAcademicYear(now); 
+    const safeSchedules = Array.isArray(schedules) ? schedules : []; const safeCompetitions = Array.isArray(competitions) ? competitions : []; const safeAwards = Array.isArray(awards) ? awards : [];
     const thisMonthTrainings = safeSchedules.filter(s => {
-      if (!s.date) return false;
-      const d = new Date(s.date);
-      return !isNaN(d) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      if (!s.date) return false; const d = new Date(s.date); return !isNaN(d) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     }).length;
     const futureCompetitions = safeCompetitions.filter(c => c.date && new Date(c.date) >= todayZero).sort((a,b) => new Date(a.date) - new Date(b.date));
-    
     let daysToNextMatch = "-";
     if (futureCompetitions.length > 0) {
       const nextMatchDate = new Date(futureCompetitions[0].date);
-      if (!isNaN(nextMatchDate)) {
-        const diffTime = Math.abs(nextMatchDate - todayZero);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-        daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`;
-      }
+      if (!isNaN(nextMatchDate)) { const diffTime = Math.abs(nextMatchDate - todayZero); const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); daysToNextMatch = diffDays === 0 ? "Today!" : `${diffDays}`; }
     }
     const awardsThisYear = safeAwards.filter(a => {
-      if (!a.date) return false;
-      const d = new Date(a.date);
-      if (isNaN(d)) return false;
-      const awardAcademicYear = getAcademicYear(d);
-      return awardAcademicYear === currentAcademicYear;
+      if (!a.date) return false; const d = new Date(a.date); if (isNaN(d)) return false; return getAcademicYear(d) === currentAcademicYear;
     }).length;
-    
     return { thisMonthTrainings, daysToNextMatch, awardsThisYear };
   }, [schedules, competitions, awards]);
 
   const galleryAlbums = useMemo(() => {
-    const albums = {};
-    const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
-    
+    const albums = {}; const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
     safeGallery.forEach(item => {
       const title = item.title || "未分類相簿"; 
-      if (!albums[title]) {
-        albums[title] = { title, cover: item.url, count: 0, items: [], type: item.type, lastUpdated: item.timestamp?.seconds || 0, isDrive: item.isDrive || false };
-      }
-      albums[title].count += 1;
-      albums[title].items.push(item);
-      if (item.timestamp?.seconds && item.timestamp.seconds > albums[title].lastUpdated) {
-         albums[title].cover = item.url;
-         albums[title].lastUpdated = item.timestamp.seconds;
-      }
+      if (!albums[title]) { albums[title] = { title, cover: item.url, count: 0, items: [], type: item.type, lastUpdated: item.timestamp?.seconds || 0, isDrive: item.isDrive || false }; }
+      albums[title].count += 1; albums[title].items.push(item);
+      if (item.timestamp?.seconds && item.timestamp.seconds > albums[title].lastUpdated) { albums[title].cover = item.url; albums[title].lastUpdated = item.timestamp.seconds; }
     });
     return Object.values(albums).sort((a,b) => b.lastUpdated - a.lastUpdated);
   }, [galleryItems]);
@@ -443,100 +389,62 @@ export default function App() {
     const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
     try {
       const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
-      link.type = 'image/png';
-      link.rel = 'icon';
-      link.href = logoUrl;
-      document.getElementsByTagName('head')[0].appendChild(link);
-      document.title = "BCKLAS 壁球校隊系統";
+      link.type = 'image/png'; link.rel = 'icon'; link.href = logoUrl; document.getElementsByTagName('head')[0].appendChild(link); document.title = "BCKLAS 壁球校隊系統";
     } catch(e) { console.error("Favicon error", e); }
   }, [systemConfig?.schoolLogo]);
 
   const handleCSVImportExternalTournaments = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setIsUpdating(true);
+    const file = e.target.files[0]; if (!file) return; setIsUpdating(true);
     try {
       const text = await readCSVFile(file, importEncoding);
       const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-      const batch = writeBatch(db);
-      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments');
+      const batch = writeBatch(db); const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments');
       let count = 0;
-      rows.forEach(row => {
-        const name = row.split(',')[0]?.trim();
-        if (name) { batch.set(doc(colRef), { name, timestamp: serverTimestamp() }); count++; }
-      });
-      await batch.commit();
-      alert(`✅ 成功匯入 ${count} 個校外賽事名稱！`);
-    } catch (err) {
-      console.error("External tournament import failed:", err);
-      alert('匯入失敗，請確認 CSV 格式 (單欄，第一行為標題)。');
-    }
-    setIsUpdating(false);
-    e.target.value = null;
+      rows.forEach(row => { const name = row.split(',')[0]?.trim(); if (name) { batch.set(doc(colRef), { name, timestamp: serverTimestamp() }); count++; } });
+      await batch.commit(); alert(`✅ 成功匯入 ${count} 個校外賽事名稱！`);
+    } catch (err) { console.error("External tournament import failed:", err); alert('匯入失敗，請確認 CSV 格式 (單欄，第一行為標題)。'); }
+    setIsUpdating(false); e.target.value = null;
   };
 
   const handleSaveAssessment = async () => {
-    const { 
-        studentId, date, notes = '', situps = 0, shuttleRun = 0, enduranceRun = 0, gripStrength = 0, flexibility = 0, 
-        fhDrive = 0, bhDrive = 0, fhVolley = 0, bhVolley = 0, rankT1 = '', rankT2 = '', rankT3 = '', hoursT1 = '', hoursT2 = '', hoursT3 = '' 
-    } = newAssessment;
-
+    const { studentId, date, notes = '', situps = 0, shuttleRun = 0, enduranceRun = 0, gripStrength = 0, flexibility = 0, fhDrive = 0, bhDrive = 0, fhVolley = 0, bhVolley = 0, rankT1 = '', rankT2 = '', rankT3 = '', hoursT1 = '', hoursT2 = '', hoursT3 = '' } = newAssessment;
     if (!studentId || !date) { alert("請選擇學員並填寫評估日期！"); return; }
-
     setIsUpdating(true);
     try {
       const cleanDataToSave = {
-        studentId, date, notes: notes || '', situps: Number(situps) || 0, shuttleRun: Number(shuttleRun) || 0, enduranceRun: Number(enduranceRun) || 0,
-        gripStrength: Number(gripStrength) || 0, flexibility: Number(flexibility) || 0, fhDrive: Number(fhDrive) || 0, bhDrive: Number(bhDrive) || 0,
-        fhVolley: Number(fhVolley) || 0, bhVolley: Number(bhVolley) || 0, rankT1: String(rankT1 || ''), rankT2: String(rankT2 || ''), rankT3: String(rankT3 || ''),
-        hoursT1: String(hoursT1 || ''), hoursT2: String(hoursT2 || ''), hoursT3: String(hoursT3 || ''), timestamp: serverTimestamp()
+        studentId, date, notes: notes || '', situps: Number(situps) || 0, shuttleRun: Number(shuttleRun) || 0, enduranceRun: Number(enduranceRun) || 0, gripStrength: Number(gripStrength) || 0, flexibility: Number(flexibility) || 0, fhDrive: Number(fhDrive) || 0, bhDrive: Number(bhDrive) || 0, fhVolley: Number(fhVolley) || 0, bhVolley: Number(bhVolley) || 0, rankT1: String(rankT1 || ''), rankT2: String(rankT2 || ''), rankT3: String(rankT3 || ''), hoursT1: String(hoursT1 || ''), hoursT2: String(hoursT2 || ''), hoursT3: String(hoursT3 || ''), timestamp: serverTimestamp()
       };
-
       const assessmentsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'assessments');
       await addDoc(assessmentsColRef, cleanDataToSave);
       alert('✅ 綜合能力評估儲存成功！');
-      
-      setNewAssessment({
-        studentId: '', date: new Date().toISOString().split('T')[0], situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', 
-        fhDrive: '', bhDrive: '', fhVolley: '', bhVolley: '', notes: '', rankT1: '', rankT2: '', rankT3: '', hoursT1: '', hoursT2: '', hoursT3: ''
-      });
+      setNewAssessment({ studentId: '', date: new Date().toISOString().split('T')[0], situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', fhDrive: '', bhDrive: '', fhVolley: '', bhVolley: '', notes: '', rankT1: '', rankT2: '', rankT3: '', hoursT1: '', hoursT2: '', hoursT3: '' });
     } catch (e) { console.error("Failed to save assessment:", e); alert(`儲存失敗：${e.message}`); }
     setIsUpdating(false);
   };
 
   const handleAddJournalEntry = async (studentId, content) => {
-      if (!content.trim()) return;
-      setIsUpdating(true);
-      try {
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'player_journals'), {
-              studentId, coachContent: content, coachId: currentUserInfo?.id || 'admin', coachName: currentUserInfo?.name || '教練', studentReply: null, createdAt: serverTimestamp()
-          });
-      } catch (e) { console.error("Failed to add journal entry:", e); alert("新增日誌失敗，請檢查網路。"); }
+      if (!content.trim()) return; setIsUpdating(true);
+      try { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'player_journals'), { studentId, coachContent: content, coachId: currentUserInfo?.id || 'admin', coachName: currentUserInfo?.name || '教練', studentReply: null, createdAt: serverTimestamp() }); } 
+      catch (e) { console.error("Failed to add journal entry:", e); alert("新增日誌失敗，請檢查網路。"); }
       setIsUpdating(false);
   };
 
   const handleReplyJournalEntry = async (journalId, replyContent) => {
-      if (!replyContent.trim()) return;
-      setIsUpdating(true);
-      try {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'player_journals', journalId);
-          await updateDoc(docRef, { studentReply: replyContent, repliedAt: serverTimestamp() });
-      } catch (e) { console.error("Failed to reply journal entry:", e); alert("回覆失敗，請檢查網路。"); }
+      if (!replyContent.trim()) return; setIsUpdating(true);
+      try { const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'player_journals', journalId); await updateDoc(docRef, { studentReply: replyContent, repliedAt: serverTimestamp() }); } 
+      catch (e) { console.error("Failed to reply journal entry:", e); alert("回覆失敗，請檢查網路。"); }
       setIsUpdating(false);
   };
 
   const deleteItem = async (col, id) => {
     if (role !== 'admin') return;
-    if (window.confirm('確定要永久刪除這個項目嗎？')) {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
-    }
+    if (window.confirm('確定要永久刪除這個項目嗎？')) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id)); }
   };
 
   const handleSetupStudentAuth = async (student) => {
     const password = prompt(`請為 ${student.name} 設定登入密碼 (最少 6 位數):`);
     if (!password || password.length < 6) { alert("密碼無效或太短 (Firebase 規定最少 6 位數)！已取消操作。"); return; }
     const studentAuthEmail = `${student.class.toLowerCase().trim()}${student.classNo.trim()}@bcklas.squash`;
-
     setIsUpdating(true);
     try {
         const tempApp = initializeApp(firebaseConfig, "TempApp");
@@ -592,13 +500,10 @@ export default function App() {
         if (currentPoints > existing.totalPoints) { uniqueMap.set(key, { ...s, totalPoints: currentPoints }); }
       }
     });
-
     return Array.from(uniqueMap.values()).sort((a, b) => {
-      const pointsA = Number(a.totalPoints) || 0;
-      const pointsB = Number(b.totalPoints) || 0;
+      const pointsA = Number(a.totalPoints) || 0; const pointsB = Number(b.totalPoints) || 0;
       if (pointsB !== pointsA) return pointsB - pointsA; 
-      const timeA = a.lastUpdated?.seconds || 0;
-      const timeB = b.lastUpdated?.seconds || 0;
+      const timeA = a.lastUpdated?.seconds || 0; const timeB = b.lastUpdated?.seconds || 0;
       if (timeB !== timeA) return timeB - timeA;
       const classCompare = (a.class || '').localeCompare(b.class || '');
       if (classCompare !== 0) return classCompare;
@@ -612,8 +517,7 @@ export default function App() {
         rankedStudents.forEach(s => {
             if (s.dob) {
                 const year = s.dob.split('-')[0];
-                if (year) { stats[year] = (stats[year] || 0) + 1; } 
-                else { stats['未知'] = (stats['未知'] || 0) + 1; }
+                if (year) { stats[year] = (stats[year] || 0) + 1; } else { stats['未知'] = (stats['未知'] || 0) + 1; }
             } else { stats['未知'] = (stats['未知'] || 0) + 1; }
         });
     }
@@ -621,13 +525,11 @@ export default function App() {
   }, [rankedStudents]);
 
   const filteredStudents = useMemo(() => {
-    return rankedStudents
-      .filter(s => {
+    return rankedStudents.filter(s => {
         const matchSearch = searchTerm === '' || s.name.includes(searchTerm) || s.class.includes(searchTerm.toUpperCase());
         const matchYear = selectedYearFilter === 'ALL' || (s.dob && s.dob.startsWith(selectedYearFilter)) || (selectedYearFilter === '未知' && !s.dob);
         return matchSearch && matchYear;
-      })
-      .sort((a, b) => {
+      }).sort((a, b) => {
         const rankA = rankedStudents.findIndex(rs => rs.id === a.id);
         const rankB = rankedStudents.findIndex(rs => rs.id === b.id);
         return rankA - rankB;
@@ -642,13 +544,9 @@ export default function App() {
   };
 
   const adjustPoints = async (id, amount, _reason = "教練調整") => { 
-    if (role !== 'admin' || !user) return;
-    setIsUpdating(true);
-    try {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', id), { 
-        points: increment(amount), lastUpdated: serverTimestamp() 
-      });
-    } catch (e) { console.error(e); }
+    if (role !== 'admin' || !user) return; setIsUpdating(true);
+    try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', id), { points: increment(amount), lastUpdated: serverTimestamp() }); } 
+    catch (e) { console.error(e); }
     setIsUpdating(false);
   };
 
@@ -658,9 +556,7 @@ export default function App() {
     if (newClass !== null) { 
         setIsUpdating(true);
         try {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), {
-                squashClass: newClass.trim(), lastUpdated: serverTimestamp()
-            });
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', student.id), { squashClass: newClass.trim(), lastUpdated: serverTimestamp() });
             alert(`✅ 已將 ${student.name} 的班別更新為「${newClass.trim() || '無'}」！`);
         } catch (e) { console.error("Update Squash Class failed", e); alert("更新失敗，請檢查網絡連線。"); }
         setIsUpdating(false);
@@ -678,8 +574,7 @@ export default function App() {
             const basePoints = BADGE_DATA[s.badge]?.basePoints || 0;
             batch.update(ref, { points: basePoints, lastUpdated: serverTimestamp() });
         });
-        await batch.commit();
-        alert("✅ 新賽季已開啟！所有積分已重置。");
+        await batch.commit(); alert("✅ 新賽季已開啟！所有積分已重置。");
     } catch(e) { console.error(e); alert("重置失敗"); }
     setIsUpdating(false);
   };
@@ -690,9 +585,8 @@ export default function App() {
     let rosterText = "🏆 BCKLAS 壁球校隊 - 推薦出賽名單 🏆\n\n";
     topStudents.forEach((s, i) => { rosterText += `${i+1}. ${s.name} (${s.class} ${s.classNo}) - 積分: ${s.totalPoints}\n`; });
     rosterText += "\n(由系統自動依據積分生成)";
-    navigator.clipboard.writeText(rosterText).then(() => {
-      alert('✅ 推薦名單已生成並複製到剪貼簿！\n\n你可以直接貼上到 Word 或 WhatsApp。');
-    }).catch(err => { console.error('複製失敗', err); alert('複製失敗，請手動選取：\n\n' + rosterText); });
+    navigator.clipboard.writeText(rosterText).then(() => { alert('✅ 推薦名單已生成並複製到剪貼簿！\n\n你可以直接貼上到 Word 或 WhatsApp。'); })
+    .catch(err => { console.error('複製失敗', err); alert('複製失敗，請手動選取：\n\n' + rosterText); });
   };
 
   const exportMatrixAttendanceCSV = (targetClass) => {
@@ -710,18 +604,12 @@ export default function App() {
 
       classStudents.sort((a,b) => a.class.localeCompare(b.class) || a.classNo.localeCompare(b.classNo)).forEach(student => {
           let row = `${student.class},${student.classNo},${student.name},${student.phone || ''},`;
-          uniqueDates.forEach(date => {
-              const attended = classLogs.some(log => log.studentId === student.id && log.date === date);
-              row += attended ? 'v,' : ',';
-          });
+          uniqueDates.forEach(date => { const attended = classLogs.some(log => log.studentId === student.id && log.date === date); row += attended ? 'v,' : ','; });
           csvContent += row.slice(0, -1) + '\n';
       });
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url; link.download = `${targetClass}_點名總表_${new Date().toISOString().split('T')[0]}.csv`;
-      link.click();
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob);
+      const link = document.createElement("a"); link.href = url; link.download = `${targetClass}_點名總表_${new Date().toISOString().split('T')[0]}.csv`; link.click();
   };
 
   const handleAddMedia = async () => {
@@ -729,94 +617,58 @@ export default function App() {
       if (type === '1') {
         if (galleryInputRef.current) { galleryInputRef.current.value = ""; galleryInputRef.current.click(); }
       } else if (type === '2') {
-        const url = prompt("請輸入 YouTube 影片網址:");
-        if (!url) return;
-        const title = prompt("請輸入影片標題 (這將作為相簿名稱):");
-        const desc = prompt("輸入描述 (可選):") || "";
-        try {
-           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
-              type: 'video', url, title: title || '未命名影片', description: desc, timestamp: serverTimestamp()
-           });
-           alert('影片新增成功！');
-        } catch (e) { console.error(e); alert('新增失敗'); }
+        const url = prompt("請輸入 YouTube 影片網址:"); if (!url) return;
+        const title = prompt("請輸入影片標題 (這將作為相簿名稱):"); const desc = prompt("輸入描述 (可選):") || "";
+        try { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), { type: 'video', url, title: title || '未命名影片', description: desc, timestamp: serverTimestamp() }); alert('影片新增成功！'); } 
+        catch (e) { console.error(e); alert('新增失敗'); }
       }
   };
 
   const handleGalleryImageUpload = async (e) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const title = prompt(`您選擇了 ${files.length} 張照片。\n請輸入這些照片的「相簿名稱」(例如：校際比賽花絮):`);
-    if (!title) return;
+    const files = e.target.files; if (!files || files.length === 0) return;
+    const title = prompt(`您選擇了 ${files.length} 張照片。\n請輸入這些照片的「相簿名稱」(例如：校際比賽花絮):`); if (!title) return;
     const desc = prompt("輸入統一描述 (可選):") || "";
-    
-    setIsUploading(true);
-    let successCount = 0;
+    setIsUploading(true); let successCount = 0;
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         try {
             const compressedBase64 = await compressImage(file);
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), {
-                type: 'image', url: compressedBase64, title, description: desc, timestamp: serverTimestamp()
-            });
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), { type: 'image', url: compressedBase64, title, description: desc, timestamp: serverTimestamp() });
             successCount++;
         } catch (err) { console.error("Upload failed for one image", err); }
     }
-    setIsUploading(false);
-    alert(`成功上傳 ${successCount} 張照片至「${title}」相簿！`);
-    setCurrentAlbum(null);
+    setIsUploading(false); alert(`成功上傳 ${successCount} 張照片至「${title}」相簿！`); setCurrentAlbum(null);
   };
 
   const handleCSVImportSchedules = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setIsUpdating(true);
+    const file = e.target.files[0]; if (!file) return; setIsUpdating(true);
     try {
       const text = await readCSVFile(file, importEncoding);
       const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-      const batch = writeBatch(db);
-      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
-      
+      const batch = writeBatch(db); const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'schedules');
       rows.forEach(row => {
         const [className, date, location, coach, notes] = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
-        if (date && date !== "日期") {
-          batch.set(doc(colRef), { 
-            trainingClass: className || '通用訓練班', date, location: location || '學校壁球場', 
-            coach: coach || '待定', notes: notes || '', createdAt: serverTimestamp() 
-          });
-        }
+        if (date && date !== "日期") { batch.set(doc(colRef), { trainingClass: className || '通用訓練班', date, location: location || '學校壁球場', coach: coach || '待定', notes: notes || '', createdAt: serverTimestamp() }); }
       });
-      await batch.commit();
-      alert('訓練班日程匯入成功！');
+      await batch.commit(); alert('訓練班日程匯入成功！');
     } catch (err) { alert('匯入失敗，請確認 CSV 格式'); }
-    setIsUpdating(false);
-    e.target.value = null;
+    setIsUpdating(false); e.target.value = null;
   };
 
   const handleCSVImportStudents = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setIsUpdating(true);
+    const file = e.target.files[0]; if (!file) return; setIsUpdating(true);
     try {
       const text = await readCSVFile(file, importEncoding);
       const rows = text.split(/\r?\n/).filter(r => r.trim() !== '').slice(1);
-      const batch = writeBatch(db);
-      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
-      
+      const batch = writeBatch(db); const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'students');
       rows.forEach(row => {
         const cols = row.split(',').map(s => s?.trim().replace(/^"|"$/g, ''));
         const [name, cls, no, badge, initPoints, squashClass, phone] = cols;
-        if (name && name !== "姓名") {
-          batch.set(doc(colRef), { 
-            name, class: (cls || '1A').toUpperCase(), classNo: no || '0', badge: badge || '無', 
-            points: Number(initPoints) || 100, squashClass: squashClass || '', phone: phone || '', createdAt: serverTimestamp() 
-          });
-        }
+        if (name && name !== "姓名") { batch.set(doc(colRef), { name, class: (cls || '1A').toUpperCase(), classNo: no || '0', badge: badge || '無', points: Number(initPoints) || 100, squashClass: squashClass || '', phone: phone || '', createdAt: serverTimestamp() }); }
       });
-      await batch.commit();
-      alert('隊員名單更新成功！');
+      await batch.commit(); alert('隊員名單更新成功！');
     } catch (err) { alert('匯入失敗'); }
-    setIsUpdating(false);
-    e.target.value = null;
+    setIsUpdating(false); e.target.value = null;
   };
 
   const uniqueTrainingClasses = useMemo(() => {
@@ -831,10 +683,7 @@ export default function App() {
       const startTime = s.time ? s.time.split(':').map(Number) : [16, 0];
       const endTime = s.time ? [startTime[0] + 2, startTime[1]] : [18, 0];
       return {
-        title: `[${s.trainingClass}] ${s.time || ''}`,
-        start: new Date(year, month - 1, day, startTime[0], startTime[1]),
-        end: new Date(year, month - 1, day, endTime[0], endTime[1]),
-        resource: s,
+        title: `[${s.trainingClass}] ${s.time || ''}`, start: new Date(year, month - 1, day, startTime[0], startTime[1]), end: new Date(year, month - 1, day, endTime[0], endTime[1]), resource: s,
       };
     });
   }, [schedules, selectedClassFilter]);
@@ -842,10 +691,7 @@ export default function App() {
   const studentsInSelectedAttendanceClass = useMemo(() => {
     const sorted = [...students].sort((a,b) => a.class.localeCompare(b.class) || a.classNo.localeCompare(b.classNo));
     if (attendanceClassFilter === 'ALL') return sorted;
-    return sorted.filter(s => {
-      if (!s.squashClass) return false;
-      return s.squashClass.includes(attendanceClassFilter);
-    });
+    return sorted.filter(s => { if (!s.squashClass) return false; return s.squashClass.includes(attendanceClassFilter); });
   }, [students, attendanceClassFilter]);
 
   const tournamentList = useMemo(() => {
@@ -872,15 +718,10 @@ export default function App() {
             groups[groupKey].push(match);
         });
     }
-
     const sortedGroupKeys = Object.keys(groups).sort((a, b) => {
-        if (a === '所有比賽') return -1;
-        if (b === '所有比賽') return 1;
-        return a.localeCompare(b);
+        if (a === '所有比賽') return -1; if (b === '所有比賽') return 1; return a.localeCompare(b);
     });
-
-    const result = {};
-    sortedGroupKeys.forEach(key => { result[key] = groups[key]; });
+    const result = {}; sortedGroupKeys.forEach(key => { result[key] = groups[key]; });
     return result;
   }, [filteredMatches]);
 
@@ -900,43 +741,41 @@ export default function App() {
       } catch (error) { console.error("Cheer failed:", error); }
   };
 
+  // 👉 重大升級：支援校外生參與聯賽與 Elo 計算 👈
   const handleUpdateLeagueMatchScore = async (match) => {
       const p1Raw = prompt(`請輸入 ${match.player1Name} 該場「總得分」\n(例如：直落三贏11-5, 11-5, 11-5，則輸入 33)`);
       if (p1Raw === null) return;
       const p2Raw = prompt(`請輸入 ${match.player2Name || '對手'} 該場「總得分」\n(例如：輸了5分, 5分, 5分，則輸入 15)`);
       if (p2Raw === null) return;
       
-      const totalP1 = parseInt(p1Raw, 10);
-      const totalP2 = parseInt(p2Raw, 10);
-
+      const totalP1 = parseInt(p1Raw, 10); const totalP2 = parseInt(p2Raw, 10);
       if (isNaN(totalP1) || isNaN(totalP2)) { alert("總得分必須是數字！"); return; }
       if (totalP1 === totalP2) { alert("總得分不能相同，壁球比賽必須分出勝負。"); return; }
 
       const winnerId = totalP1 > totalP2 ? match.player1Id : match.player2Id;
-      const winner = students.find(s => s.id === winnerId);
-      const loserId = (winnerId === match.player1Id ? match.player2Id : match.player1Id);
-      const loser = loserId ? students.find(s => s.id === loserId) : null;
-      
-      if (!winner || !loser) { alert("找不到球員資料，無法更新積分。"); return; }
+      const loserId = totalP1 > totalP2 ? match.player2Id : match.player1Id;
 
       const gamesScoreString = prompt(`請輸入大局比分 (例如 3-0, 3-1, 3-2):\n(這將顯示在聯賽介面上)`, totalP1 > totalP2 ? "3-0" : "0-3");
       if (!gamesScoreString || !gamesScoreString.includes("-")) { alert("格式錯誤。"); return; }
-      
-      const [g1, g2] = gamesScoreString.split('-');
-      const score1 = parseInt(g1, 10);
-      const score2 = parseInt(g2, 10);
+      const [g1, g2] = gamesScoreString.split('-'); const score1 = parseInt(g1, 10); const score2 = parseInt(g2, 10);
 
-      const p1Elo = winnerId === match.player1Id ? (winner.totalPoints || 1000) : (loser.totalPoints || 1000);
-      const p2Elo = winnerId === match.player2Id ? (winner.totalPoints || 1000) : (loser.totalPoints || 1000);
+      // 檢查身份：雙方是否為校內生
+      const isP1Internal = students.some(s => s.id === match.player1Id);
+      const isP2Internal = match.player2Id ? students.some(s => s.id === match.player2Id) : false;
+
+      // 如果兩邊都是外校，系統不結算 Elo
+      if (!isP1Internal && !isP2Internal) { alert("雙方皆為外校選手，不進行本校 Elo 結算。"); return; }
+
+      // 提取雙方的當前 Elo 總分 (若為外部選手，則抓取預估的 extElo 或預設 1000)
+      const p1Elo = isP1Internal ? (students.find(s => s.id === match.player1Id)?.totalPoints || 1000) : (match.extElo || 1000);
+      const p2Elo = isP2Internal ? (students.find(s => s.id === match.player2Id)?.totalPoints || 1000) : (match.extElo || 1000);
 
       const expectedScoreP1 = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
-      
       const totalPointsMatch = totalP1 + totalP2;
       const pointRatioP1 = totalPointsMatch > 0 ? totalP1 / totalPointsMatch : 0.5;
       const actualScoreP1 = totalPointsMatch > 0 ? Math.max(0, Math.min(1, (pointRatioP1 - 0.3) / 0.4)) : 0.5;
 
-      const K = 30;
-
+      const K = 30; // 固定聯賽波幅
       const p1DeltaRaw = K * (actualScoreP1 - expectedScoreP1);
       const p1Delta = Math.round(p1DeltaRaw);
       const p2Delta = -p1Delta;
@@ -944,13 +783,19 @@ export default function App() {
       const winnerDelta = winnerId === match.player1Id ? p1Delta : p2Delta;
       const loserDelta = loserId === match.player1Id ? p1Delta : p2Delta;
 
+      const winnerInternal = students.find(s => s.id === winnerId);
+      const loserInternal = students.find(s => s.id === loserId);
+
+      const winnerName = winnerInternal ? winnerInternal.name : (winnerId === match.player1Id ? match.player1Name : match.player2Name);
+      const loserName = loserInternal ? loserInternal.name : (loserId === match.player1Id ? match.player1Name : match.player2Name);
+
       const confirmMsg = `✍️ 確認賽果與 Elo 結算？\n\n` +
                          `對戰: ${match.player1Name} vs ${match.player2Name}\n` +
                          `總得分: ${totalP1} : ${totalP2}\n` +
                          `大局數: ${score1} - ${score2}\n\n` +
                          `【全校 Elo 積分變動】\n` +
-                         `${winner.name}: ${winnerDelta > 0 ? '+'+winnerDelta : winnerDelta} 分\n` +
-                         `${loser.name}: ${loserDelta > 0 ? '+'+loserDelta : loserDelta} 分\n\n` +
+                         `${winnerInternal ? `${winnerName}: ${winnerDelta > 0 ? '+'+winnerDelta : winnerDelta} 分\n` : `(${winnerName} 為外校選手不紀錄)\n`}` +
+                         `${loserInternal ? `${loserName}: ${loserDelta > 0 ? '+'+loserDelta : loserDelta} 分\n\n` : `(${loserName} 為外校選手不紀錄)\n\n`}` +
                          `(註: 聯賽榜仍會維持勝方 +3 聯賽積分)`;
 
       if (confirm(confirmMsg)) {
@@ -960,49 +805,37 @@ export default function App() {
               
               const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
               batch.update(matchRef, { 
-                  score1, score2, 
-                  totalPoints1: totalP1, totalPoints2: totalP2, 
-                  winnerId, status: 'completed', updatedAt: serverTimestamp() 
+                  score1, score2, totalPoints1: totalP1, totalPoints2: totalP2, winnerId, status: 'completed', updatedAt: serverTimestamp() 
               });
 
-              const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id);
-              batch.update(winnerRef, { points: increment(winnerDelta), lastUpdated: serverTimestamp() });
-              
-              const loserRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', loser.id);
-              batch.update(loserRef, { points: increment(loserDelta), lastUpdated: serverTimestamp() });
+              if (winnerInternal) {
+                  const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winnerInternal.id);
+                  batch.update(winnerRef, { points: increment(winnerDelta), lastUpdated: serverTimestamp() });
+              }
+              if (loserInternal) {
+                  const loserRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', loserInternal.id);
+                  batch.update(loserRef, { points: increment(loserDelta), lastUpdated: serverTimestamp() });
+              }
               
               await batch.commit();
               alert("✅ 賽果已成功儲存！聯賽積分與全校 Elo 已同步更新。");
-          } catch (e) {
-              console.error("Update match score failed", e);
-              alert("儲存失敗，請檢查網絡連線。");
-          }
+          } catch (e) { console.error("Update match score failed", e); alert("儲存失敗，請檢查網絡連線。"); }
           setIsUpdating(false);
       }
   };
 
   const handleEditLeagueMatch = async (match) => {
-      const newDate = prompt(`請輸入新的比賽日期 (YYYY-MM-DD):`, match.date);
-      if (newDate === null) return;
-      
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(newDate)) { alert("日期格式錯誤！請使用 YYYY-MM-DD 格式。"); return; }
+      const newDate = prompt(`請輸入新的比賽日期 (YYYY-MM-DD):`, match.date); if (newDate === null) return;
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/; if (!dateRegex.test(newDate)) { alert("日期格式錯誤！請使用 YYYY-MM-DD 格式。"); return; }
 
-      const newTime = prompt(`請輸入新的比賽時間 (HH:MM):`, match.time);
-      if (newTime === null) return;
-      
-      const timeRegex = /^\d{2}:\d{2}$/;
-      if (!timeRegex.test(newTime) && newTime !== 'N/A') { alert("時間格式錯誤！請使用 HH:MM 格式。"); return; }
+      const newTime = prompt(`請輸入新的比賽時間 (HH:MM):`, match.time); if (newTime === null) return;
+      const timeRegex = /^\d{2}:\d{2}$/; if (!timeRegex.test(newTime) && newTime !== 'N/A') { alert("時間格式錯誤！請使用 HH:MM 格式。"); return; }
       
       setIsUpdating(true);
       try {
           const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
-          await updateDoc(matchRef, { date: newDate, time: newTime });
-          alert('比賽時間已更新！');
-      } catch (e) {
-          console.error("Failed to update match time:", e);
-          alert("更新失敗，請稍後再試。");
-      }
+          await updateDoc(matchRef, { date: newDate, time: newTime }); alert('比賽時間已更新！');
+      } catch (e) { console.error("Failed to update match time:", e); alert("更新失敗，請稍後再試。"); }
       setIsUpdating(false);
   };
 
@@ -1011,19 +844,22 @@ export default function App() {
     return leagueMatches.filter(match => match.tournamentName === selectedTournament);
   }, [leagueMatches, selectedTournament]);
 
+  // 👉 重大升級：排行榜兼容外校選手 👈
   const tournamentStandings = useMemo(() => {
-    if (!trulyFilteredMatches || trulyFilteredMatches.length === 0 || !students || students.length === 0) return {};
+    if (!trulyFilteredMatches || trulyFilteredMatches.length === 0) return {};
     const standingsData = {};
 
-    const getOrCreateStanding = (playerId, groupKey) => {
+    const getOrCreateStanding = (playerId, playerName, groupKey) => {
         if (!standingsData[groupKey]) standingsData[groupKey] = {};
         if (!standingsData[groupKey][playerId]) {
-            const student = students.find(s => s.id === playerId);
-            if (!student) return null;
+            const student = students?.find(s => s.id === playerId);
             standingsData[groupKey][playerId] = {
-                id: playerId, name: student.name, class: student.class, classNo: student.classNo,
-                played: 0, wins: 0, losses: 0,
-                pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0
+                id: playerId,
+                name: student ? student.name : (playerName || '外部選手'),
+                class: student ? student.class : 'EXT',
+                classNo: student ? student.classNo : '-',
+                played: 0, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, pointsDiff: 0, leaguePoints: 0,
+                isExternal: !student
             };
         }
         return standingsData[groupKey][playerId];
@@ -1031,25 +867,22 @@ export default function App() {
 
     trulyFilteredMatches.forEach(match => {
         if (match.status !== 'completed') return;
-        const { player1Id, player2Id, groupName } = match;
+        const { player1Id, player2Id, groupName, player1Name, player2Name } = match;
         const groupKey = groupName || '所有比賽';
         
         const p1Score = parseInt(match.score1, 10) || 0;
         const p2Score = parseInt(match.score2, 10) || 0;
 
-        const player1Standing = getOrCreateStanding(player1Id, groupKey);
-        if (!player1Standing) return;
+        const player1Standing = getOrCreateStanding(player1Id, player1Name, groupKey);
         player1Standing.played += 1;
 
-        if (player2Id) {
-            const player2Standing = getOrCreateStanding(player2Id, groupKey);
-            if (!player2Standing) return;
-            if (player1Id !== player2Id) player2Standing.played += 1;
+        if (player2Id || player2Name) {
+            const p2IdToUse = player2Id || `ext_${player2Name}`; 
+            const player2Standing = getOrCreateStanding(p2IdToUse, player2Name, groupKey);
+            if (player1Id !== p2IdToUse) player2Standing.played += 1;
 
-            player1Standing.pointsFor += p1Score;
-            player1Standing.pointsAgainst += p2Score;
-            player2Standing.pointsFor += p2Score;
-            player2Standing.pointsAgainst += p1Score;
+            player1Standing.pointsFor += p1Score; player1Standing.pointsAgainst += p2Score;
+            player2Standing.pointsFor += p2Score; player2Standing.pointsAgainst += p1Score;
 
             if (p1Score > p2Score) {
                 player1Standing.wins += 1; player1Standing.leaguePoints += 3; player2Standing.losses += 1;
@@ -1066,8 +899,7 @@ export default function App() {
     const finalSortedResult = {};
     Object.keys(standingsData).forEach(groupKey => {
         finalSortedResult[groupKey] = Object.values(standingsData[groupKey]).map(player => {
-            player.pointsDiff = player.pointsFor - player.pointsAgainst;
-            return player;
+            player.pointsDiff = player.pointsFor - player.pointsAgainst; return player;
         }).sort((a, b) => {
             if (b.leaguePoints !== a.leaguePoints) return b.leaguePoints - a.leaguePoints;
             if (b.pointsDiff !== a.pointsDiff) return b.pointsDiff - a.pointsDiff;
@@ -1622,7 +1454,13 @@ export default function App() {
           {!viewingStudent && activeTab === 'financial' && role === 'admin' && (<FinancialPage financeConfig={financeConfig} setFinanceConfig={setFinanceConfig} financialSummary={financialSummary} saveFinanceConfig={saveFinanceConfig} />)}
           {!viewingStudent && activeTab === 'competitions' && (<CompetitionsPage role={role} competitions={competitions} generateCompetitionRoster={generateCompetitionRoster} deleteItem={deleteItem} db={db} appId={appId} />)}
           {!viewingStudent && activeTab === 'gallery' && (<GalleryPage role={role} currentAlbum={currentAlbum} setCurrentAlbum={setCurrentAlbum} isUploading={isUploading} isSyncingDrive={isSyncingDrive} syncGoogleDriveGallery={syncGoogleDriveGallery} handleAddMedia={handleAddMedia} galleryAlbums={galleryAlbums} setViewingImage={setViewingImage} getYouTubeEmbedUrl={getYouTubeEmbedUrl} deleteItem={deleteItem} />)}
-          {!viewingStudent && activeTab === 'awards' && (<AwardsPage role={role} awards={awards} students={students} awardsViewMode={awardsViewMode} setAwardsViewMode={setAwardsViewMode} setShowAddAwardModal={setShowAddAwardModal} deleteItem={deleteItem} setShowPlayerCard={setShowPlayerCard} />)}
+          
+          {!viewingStudent && activeTab === 'awards' && (
+            <AwardsPage 
+                role={role} awards={awards} students={students} awardsViewMode={awardsViewMode} setAwardsViewMode={setAwardsViewMode} 
+                setShowAddAwardModal={setShowAddAwardModal} deleteItem={deleteItem} setShowPlayerCard={setShowPlayerCard}
+            />
+          )}
           
           {!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
               <LeaguePage 
@@ -1632,16 +1470,11 @@ export default function App() {
                   myTournamentStats={myTournamentStats} myUpcomingMatches={myUpcomingMatches} groupedMatches={groupedMatches}
                   tournamentStandings={tournamentStandings} handleCheerMatch={handleCheerMatch} handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore}
                   handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} schoolLogo={systemConfig.schoolLogo} students={students}
+                  db={db} appId={appId} /* 👉 傳入 db 讓 LeaguePage 可以建立單場賽事 */
               />
           )}
             
-          {!viewingStudent && activeTab === 'settings' && role === 'admin' && (
-              <SettingsPage 
-                  systemConfig={systemConfig} setSystemConfig={setSystemConfig} importEncoding={importEncoding} setImportEncoding={setImportEncoding} 
-                  externalTournaments={externalTournaments} handleCSVImportExternalTournaments={handleCSVImportExternalTournaments} deleteItem={deleteItem} 
-                  handleSeasonReset={handleSeasonReset} setIsUpdating={setIsUpdating} db={db} appId={appId} 
-              />
-          )}
+          {!viewingStudent && activeTab === 'settings' && role === 'admin' && (<SettingsPage systemConfig={systemConfig} setSystemConfig={setSystemConfig} importEncoding={importEncoding} setImportEncoding={setImportEncoding} externalTournaments={externalTournaments} handleCSVImportExternalTournaments={handleCSVImportExternalTournaments} deleteItem={deleteItem} handleSeasonReset={handleSeasonReset} setIsUpdating={setIsUpdating} db={db} appId={appId} />)}
           
           {showAddPlayerModal && (<AddPlayerModal onClose={() => setShowAddPlayerModal(false)} db={db} appId={appId} compressImage={compressImage} />)}
           {editingStudent && (<EditPlayerModal student={editingStudent} onClose={() => setEditingStudent(null)} db={db} appId={appId} compressImage={compressImage} handleSetupStudentAuth={handleSetupStudentAuth} />)}        
