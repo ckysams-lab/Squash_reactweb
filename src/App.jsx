@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.13: 修復子頁面缺失 Props (handleExternalComp, leagueMatches, setShowPlayerCard) 導致的 onClick 崩潰問題。
+// Version 1.14: 新增「賽季封存與歷史殿堂 (Season Archives)」功能。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -27,6 +27,9 @@ import FinancialPage from './pages/FinancialPage';
 import PlayerDashboard from './components/PlayerDashboard';
 import MyDashboardPage from './pages/MyDashboardPage';
 import RankingPage from './pages/RankingPage';
+// 👉 引入全新的 Season Archives Page
+import SeasonArchivesPage from './pages/SeasonArchivesPage';
+
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
 import { useFirebaseData } from './hooks/useFirebaseData';
 import LiveScoreboardDisplay from './components/LiveScoreboardDisplay';
@@ -39,7 +42,7 @@ import {
   Key, LayoutDashboard, Layers, Link as LinkIcon, ListChecks, Loader2, Lock, LogIn, LogOut, Mail, MapPin, Medal,
   Megaphone, Menu, MinusCircle, Pencil, Percent, PlayCircle, Plus, PlusCircle, Printer, Rocket, Save, Search, Settings2,
   Shield as ShieldIcon, ShieldCheck, Sparkles, Star, Sun, Swords, Target, Trash2, TrendingUp, Trophy, Trophy as TrophyIcon,
-  Upload, User, UserCheck, UserCog, UserPlus, Users, X, Zap, FilePenLine
+  Upload, User, UserCheck, UserCog, UserPlus, Users, X, Zap, FilePenLine, Archive // 👉 加入 Archive 圖示
 } from 'lucide-react';
 
 import { 
@@ -59,7 +62,7 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.13";
+const CURRENT_VERSION = "1.14";
 
 momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
@@ -75,48 +78,23 @@ const SchoolLogo = ({ size = 48, className = "", systemConfig }) => {
   const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
   const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
 
-  if (error) {
-    return <ShieldCheck className={`${className}`} size={size} />;
-  }
+  if (error) { return <ShieldCheck className={`${className}`} size={size} />; }
   return (
-    <img
-      src={logoUrl}
-      alt="BCKLAS Logo"
-      className={`object-contain ${className}`}
-      style={{ width: size * 2, height: size * 2 }}
-      loading="eager"
-      crossOrigin="anonymous"
-      onError={(e) => {
-        console.error("Logo load failed", e);
-        setError(true);
-      }}
-    />
+    <img src={logoUrl} alt="BCKLAS Logo" className={`object-contain ${className}`} style={{ width: size * 2, height: size * 2 }} loading="eager" crossOrigin="anonymous" onError={(e) => { setError(true); }} />
   );
 };
 
 const NavButton = ({ tabName, activeTab, setActiveTab, setSidebarOpen, icon, children }) => {
     const [isHovered, setIsHovered] = useState(false);
     const isActive = activeTab === tabName;
-    
-    const activeStyle = {
-      backgroundColor: 'var(--theme-sidebar-active-bg)',
-      color: 'var(--theme-sidebar-active-text)',
-      boxShadow: '0 10px 15px -3px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.2)'
-    };
+    const activeStyle = { backgroundColor: 'var(--theme-sidebar-active-bg)', color: 'var(--theme-sidebar-active-text)', boxShadow: '0 10px 15px -3px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.2)' };
     const inactiveStyle = { color: 'var(--theme-sidebar-text)', backgroundColor: 'transparent' };
     const hoverStyle = { backgroundColor: 'rgba(128, 128, 128, 0.05)' };
-
     let style = isActive ? activeStyle : inactiveStyle;
     if (!isActive && isHovered) style = {...style, ...hoverStyle};
     
     return (
-        <button
-          onClick={() => { setActiveTab(tabName); setSidebarOpen(false); }}
-          className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all text-left font-bold"
-          style={style}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-        >
+        <button onClick={() => { setActiveTab(tabName); setSidebarOpen(false); }} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all text-left font-bold" style={style} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
           {icon} {children}
         </button>
     );
@@ -139,6 +117,9 @@ export default function App() {
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   
+  // 👉 歷史賽季資料庫狀態
+  const [seasonArchives, setSeasonArchives] = useState([]);
+
   const syncGoogleDriveGallery = async () => {
     setIsSyncingDrive(true);
     try {
@@ -157,29 +138,17 @@ export default function App() {
                     album.photos.forEach(photo => {
                         if (!existingDriveImageUrls.has(photo.url)) {
                             const newDocRef = doc(galleryColRef);
-                            batch.set(newDocRef, {
-                                type: 'image', url: photo.url, title: album.album, description: photo.name || `來自 ${album.album}`,
-                                isDrive: true, timestamp: serverTimestamp()
-                            });
+                            batch.set(newDocRef, { type: 'image', url: photo.url, title: album.album, description: photo.name || `來自 ${album.album}`, isDrive: true, timestamp: serverTimestamp() });
                             itemsToSyncCount++;
                         }
                     });
                 }
             });
 
-            if (itemsToSyncCount > 0) {
-                await batch.commit();
-                alert(`✅ 成功從 Google Drive 同步並永久儲存了 ${itemsToSyncCount} 個新項目！`);
-            } else {
-                alert("ℹ️ Google Drive 中沒有找到新的照片可以同步。所有項目都已是最新狀態。");
-            }
-        } else {
-            alert("同步失敗：" + (result.message || '無法解析來自 Google Drive 的資料。'));
-        }
-    } catch (error) {
-        console.error("Drive sync error:", error);
-        alert("網路錯誤，無法連接 Google Drive。");
-    }
+            if (itemsToSyncCount > 0) { await batch.commit(); alert(`✅ 成功從 Google Drive 同步並永久儲存了 ${itemsToSyncCount} 個新項目！`); } 
+            else { alert("ℹ️ Google Drive 中沒有找到新的照片可以同步。所有項目都已是最新狀態。"); }
+        } else { alert("同步失敗：" + (result.message || '無法解析來自 Google Drive 的資料。')); }
+    } catch (error) { console.error("Drive sync error:", error); alert("網路錯誤，無法連接 Google Drive。"); }
     setIsSyncingDrive(false);
   };
 
@@ -301,6 +270,11 @@ export default function App() {
       const liveMatchesRef = collection(db, 'artifacts', appId, 'public', 'data', 'live_matches');
       listeners.push(onSnapshot(liveMatchesRef, (snap) => {
         setLiveMatches(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }));
+
+      const archivesRef = collection(db, 'artifacts', appId, 'public', 'data', 'season_archives');
+      listeners.push(onSnapshot(archivesRef, (snap) => {
+        setSeasonArchives(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       }));
 
       listeners.push(onSnapshot(financeConfigRef, (docSnap) => {
@@ -520,6 +494,37 @@ export default function App() {
     });
   }, [students]);
 
+  // 👉 全新：賽季封存機制 👈
+  const handleArchiveSeason = async () => {
+      if (role !== 'admin') return;
+      const seasonName = prompt("請輸入要封存的賽季名稱 (例如: 2023/24 學年度):");
+      if (!seasonName) return;
+
+      setIsUpdating(true);
+      try {
+          const topPlayers = rankedStudents.slice(0, 10).map((s, idx) => ({
+              rank: idx + 1, name: s.name, class: s.class, points: s.totalPoints || s.points, badge: s.badge || '無'
+          }));
+          const totalMatches = leagueMatches.filter(m => m.status === 'completed').length;
+          const archiveData = { seasonName, topPlayers, totalMatches, createdAt: serverTimestamp() };
+
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'season_archives'), archiveData);
+          alert(`✅ 成功封存「${seasonName}」賽季的排行榜與數據！\n你現在可以在「歷年賽季」中查看。`);
+
+          if (confirm("封存完成！\n是否要【重置】所有學員目前的積分，以準備開始新賽季？\n(金章200分, 銀章100分, 銅章30分, 其他0分)")) {
+              const batch = writeBatch(db);
+              students.forEach(s => {
+                  const ref = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
+                  const basePoints = BADGE_DATA[s.badge]?.basePoints || 0;
+                  batch.update(ref, { points: basePoints, lastUpdated: serverTimestamp() });
+              });
+              await batch.commit();
+              alert("✅ 新賽季已開啟！所有積分已重置。");
+          }
+      } catch (error) { console.error(error); alert("封存失敗，請檢查網絡連線。"); }
+      setIsUpdating(false);
+  };
+
   const birthYearStats = useMemo(() => {
     const stats = {};
     if (Array.isArray(rankedStudents)) {
@@ -552,7 +557,7 @@ export default function App() {
     setIsUpdating(false);
   };
 
-  const adjustPoints = async (id, amount, _reason = "教練調整") => { 
+  const adjustPoints = async (id, amount, reason = "教練調整") => { 
     if (role !== 'admin' || !user) return; setIsUpdating(true);
     try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', id), { points: increment(amount), lastUpdated: serverTimestamp() }); } 
     catch (e) { console.error(e); }
@@ -572,21 +577,6 @@ export default function App() {
     }
   };
 
-  // 👉 重大修復：恢復 handleExternalComp 並傳遞給 RankingPage 👈
-  const handleExternalComp = (student) => {
-    const option = prompt(
-        `請為 ${student.name} 選擇校外賽成績 (輸入代號):\n\n` +
-        `1. 🔵 代表學校參賽 (+20)\n` + `2. ⚔️ 單場勝出 (+20)\n` + `3. 🥇 冠軍 (+100)\n` + `4. 🥈 亞軍 (+50)\n` + `5. 🥉 季軍/殿軍 (+30)`
-    );
-    let points = 0; let reason = "";
-    switch(option) {
-        case '1': points = 20; reason = "校外賽參與"; break; case '2': points = 20; reason = "校外賽勝場"; break;
-        case '3': points = 100; reason = "校外賽冠軍"; break; case '4': points = 50; reason = "校外賽亞軍"; break; case '5': points = 30; reason = "校外賽季殿軍"; break;
-        default: return; 
-    }
-    if(confirm(`確認給予 ${student.name} 「${reason}」獎勵 (總分 +${points})?`)) { adjustPoints(student.id, points, reason); }
-  };
-
   const handleSeasonReset = async () => {
     const confirmText = prompt("⚠️ 警告：這將重置所有學員的積分！\n\n系統將根據學員的「章別」重新賦予底分：\n金章: 200, 銀章: 100, 銅章: 30, 無章: 0\n\n請輸入 'RESET' 確認執行：");
     if (confirmText !== 'RESET') return;
@@ -601,6 +591,16 @@ export default function App() {
         await batch.commit(); alert("✅ 新賽季已開啟！所有積分已重置。");
     } catch(e) { console.error(e); alert("重置失敗"); }
     setIsUpdating(false);
+  };
+
+  const generateCompetitionRoster = () => {
+    const topStudents = rankedStudents.slice(0, 5);
+    if (topStudents.length === 0) { alert('目前沒有學員資料可生成名單。'); return; }
+    let rosterText = "🏆 BCKLAS 壁球校隊 - 推薦出賽名單 🏆\n\n";
+    topStudents.forEach((s, i) => { rosterText += `${i+1}. ${s.name} (${s.class} ${s.classNo}) - 積分: ${s.totalPoints}\n`; });
+    rosterText += "\n(由系統自動依據積分生成)";
+    navigator.clipboard.writeText(rosterText).then(() => { alert('✅ 推薦名單已生成並複製到剪貼簿！\n\n你可以直接貼上到 Word 或 WhatsApp。'); })
+    .catch(err => { console.error('複製失敗', err); alert('複製失敗，請手動選取：\n\n' + rosterText); });
   };
 
   const exportMatrixAttendanceCSV = (targetClass) => {
@@ -1017,66 +1017,6 @@ export default function App() {
     };
   }, [viewingStudent, currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
 
-  const myDashboardData = useMemo(() => {
-    if (role !== 'student' || !currentUserInfo) return null;
-    
-    const studentData = rankedStudents.find(s => s.id === currentUserInfo.id);
-    if (!studentData) return null;
-
-    const studentMatches = leagueMatches.filter(m => m.player1Id === studentData.id || m.player2Id === studentData.id);
-    const completedMatches = studentMatches.filter(m => m.status === 'completed');
-    const studentAttendance = attendanceLogs.filter(log => log.studentId === studentData.id);
-    const studentAchievements = achievements.filter(ach => ach.studentId === studentData.id);
-
-    const wins = completedMatches.filter(m => m.winnerId === studentData.id).length;
-    const totalPlayed = completedMatches.length;
-    const winRate = totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : 0;
-
-    const totalScheduledSessions = schedules.filter(s => studentData.squashClass && s.trainingClass === studentData.squashClass).length;
-    const attendedSessions = new Set(studentAttendance.map(log => log.date)).size;
-    const attendanceRate = totalScheduledSessions > 0 ? Math.round((attendedSessions / totalScheduledSessions) * 100) : 0;
-
-    const dynamicPointsHistory = [
-        { date: '初始積分', points: BADGE_DATA[studentData.badge]?.basePoints || 0 },
-        { date: '目前', points: studentData.totalPoints }
-    ];
-    const studentAssessments = (assessments || []).filter(a => a.studentId === studentData.id);
-    let latestAssessment = null;
-    if (studentAssessments.length > 0) {
-        latestAssessment = studentAssessments.reduce((latest, current) => {
-            const timeLatest = latest.timestamp?.seconds || new Date(latest.date).getTime() / 1000;
-            const timeCurrent = current.timestamp?.seconds || new Date(current.date).getTime() / 1000;
-            return (timeCurrent > timeLatest) ? current : latest;
-        });
-    }
-    let radarData = [];
-    if (latestAssessment) {
-        const calcScore = (val, max) => Math.min(10, Math.max(1, Math.round((val / max) * 10)));
-        const calculateShotScore = (driveHitsRaw, volleyHitsRaw) => {
-            const driveHits = Math.min(10, Number(driveHitsRaw) || 0);
-            const volleyHits = Math.min(7, Number(volleyHitsRaw) || 0);
-            return Math.floor((driveHits * 4) + (volleyHits * (60 / 7)));
-        };
-        const fhTotalScore = calculateShotScore(latestAssessment.fhDrive, latestAssessment.fhVolley);
-        const bhTotalScore = calculateShotScore(latestAssessment.bhDrive, latestAssessment.bhVolley);
-        radarData = [
-            { subject: '體能 (折返跑)', A: calcScore(latestAssessment.shuttleRun, 25), fullMark: 10 },
-            { subject: '力量 (握力)', A: calcScore(latestAssessment.gripStrength, 70), fullMark: 10 },
-            { subject: '柔軟度', A: calcScore(latestAssessment.flexibility, 30), fullMark: 10 },
-            { subject: '正手技術', A: Math.max(1, Math.round(fhTotalScore / 10)), fullMark: 10 },
-            { subject: '反手技術', A: Math.max(1, Math.round(bhTotalScore / 10)), fullMark: 10 },
-        ];
-    }
-
-    const recentMatches = studentMatches.sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
-
-    return {
-        winRate, wins, totalPlayed, attendanceRate, attendedSessions, totalScheduledSessions,
-        pointsHistory: dynamicPointsHistory, recentMatches, latestAssessment, radarData,
-        achievements: studentAchievements.map(ach => ({ badgeId: ach.badgeId, level: ach.level || 1 }))
-    };
-  }, [currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments, students]);
-
   const handleMonthlyStarFieldChange = (gender, field, value) => {
     setMonthlyStarEditData(prev => ({ ...prev, [gender]: { ...prev[gender], [field]: value } }));
   };
@@ -1233,6 +1173,9 @@ export default function App() {
                     <NavButton tabName="league" icon={<Swords size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>聯賽專區</NavButton>
                     <NavButton tabName="gallery" icon={<ImageIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>精彩花絮</NavButton>
                     <NavButton tabName="awards" icon={<Award size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>獎項成就</NavButton>
+                    {/* 👉 全新加入：歷年賽季 👈 */}
+                    <NavButton tabName="seasonArchives" icon={<Archive size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>歷年賽季</NavButton>
+                    
                     <NavButton tabName="schedules" icon={<CalendarIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>訓練日程</NavButton>
                     <NavButton tabName="competitions" icon={<Megaphone size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>比賽與公告</NavButton>
                   </>
@@ -1288,6 +1231,7 @@ export default function App() {
                  activeTab === 'gallery' ? "📸 精彩花絮" :
                  activeTab === 'awards' ? "🏆 獎項成就" :
                  activeTab === 'league' ? "🗓️ 聯賽專區" :
+                 activeTab === 'seasonArchives' ? "🏛️ 歷年賽季" : 
                  activeTab === 'financial' ? "💰 財務收支管理" :
                  activeTab === 'settings' ? "⚙️ 系統核心設定" :
                  activeTab === 'monthlyStarsAdmin' ? "🌟 每月之星管理" :
@@ -1412,7 +1356,6 @@ export default function App() {
               <AssessmentsPage students={students} assessments={assessments} newAssessment={newAssessment} setNewAssessment={setNewAssessment} handleSaveAssessment={handleSaveAssessment} isUpdating={isUpdating} />
           )}
 
-          {/* 👉 修復重點：加入 handleExternalComp, leagueMatches, setShowPlayerCard 👈 */}
           {!viewingStudent && activeTab === 'rankings' && (
               <RankingPage 
                   role={role} 
@@ -1422,7 +1365,6 @@ export default function App() {
                   setSearchTerm={setSearchTerm} 
                   setShowPlayerCard={setShowPlayerCard} 
                   adjustPoints={adjustPoints} 
-                  handleExternalComp={handleExternalComp} 
                   deleteItem={deleteItem} 
                   leagueMatches={leagueMatches} 
               />
@@ -1497,12 +1439,16 @@ export default function App() {
           {!viewingStudent && activeTab === 'competitions' && (<CompetitionsPage role={role} competitions={competitions} generateCompetitionRoster={generateCompetitionRoster} deleteItem={deleteItem} db={db} appId={appId} />)}
           {!viewingStudent && activeTab === 'gallery' && (<GalleryPage role={role} currentAlbum={currentAlbum} setCurrentAlbum={setCurrentAlbum} isUploading={isUploading} isSyncingDrive={isSyncingDrive} syncGoogleDriveGallery={syncGoogleDriveGallery} handleAddMedia={handleAddMedia} galleryAlbums={galleryAlbums} setViewingImage={setViewingImage} getYouTubeEmbedUrl={getYouTubeEmbedUrl} deleteItem={deleteItem} />)}
           
-          {/* 👉 修復重點：加入 setShowPlayerCard 👈 */}
           {!viewingStudent && activeTab === 'awards' && (
             <AwardsPage 
                 role={role} awards={awards} students={students} awardsViewMode={awardsViewMode} setAwardsViewMode={setAwardsViewMode} 
                 setShowAddAwardModal={setShowAddAwardModal} deleteItem={deleteItem} setShowPlayerCard={setShowPlayerCard}
             />
+          )}
+
+          {/* 👉 載入新的 SeasonArchivesPage 👈 */}
+          {!viewingStudent && activeTab === 'seasonArchives' && (
+            <SeasonArchivesPage archives={seasonArchives} handleArchiveSeason={handleArchiveSeason} role={role} deleteItem={deleteItem} />
           )}
           
           {!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
