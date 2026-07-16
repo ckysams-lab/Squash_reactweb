@@ -12,8 +12,8 @@ import {
     BarChart, Bar, AreaChart, Area, Legend 
 } from 'recharts';
 import { ACHIEVEMENT_DATA } from '../constants/data';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+import { toJpeg } from 'html-to-image';
+import jsPDF from 'jspdf';
 import PortfolioGenerator from './PortfolioGenerator'; 
 
 // 客製化數據卡片元件
@@ -77,27 +77,31 @@ export default function PlayerDashboard({
         setReplyTextMap(prev => ({...prev, [journalId]: ''}));
     };
 
-        // --- PDF 匯出邏輯 (High-DPI 印刷級別升級) ---
+       // --- PDF 匯出邏輯 (High-DPI + Tailwind v4 兼容版) ---
     const handleDownloadPDF = async () => { 
         const element = portfolioRef.current;
         if (!element) return;
         setIsGeneratingPDF(true);
+
         try {
-            // 1. 強制隱藏圖表動畫，確保截圖時資料已渲染完畢 (這非常重要，防止雷達圖殘缺)
+            // 1. 強制隱藏圖表動畫，確保截圖時資料已渲染完畢
             const charts = element.querySelectorAll('.recharts-wrapper');
             charts.forEach(chart => { chart.style.transform = 'translateZ(0)'; });
 
-            // 2. 升級 html2canvas 參數：scale 提升至 3，並優化字體渲染
-            const canvas = await html2canvas(element, { 
-                scale: 3,           // 產生 300DPI 級別的高清圖片
-                useCORS: true,      // 允許跨域載入圖片 (例如大頭照)
-                logging: false,
+            // 2. 使用 html-to-image 替換 html2canvas，完美支援 Tailwind v4
+            const dataUrl = await toJpeg(element, { 
+                quality: 0.95,       // 95% JPEG 品質
+                pixelRatio: 3,       // 等同於 scale: 3，達到 300DPI 印刷級別
                 backgroundColor: '#ffffff',
-                fontRendering: 'ligatures' // 關閉抗鋸齒，讓 PDF 邊緣更銳利
+                // 3. ✨ 過濾器：攔截會導致 CORS 崩潰的外部材質圖片
+                filter: (node) => {
+                    // 如果節點的背景包含 transparenttextures，則不要將其畫入 PDF
+                    if (node?.style?.backgroundImage?.includes('transparenttextures')) {
+                        return false;
+                    }
+                    return true;
+                }
             });
-
-            // 3. 使用 95% 品質的 JPEG 以控制 PDF 檔案大小，同時保持高畫質
-            const imgData = canvas.toDataURL('image/jpeg', 0.95); 
             
             // 4. 精準設定 A4 尺寸 (210 x 297 mm)
             const pdf = new jsPDF({
@@ -106,10 +110,11 @@ export default function PlayerDashboard({
                 format: 'a4'
             });
 
-            // 5. 確保圖片鋪滿整張 A4，不留白邊
-            pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+            // 5. 將圖片鋪滿整張 A4
+            pdf.addImage(dataUrl, 'JPEG', 0, 0, 210, 297);
             
             pdf.save(`${student.name}_專業壁球數據卡_${new Date().toISOString().split('T')[0]}.pdf`);
+            
         } catch (error) {
             console.error("PDF 產生失敗:", error);
             alert("履歷產生失敗，請稍後再試。");
@@ -117,7 +122,6 @@ export default function PlayerDashboard({
             setIsGeneratingPDF(false);
         }
     };
-
     // --- 戰術資料處理 ---
     const myTacticalShots = tacticalShots ? tacticalShots.filter(s => s.player === student.name) : [];
     
