@@ -77,19 +77,39 @@ export default function PlayerDashboard({
         setReplyTextMap(prev => ({...prev, [journalId]: ''}));
     };
 
-    // --- PDF 匯出邏輯 ---
+        // --- PDF 匯出邏輯 (High-DPI 印刷級別升級) ---
     const handleDownloadPDF = async () => { 
         const element = portfolioRef.current;
         if (!element) return;
         setIsGeneratingPDF(true);
         try {
-            const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save(`${student.name}_專業壁球簡歷.pdf`);
+            // 1. 強制隱藏圖表動畫，確保截圖時資料已渲染完畢 (這非常重要，防止雷達圖殘缺)
+            const charts = element.querySelectorAll('.recharts-wrapper');
+            charts.forEach(chart => { chart.style.transform = 'translateZ(0)'; });
+
+            // 2. 升級 html2canvas 參數：scale 提升至 3，並優化字體渲染
+            const canvas = await html2canvas(element, { 
+                scale: 3,           // 產生 300DPI 級別的高清圖片
+                useCORS: true,      // 允許跨域載入圖片 (例如大頭照)
+                logging: false,
+                backgroundColor: '#ffffff',
+                fontRendering: 'ligatures' // 關閉抗鋸齒，讓 PDF 邊緣更銳利
+            });
+
+            // 3. 使用 95% 品質的 JPEG 以控制 PDF 檔案大小，同時保持高畫質
+            const imgData = canvas.toDataURL('image/jpeg', 0.95); 
+            
+            // 4. 精準設定 A4 尺寸 (210 x 297 mm)
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            // 5. 確保圖片鋪滿整張 A4，不留白邊
+            pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+            
+            pdf.save(`${student.name}_專業壁球數據卡_${new Date().toISOString().split('T')[0]}.pdf`);
         } catch (error) {
             console.error("PDF 產生失敗:", error);
             alert("履歷產生失敗，請稍後再試。");
