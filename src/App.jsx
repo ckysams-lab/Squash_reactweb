@@ -449,7 +449,7 @@ export default function App() {
       if (!email || !password) { alert('請輸入教練電郵和密碼'); return; }
       try {
         await signInWithEmailAndPassword(auth, email, password);
-        setRole('admin'); setShowLoginModal(false); setActiveTab('dashboard');
+        setRole('admin'); setShowLoginModal(false); setActiveTab('competitions');
       } catch (error) { console.error("Admin Login failed", error); alert('登入失敗：' + error.message + '\n(請確認教練帳號密碼是否正確)'); }
     } else {
       const { classStr, classNo, password } = credentials;
@@ -460,7 +460,7 @@ export default function App() {
         const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
         if (matchedStudent) { setCurrentUserInfo(matchedStudent); } 
         else { setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail }); }
-        setRole('student'); setShowLoginModal(false); setActiveTab('myDashboard');
+        setRole('student'); setShowLoginModal(false); setActiveTab('competitions');
       } catch (error) { console.error("Student Login failed", error); alert('登入失敗：\n(請確認班別、班號和密碼是否正確)'); }
     }
   };
