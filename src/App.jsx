@@ -755,7 +755,9 @@ export default function App() {
       } catch (error) { console.error("Cheer failed:", error); }
   };
 
+  // --- 賽後自動結算引擎 (Auto-Resolution Engine) ---
   const handleUpdateLeagueMatchScore = async (match) => {
+      // 1. 獲取比分資料
       const p1Raw = prompt(`請輸入 ${match.player1Name} 該場「總得分」\n(例如：直落三贏11-5, 11-5, 11-5，則輸入 33)`);
       if (p1Raw === null) return;
       const p2Raw = prompt(`請輸入 ${match.player2Name || '對手'} 該場「總得分」\n(例如：輸了5分, 5分, 5分，則輸入 15)`);
@@ -769,6 +771,7 @@ export default function App() {
       if (!gamesScoreString || !gamesScoreString.includes("-")) { alert("格式錯誤。"); return; }
       const [g1, g2] = gamesScoreString.split('-'); const score1 = parseInt(g1, 10); const score2 = parseInt(g2, 10);
 
+      // 2. 判定勝負與選手身分
       const isP1Winner = totalP1 > totalP2;
       const winnerId = isP1Winner ? match.player1Id : match.player2Id;
       const loserId = isP1Winner ? match.player2Id : match.player1Id;
@@ -776,11 +779,12 @@ export default function App() {
       const isP1Internal = students.some(s => s.id === match.player1Id);
       const isP2Internal = match.player2Id ? students.some(s => s.id === match.player2Id) : false;
 
-      if (!isP1Internal && !isP2Internal) { alert("雙方皆為外校選手，不進行本校 Elo 結算。"); return; }
+      if (!isP1Internal && !isP2Internal) { alert("雙方皆為外校選手，不進行本校結算。"); return; }
 
       const winner = students.find(s => s.id === winnerId);
       const loser = students.find(s => s.id === loserId);
 
+      // 3. Elo 積分計算邏輯 (維持您原本的專業公式)
       const p1Elo = isP1Internal ? (students.find(s=>s.id === match.player1Id)?.totalPoints || 1000) : (match.extElo || 1000);
       const p2Elo = isP2Internal ? (students.find(s=>s.id === match.player2Id)?.totalPoints || 1000) : (match.extElo || 1000);
       const winnerElo = isP1Winner ? p1Elo : p2Elo;
@@ -824,33 +828,59 @@ export default function App() {
       const winnerDelta = Math.round(baseDelta * hybridDominance * gradeBonus);
       const loserDelta = -Math.round(baseDelta * hybridDominance);
 
-      const p1Delta = isP1Winner ? winnerDelta : loserDelta;
-      const p2Delta = isP1Winner ? loserDelta : winnerDelta;
+      // ✨ 4. 自動成就解鎖引擎 (Auto-Achievement Detection)
+      let autoBadgesToAward = [];
+      let badgeMsg = "";
+      
+      if (winner) {
+          // 條件 A: 完美壓制 (Flawless) - 直落三且總失分小於 10 分
+          if (winnerGames === 3 && loserGames === 0 && (totalPointsMatch - winnerPoints) <= 10) {
+              autoBadgesToAward.push({ badgeId: 'flawless_victory', level: 1, name: '完美壓制' });
+          }
+          // 條件 B: 越級打怪 (Giant Killer) - 贏了 OVR 比自己高 100 分以上的對手
+          if (loserElo - winnerElo >= 100) {
+              autoBadgesToAward.push({ badgeId: 'giant_killer', level: 1, name: '越級打怪' });
+          }
+          // 條件 C: 極限反殺 (Clutch Master) - 3-2 險勝
+          if (winnerGames === 3 && loserGames === 2) {
+              autoBadgesToAward.push({ badgeId: 'clutch_master', level: 1, name: '極限反殺' });
+          }
+
+          // 過濾掉該學生已經擁有的徽章
+          const studentExistingBadges = achievements.filter(ach => ach.studentId === winner.id).map(ach => ach.badgeId);
+          autoBadgesToAward = autoBadgesToAward.filter(b => !studentExistingBadges.includes(b.badgeId));
+
+          if (autoBadgesToAward.length > 0) {
+              badgeMsg = `\n🏅 系統自動解鎖成就：${autoBadgesToAward.map(b => `「${b.name}」`).join(', ')}`;
+          }
+      }
 
       const winnerName = winner ? winner.name : (winnerId === match.player1Id ? match.player1Name : match.player2Name);
       const loserName = loser ? loser.name : (loserId === match.player1Id ? match.player1Name : match.player2Name);
 
+      // 5. 確認視窗
       const confirmMsg = `✍️ 確認賽果與終極 Elo 結算？\n\n` +
                          `對戰: ${match.player1Name} vs ${match.player2Name}\n` +
-                         `總得分: ${totalP1} : ${totalP2}\n` +
                          `大局數: ${score1} - ${score2}\n` +
                          `統治力系數: ${hybridDominance.toFixed(2)}x` +
-                         `${gradeMsg}\n\n` +
-                         `【全校 Elo 積分變動】\n` +
-                         `${winner ? `${winnerName}: ${winnerDelta > 0 ? '+'+winnerDelta : winnerDelta} 分\n` : `(${winnerName} 為外校選手不紀錄)\n`}` +
-                         `${loser ? `${loserName}: ${loserDelta > 0 ? '+'+loserDelta : loserDelta} 分\n\n` : `(${loserName} 為外校選手不紀錄)\n\n`}` +
-                         `(註: 聯賽榜仍會維持勝方 +3 聯賽積分)`;
+                         `${gradeMsg}` + 
+                         `${badgeMsg}\n\n` +
+                         `【積分變動】\n` +
+                         `${winner ? `${winnerName}: ${winnerDelta > 0 ? '+'+winnerDelta : winnerDelta} 分\n` : `(${winnerName} 為外校選手)\n`}` +
+                         `${loser ? `${loserName}: ${loserDelta > 0 ? '+'+loserDelta : loserDelta} 分\n` : `(${loserName} 為外校選手)\n`}`;
 
       if (confirm(confirmMsg)) {
           setIsUpdating(true);
           try {
               const batch = writeBatch(db);
               
+              // 更新比賽狀態
               const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
               batch.update(matchRef, { 
                   score1, score2, totalPoints1: totalP1, totalPoints2: totalP2, winnerId, status: 'completed', updatedAt: serverTimestamp() 
               });
 
+              // 更新勝敗雙方積分
               if (winner) {
                   const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id);
                   batch.update(winnerRef, { points: increment(winnerDelta), lastUpdated: serverTimestamp() });
@@ -859,9 +889,20 @@ export default function App() {
                   const loserRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', loser.id);
                   batch.update(loserRef, { points: increment(loserDelta), lastUpdated: serverTimestamp() });
               }
+
+              // 寫入自動解鎖的成就徽章
+              autoBadgesToAward.forEach(badge => {
+                  const newBadgeRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'));
+                  batch.set(newBadgeRef, {
+                      studentId: winner.id,
+                      badgeId: badge.badgeId,
+                      level: badge.level,
+                      timestamp: serverTimestamp()
+                  });
+              });
               
               await batch.commit();
-              alert("✅ 賽果已成功儲存！");
+              alert("✅ 賽果已成功儲存！積分與成就已自動派發。");
           } catch (e) { console.error("Update match score failed", e); alert("儲存失敗，請檢查網絡連線。"); }
           setIsUpdating(false);
       }
