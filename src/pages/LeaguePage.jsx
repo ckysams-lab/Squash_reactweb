@@ -1,12 +1,13 @@
-// src/pages/LeaguePage.jsx (Version 5.2 — Elo Read Bug Fix)
-// 更新內容: 修復了對戰卡片與賽程表中，無法正確讀取學生 Elo 積分 (錯誤讀取 totalPoints 導致全部顯示 1000) 的問題。
+// src/pages/LeaguePage.jsx (Version 5.3 — Manual Score Override with Professional Linkage)
+// 更新內容: 新增「修改最終比分」功能，並會在勝負反轉時自動補扣/補發學生積分。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
-import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus } from 'lucide-react';
+import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, writeBatch, increment, serverTimestamp } from 'firebase/firestore';
 
+// ... (TrendIndicator, StatusPill, RankBadge, PodiumStrip, TeamTieBoard, StandingsTable 保持不變) ...
 const TrendIndicator = ({ trend }) => {
   if (trend > 0) return (<span className="inline-flex items-center gap-0.5 text-emerald-600 text-[11px] font-bold"><ArrowUp size={10} strokeWidth={2.5} />{trend}</span>);
   if (trend < 0) return (<span className="inline-flex items-center gap-0.5 text-rose-500 text-[11px] font-bold"><ArrowDown size={10} strokeWidth={2.5} />{Math.abs(trend)}</span>);
@@ -116,7 +117,6 @@ const StandingsTable = ({ players }) => (
   </div>
 );
 
-// 👉 修復點 1：MatchupCard 內讀取 Elo 的欄位更正為 points 👈
 const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students }) => {
     const cheersCount = match.cheers?.length || 0;
     const hasCheered = match.cheers?.includes(currentUserInfo?.id || 'admin');
@@ -124,7 +124,6 @@ const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActive
     const p1Internal = students?.find(s => s.id === match.player1Id);
     const p2Internal = students?.find(s => s.id === match.player2Id);
     
-    // 將 totalPoints 修正為 points
     const p1Elo = p1Internal ? (p1Internal.points || 1000) : (match.extElo || 1000);
     const p2Elo = p2Internal ? (p2Internal.points || 1000) : (match.extElo || 1000);
     const p1WinProb = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
@@ -196,97 +195,8 @@ const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActive
     );
 };
 
-// 👉 修復點 2：傳統表格中的預測條也是使用 points 👈
-const MatchRow = ({ match, role, tournamentStandings, groupName, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students }) => {
-  const isGiantSlayer = useMemo(() => {
-    if (match.status !== 'completed' || !match.winnerId) return false;
-    const group = tournamentStandings?.[groupName];
-    if (!Array.isArray(group)) return false;
-    const winnerRank = group.findIndex(p => p.id === match.winnerId);
-    const loserId = match.winnerId === match.player1Id ? match.player2Id : match.player1Id;
-    const loserRank = group.findIndex(p => p.id === loserId);
-    return winnerRank !== -1 && loserRank !== -1 && winnerRank > loserRank;
-  }, [match, tournamentStandings, groupName]);
-
-  const cheersCount = match.cheers?.length || 0;
-  const hasCheered = match.cheers?.includes(currentUserInfo?.id || 'admin');
-  const isDone = match.status === 'completed';
-  const scoreStr = isDone ? (match.matchType === 'external' ? match.externalMatchScore : `${match.score1} : ${match.score2}`) : null;
-
-  const p1Elo = useMemo(() => {
-      const s = students?.find(s => s.id === match.player1Id);
-      return s ? (s.points || 1000) : (match.extElo || 1000);
-  }, [students, match.player1Id, match.extElo]);
-
-  const p2Elo = useMemo(() => {
-      const s = students?.find(s => s.id === match.player2Id);
-      return s ? (s.points || 1000) : (match.extElo || 1000);
-  }, [students, match.player2Id, match.extElo]);
-  
-  const p1WinProb = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
-  const p2WinProb = 1 - p1WinProb;
-
-  return (
-    <tr className={`transition-colors ${isDone ? '' : 'hover:bg-slate-50'}`}>
-      <td className="px-4 py-4 whitespace-nowrap align-top pt-5">
-        <p className="font-bold text-slate-700 text-sm">{match.date}</p>
-        <p className="font-mono text-xs text-slate-400 mt-0.5">{match.time}</p>
-        {(match.matchOrder || match.venue) && (<p className="text-[10px] text-blue-500 font-bold mt-1 uppercase tracking-wider">{match.matchOrder || match.venue}</p>)}
-      </td>
-      <td className="px-4 py-4 min-w-[200px]">
-        <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`font-black text-sm ${match.winnerId === match.player1Id ? 'text-blue-600' : 'text-slate-700'}`}>{match.player1Name}</span>
-              <span className="text-[10px] font-black text-slate-300 italic px-1">vs</span>
-              <span className={`font-black text-sm flex items-center gap-1 ${match.winnerId === match.player2Id ? 'text-blue-600' : 'text-slate-700'}`}>
-                {match.player2Name} {(!students?.find(s => s.id === match.player2Id) && match.player2Id) && <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded uppercase tracking-wider">外校</span>}
-              </span>
-              {isGiantSlayer && (<span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded uppercase tracking-wider"><ShieldAlert size={10} /> 爆冷</span>)}
-            </div>
-            {!isDone && match.matchType !== 'external' && (
-                <div className="mt-1 w-full max-w-[220px]">
-                   <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                      <span className="text-blue-500">勝率預測 {(p1WinProb*100).toFixed(0)}%</span>
-                      <span className="text-orange-500">{(p2WinProb*100).toFixed(0)}%</span>
-                   </div>
-                   <div className="flex h-1.5 w-full rounded-full overflow-hidden bg-slate-100 shadow-inner">
-                      <div className="bg-blue-500 h-full" style={{ width: `${p1WinProb * 100}%` }}></div>
-                      <div className="bg-orange-400 h-full" style={{ width: `${p2WinProb * 100}%` }}></div>
-                   </div>
-                </div>
-            )}
-        </div>
-      </td>
-      <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5">
-        {scoreStr ? <span className="font-mono font-black text-xl text-slate-800 tracking-wider bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">{scoreStr}</span> : <span className="text-slate-300 font-bold text-lg">—</span>}
-      </td>
-      <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5"><StatusPill status={match.status} /></td>
-      <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5">
-        <button onClick={(e) => handleCheerMatch(match.id, e)} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black border transition-all active:scale-95 shadow-sm ${hasCheered ? 'bg-gradient-to-r from-orange-50 to-red-50 text-orange-600 border-orange-200' : 'bg-white text-slate-400 border-slate-200 hover:text-orange-500 hover:border-orange-300'}`}>
-          <Zap size={12} className={hasCheered ? 'fill-orange-500' : ''} />{cheersCount > 0 ? cheersCount : '支持'}
-        </button>
-      </td>
-      {role === 'admin' && (
-        <td className="px-4 py-4 text-center whitespace-nowrap align-top pt-5">
-          <div className="flex justify-center gap-1.5">
-            {match.status === 'scheduled' && match.matchType !== 'external' && (
-              <>
-                {!match.player2Id?.startsWith('ext_') && (
-                    <button onClick={() => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }} className="p-2.5 rounded-xl bg-red-50 text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all shadow-sm" title="即時轉播"><PlayCircle size={14} /></button>
-                )}
-                <button onClick={() => handleUpdateLeagueMatchScore(match)} className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all shadow-sm" title="結算聯賽與 Elo 積分"><Swords size={14} /></button>
-                <button onClick={() => handleEditLeagueMatch(match)} className="p-2.5 rounded-xl bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-600 hover:text-white transition-all shadow-sm" title="編輯"><Pencil size={14} /></button>
-              </>
-            )}
-            <button onClick={() => deleteItem('league_matches', match.id)} className="p-2.5 rounded-xl bg-white text-red-400 border border-slate-200 hover:bg-red-50 hover:border-red-200 transition-all shadow-sm" title="刪除"><Trash2 size={14} /></button>
-          </div>
-        </td>
-      )}
-    </tr>
-  );
-};
-
-const CompletedMatchRow = ({ match, tournamentStandings, groupName, students }) => {
+// 5.3 修改：加入 openScoreOverrideModal props
+const CompletedMatchRow = ({ match, tournamentStandings, groupName, students, role, openScoreOverrideModal }) => {
   const isGiantSlayer = useMemo(() => {
     if (match.status !== 'completed' || !match.winnerId) return false;
     const group = tournamentStandings?.[groupName];
@@ -301,7 +211,7 @@ const CompletedMatchRow = ({ match, tournamentStandings, groupName, students }) 
   const p2Internal = students?.find(s => s.id === match.player2Id);
 
   return (
-    <tr className="hover:bg-slate-50 transition-colors">
+    <tr className="hover:bg-slate-50 transition-colors group">
       <td className="px-4 py-4 whitespace-nowrap align-middle">
         <p className="font-bold text-slate-700 text-sm">{match.date}</p>
         <p className="font-mono text-xs text-slate-400 mt-0.5">{match.time}</p>
@@ -319,12 +229,25 @@ const CompletedMatchRow = ({ match, tournamentStandings, groupName, students }) 
       <td className="px-4 py-4 text-center whitespace-nowrap align-middle">
         <span className="font-mono font-black text-xl text-slate-800 tracking-wider bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">{scoreStr}</span>
       </td>
-      <td className="px-4 py-4 text-center whitespace-nowrap align-middle"><StatusPill status={match.status} /></td>
+      <td className="px-4 py-4 text-center whitespace-nowrap align-middle flex items-center justify-center gap-2 h-full min-h-[64px]">
+        <StatusPill status={match.status} />
+        {/* 5.3 新增：修改比分按鈕 */}
+        {role === 'admin' && match.matchType !== 'external' && (
+            <button 
+                onClick={() => openScoreOverrideModal(match)} 
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                title="修改最終比分"
+            >
+                <Pencil size={14}/>
+            </button>
+        )}
+      </td>
     </tr>
   );
 };
 
-const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandings, role, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students }) => {
+// 5.3 修改：加入 openScoreOverrideModal props 傳遞
+const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandings, role, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students, openScoreOverrideModal }) => {
   const isTeamTie = groupName.includes(' vs ');
   const players = enrichedStandings?.[groupName] || [];
   const sortedMatches = [...matches].sort((a, b) => a.date.localeCompare(b.date) || (a.matchOrder || '').localeCompare(b.matchOrder || ''));
@@ -386,7 +309,7 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {completedMatches.map(match => (
-                          <CompletedMatchRow key={match.id} match={match} tournamentStandings={tournamentStandings} groupName={groupName} students={students}/>
+                          <CompletedMatchRow key={match.id} match={match} tournamentStandings={tournamentStandings} groupName={groupName} students={students} role={role} openScoreOverrideModal={openScoreOverrideModal}/>
                         ))}
                       </tbody>
                     </table>
@@ -443,7 +366,13 @@ export default function LeaguePage({
   const [isUpdatingMatch, setIsUpdatingMatch] = useState(false);
   const [newMatch, setNewMatch] = useState({ groupName: 'Group A', date: new Date().toISOString().split('T')[0], time: '16:00', player1Id: '', isExternal: false, player2Id: '', extName: '', extElo: '1000' });
 
+  // 5.3 新增：修改比分的狀態管理
+  const [overrideModalOpen, setOverrideModalOpen] = useState(false);
+  const [matchToOverride, setMatchToOverride] = useState(null);
+  const [overrideScores, setOverrideScores] = useState({ s1: 0, s2: 0 });
+
   const handleSaveSingleMatch = async () => {
+      // ... (原本邏輯不變) ...
       if (!newMatch.player1Id) return alert("必須選擇一位本校出賽球員！");
       if (!newMatch.isExternal && !newMatch.player2Id) return alert("請選擇本校對手！");
       if (newMatch.isExternal && !newMatch.extName.trim()) return alert("請輸入外校對手名稱！");
@@ -471,6 +400,72 @@ export default function LeaguePage({
           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'), matchData);
           alert("✅ 成功加入一場新賽程！"); setShowAddSingleMatch(false);
       } catch(e) { console.error(e); alert("新增失敗，請檢查網絡。"); }
+      setIsUpdatingMatch(false);
+  };
+
+  // 5.3 新增：打開修改比分彈窗
+  const openScoreOverrideModal = (match) => {
+      setMatchToOverride(match);
+      setOverrideScores({ s1: match.score1 || 0, s2: match.score2 || 0 });
+      setOverrideModalOpen(true);
+  };
+
+  // 5.3 新增：處理覆寫比分與積分聯動邏輯
+  const handleConfirmOverride = async () => {
+      if (!matchToOverride) return;
+      const oldS1 = parseInt(matchToOverride.score1) || 0;
+      const oldS2 = parseInt(matchToOverride.score2) || 0;
+      const newS1 = parseInt(overrideScores.s1) || 0;
+      const newS2 = parseInt(overrideScores.s2) || 0;
+
+      // 如果根本沒改
+      if (oldS1 === newS1 && oldS2 === newS2) {
+          setOverrideModalOpen(false);
+          return;
+      }
+
+      const oldWinnerId = oldS1 > oldS2 ? matchToOverride.player1Id : (oldS2 > oldS1 ? matchToOverride.player2Id : null);
+      const newWinnerId = newS1 > newS2 ? matchToOverride.player1Id : (newS2 > newS1 ? matchToOverride.player2Id : null);
+
+      setIsUpdatingMatch(true);
+      try {
+          const batch = writeBatch(db);
+
+          // 1. 更新比賽紀錄
+          const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', matchToOverride.id);
+          batch.update(matchRef, {
+              score1: newS1,
+              score2: newS2,
+              winnerId: newWinnerId,
+              updatedAt: serverTimestamp()
+          });
+
+          // 2. 如果勝負結果發生反轉 (且不是外校比賽，確保兩個都是內部學生)
+          if (oldWinnerId !== newWinnerId && matchToOverride.matchType !== 'external') {
+              const STANDARD_POINTS = 10; // 基礎聯賽積分
+
+              // 撤銷舊贏家的積分 (如果有舊贏家)
+              if (oldWinnerId) {
+                  const oldWinnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', oldWinnerId);
+                  batch.update(oldWinnerRef, { points: increment(-STANDARD_POINTS) });
+              }
+              // 補發新贏家的積分 (如果有新贏家)
+              if (newWinnerId) {
+                  const newWinnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', newWinnerId);
+                  batch.update(newWinnerRef, { points: increment(STANDARD_POINTS) });
+              }
+          }
+
+          await batch.commit();
+          alert("✅ 賽果已成功覆寫！");
+          if (oldWinnerId !== newWinnerId) {
+              alert("⚠️ 系統已連帶更新學生之聯賽總積分！");
+          }
+          setOverrideModalOpen(false);
+      } catch (error) {
+          console.error("覆寫失敗:", error);
+          alert("❌ 覆寫比分失敗，請檢查權限。");
+      }
       setIsUpdatingMatch(false);
   };
 
@@ -536,7 +531,7 @@ export default function LeaguePage({
              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Medal size={28}/></div>
              <div>
                <h3 className="text-3xl font-black text-slate-800 tracking-tight">聯賽專區</h3>
-               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析</p>
+               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v5.3</span></p>
              </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -576,7 +571,7 @@ export default function LeaguePage({
       </div>
 
       {Object.keys(safeGroupedMatches).map(groupName => (
-        <GroupSection key={groupName} groupName={groupName} matches={safeGroupedMatches[groupName]} enrichedStandings={enrichedStandings} tournamentStandings={tournamentStandings} role={role} currentUserInfo={currentUserInfo} handleCheerMatch={handleCheerMatch} setActiveLeagueMatch={setActiveLeagueMatch} setShowUmpirePanel={setShowUmpirePanel} handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore} handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} students={students} />
+        <GroupSection key={groupName} groupName={groupName} matches={safeGroupedMatches[groupName]} enrichedStandings={enrichedStandings} tournamentStandings={tournamentStandings} role={role} currentUserInfo={currentUserInfo} handleCheerMatch={handleCheerMatch} setActiveLeagueMatch={setActiveLeagueMatch} setShowUmpirePanel={setShowUmpirePanel} handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore} handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} students={students} openScoreOverrideModal={openScoreOverrideModal} />
       ))}
 
       {isRenderingPoster && (
@@ -585,9 +580,63 @@ export default function LeaguePage({
         </div>
       )}
 
+      {/* 5.3 新增：覆寫賽果視窗 */}
+      {overrideModalOpen && matchToOverride && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-100">
+                <div className="p-6 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
+                    <div className="flex items-center gap-3 text-amber-700">
+                        <Pencil size={20}/>
+                        <h3 className="text-xl font-black">手動覆寫賽果</h3>
+                    </div>
+                    <button onClick={() => setOverrideModalOpen(false)} className="text-amber-400 hover:text-amber-600 transition-all"><X size={20}/></button>
+                </div>
+                
+                <div className="p-8 space-y-6">
+                    <div className="flex items-center justify-between text-center">
+                        <div className="w-5/12">
+                            <p className="font-black text-slate-800 text-lg mb-2">{matchToOverride.player1Name}</p>
+                            <input 
+                                type="number" 
+                                min="0" 
+                                className="w-20 text-center text-4xl font-black text-blue-600 bg-slate-50 border-2 border-slate-200 rounded-2xl py-2 focus:border-blue-500 outline-none"
+                                value={overrideScores.s1}
+                                onChange={(e) => setOverrideScores({ ...overrideScores, s1: e.target.value })}
+                            />
+                        </div>
+                        <div className="w-2/12 font-black text-slate-300 text-2xl">:</div>
+                        <div className="w-5/12">
+                            <p className="font-black text-slate-800 text-lg mb-2">{matchToOverride.player2Name}</p>
+                            <input 
+                                type="number" 
+                                min="0" 
+                                className="w-20 text-center text-4xl font-black text-orange-600 bg-slate-50 border-2 border-slate-200 rounded-2xl py-2 focus:border-orange-500 outline-none"
+                                value={overrideScores.s2}
+                                onChange={(e) => setOverrideScores({ ...overrideScores, s2: e.target.value })}
+                            />
+                        </div>
+                    </div>
+                    <div className="bg-amber-50 p-4 rounded-xl flex gap-3 text-amber-800 text-xs font-bold border border-amber-100">
+                        <ShieldAlert size={16} className="shrink-0 text-amber-500"/>
+                        <p>若修改導致勝負反轉，系統將會自動撤銷並重新結算學生的聯賽總積分。</p>
+                    </div>
+                </div>
+
+                <div className="p-6 bg-slate-50 border-t flex justify-end gap-3">
+                    <button onClick={() => setOverrideModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-200 transition-all">取消</button>
+                    <button onClick={handleConfirmOverride} disabled={isUpdatingMatch} className="px-6 py-3 rounded-xl font-black bg-amber-500 text-white hover:bg-amber-600 shadow-md transition-all flex items-center gap-2">
+                        {isUpdatingMatch ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} 確認覆寫
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* 單一賽事新增視窗 */}
       {showAddSingleMatch && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100">
+                {/* ... (原本內容不變) ... */}
                 <div className="p-6 bg-slate-50 border-b flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-emerald-100 text-emerald-600 rounded-xl"><UserPlus size={20}/></div>
