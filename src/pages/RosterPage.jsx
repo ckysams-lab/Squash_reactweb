@@ -1,12 +1,14 @@
-// src/pages/RosterPage.jsx (Version 3.1 - UI Standardized)
+// src/pages/RosterPage.jsx (Version 3.2 - Bulk Promotion Wizard)
 
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Users, Filter, ChevronDown, Upload, 
-  Cake, Award, Layers, Key, UserCog, Trash2, Plus 
+  Cake, Award, Layers, Key, UserCog, Trash2, Plus, 
+  ArrowUpRight, AlertTriangle, CheckCircle2 
 } from 'lucide-react';
 import { BADGE_DATA, ACHIEVEMENT_DATA } from '../constants/data';
 import TemplateDownloader from '../components/TemplateDownloader';
+import { doc, writeBatch, serverTimestamp } from 'firebase/firestore'; // 3.2 新增：引入 Firestore 批次更新功能
 
 // 👇 引入我們的共用 UI 元件
 import { PageHeader, Card, PrimaryButton } from '../components/ui.jsx';
@@ -24,8 +26,74 @@ export default function RosterPage({
     handleSetupStudentAuth,
     setEditingStudent,
     deleteItem,
-    setShowAddPlayerModal
+    setShowAddPlayerModal,
+    db, // 3.2 新增：需要資料庫實例來執行批次更新
+    appId // 3.2 新增：需要 appId 來定位資料庫路徑
 }) {
+    // 3.2 新增：升級精靈的狀態管理
+    const [showWizard, setShowWizard] = useState(false);
+    const [isPromoting, setIsPromoting] = useState(false);
+
+    // 3.2 新增：精靈預覽計算 (透過正規表達式找出 6 年級與 1-5 年級)
+    const p6Students = students.filter(s => s.class && s.class.match(/6/));
+    const promotableStudents = students.filter(s => s.class && s.class.match(/[1-5]/));
+
+    // 3.2 新增：執行批次升級核心邏輯
+    const executePromotion = async () => {
+        if (!db || !appId) {
+            alert("⚠️ 系統錯誤：找不到資料庫連線 (請確認 App.jsx 已將 db 與 appId 傳入 RosterPage)");
+            return;
+        }
+
+        if(p6Students.length === 0 && promotableStudents.length === 0) {
+            alert("目前沒有找到任何符合升級條件的學生！");
+            return;
+        }
+
+        setIsPromoting(true);
+        try {
+            const batch = writeBatch(db);
+            let updateCount = 0;
+
+            students.forEach(s => {
+                if (!s.class) return;
+                const gradeMatch = s.class.match(/[1-6]/); // 抓出字串中的年級數字
+                
+                if (gradeMatch) {
+                    const grade = parseInt(gradeMatch[0]);
+                    const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
+
+                    if (grade === 6) {
+                        // 6年級 -> 畢業
+                        batch.update(studentRef, {
+                            class: '畢業/校友',
+                            status: 'archived',
+                            updatedAt: serverTimestamp()
+                        });
+                        updateCount++;
+                    } else if (grade >= 1 && grade <= 5) {
+                        // 1到5年級 -> 升級並待編班
+                        batch.update(studentRef, {
+                            class: `${grade + 1}`, // 只保留新的年級數字
+                            classNo: '', // 清空舊的班號
+                            enrollmentStatus: '待編班', // 加上待編班標籤
+                            updatedAt: serverTimestamp()
+                        });
+                        updateCount++;
+                    }
+                }
+            });
+
+            await batch.commit(); // 一次性提交所有更新
+            alert(`✅ 新學年升級成功！共自動處理了 ${updateCount} 名隊員檔案。`);
+            setShowWizard(false);
+        } catch (error) {
+            console.error("升級失敗:", error);
+            alert("❌ 升級過程中發生錯誤，請稍後再試。");
+        }
+        setIsPromoting(false);
+    };
+
     return (
         <div className="space-y-8 animate-in slide-in-from-right-10 duration-700 font-bold">
             
@@ -50,7 +118,7 @@ export default function RosterPage({
                 ))}
             </div>
 
-            {/* 控制面板：過濾器與匯入/匯出按鈕 (使用 Card 元件) */}
+            {/* 控制面板：過濾器與匯入/匯出按鈕 */}
             <Card className="flex flex-col lg:flex-row items-center justify-between gap-6 overflow-visible">
                  <div className="flex-1 w-full flex flex-col sm:flex-row gap-4">
                     {/* 年份過濾器 */}
@@ -71,11 +139,15 @@ export default function RosterPage({
                 </div>
 
                 <div className="flex w-full lg:w-auto flex-col sm:flex-row gap-4">
+                    {/* 3.2 新增：年度批次升級按鈕 */}
+                    <button onClick={() => setShowWizard(true)} className="bg-amber-500 text-white px-6 py-4 rounded-2xl cursor-pointer hover:bg-amber-600 shadow-lg flex items-center justify-center gap-2 transition-all font-bold active:scale-95">
+                        <ArrowUpRight size={18}/> 年度批次升級
+                    </button>
+
                     {/* 下載範本 */}
                     <TemplateDownloader type="students" />
 
                     {/* 匯入名單 */}
-                    {/* 這裡保留原生寫法，因為它需要 <input type="file"> */}
                     <label className="bg-slate-800 text-white px-8 py-4 rounded-2xl cursor-pointer hover:bg-slate-700 shadow-lg flex items-center justify-center gap-2 transition-all font-bold active:scale-95">
                         <Upload size={18}/> 批量匯入名單
                         <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
@@ -94,12 +166,20 @@ export default function RosterPage({
                         </div>
 
                         {/* 姓名頭像 */}
-                        <div className="w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center text-4xl mb-4 text-slate-300 border-2 border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-all duration-300 font-black uppercase shadow-inner">
+                        <div className={`w-24 h-24 rounded-[2rem] flex items-center justify-center text-4xl mb-4 transition-all duration-300 font-black uppercase shadow-inner border-2 ${s.enrollmentStatus === '待編班' ? 'bg-red-50 text-red-400 border-red-100' : 'bg-slate-50 text-slate-300 border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600'}`}>
                             {s.name[0]}
                         </div>
                         
                         <p className="text-xl font-black text-slate-800">{s.name}</p>
-                        <p className="text-xs text-slate-400 mt-1 font-bold uppercase tracking-widest">{s.class} ({s.classNo})</p>
+                        
+                        {/* 3.2 升級：智能顯示待編班狀態 */}
+                        <p className="text-xs mt-1 font-bold uppercase tracking-widest">
+                            {s.enrollmentStatus === '待編班' ? (
+                                <span className="text-red-500 bg-red-50 px-2 py-1 rounded-md">{s.class} 年級 (待編班)</span>
+                            ) : (
+                                <span className="text-slate-400">{s.class} ({s.classNo || '-'})</span>
+                            )}
+                        </p>
 
                         {/* 顯示主打勳章 */}
                         <div className="flex items-center justify-center gap-2 mt-3 h-6">
@@ -138,7 +218,7 @@ export default function RosterPage({
                     </div>
                 ))}
                 
-                {/* 新增單一隊員按鈕 (改為卡片風格) */}
+                {/* 新增單一隊員按鈕 */}
                 <button 
                     onClick={() => setShowAddPlayerModal(true)} 
                     className="p-8 bg-slate-50/50 border-2 border-dashed border-slate-300 rounded-[2.5rem] flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-500 hover:bg-blue-50/50 transition-all duration-300 group min-h-[300px]"
@@ -150,6 +230,51 @@ export default function RosterPage({
                     <span className="text-xs font-bold text-slate-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">手動建立新檔案</span>
                 </button>
             </div>
+
+            {/* 3.2 新增：升級精靈確認彈窗 (Modal) */}
+            {showWizard && (
+                <div className="fixed inset-0 z-[500] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                    <div className="bg-white rounded-[2rem] w-full max-w-lg p-8 shadow-2xl relative flex flex-col">
+                        <div className="flex items-center gap-3 text-amber-500 mb-6">
+                            <AlertTriangle size={32} />
+                            <h3 className="text-2xl font-black text-slate-800">執行新學年升級</h3>
+                        </div>
+
+                        <p className="text-slate-600 font-bold mb-6">
+                            此操作將會自動更新所有活躍隊員的年級，請確認目前正處於「學年轉換期」。
+                        </p>
+
+                        <div className="space-y-4 bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-8">
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-2 font-black text-slate-700">
+                                    <ArrowUpRight className="text-blue-500"/>
+                                    1-5 年級升級
+                                </div>
+                                <span className="text-blue-600 font-black text-xl">{promotableStudents.length} 人</span>
+                            </div>
+                            <p className="text-xs text-slate-400 font-bold pl-8">將年級 +1，清空班號並標記為「待編班」</p>
+
+                            <div className="w-full h-px bg-slate-200 my-2"></div>
+
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-2 font-black text-slate-700">
+                                    <CheckCircle2 className="text-emerald-500"/>
+                                    6 年級畢業
+                                </div>
+                                <span className="text-emerald-600 font-black text-xl">{p6Students.length} 人</span>
+                            </div>
+                            <p className="text-xs text-slate-400 font-bold pl-8">標記為「畢業/校友」並於活躍名單中隱藏</p>
+                        </div>
+
+                        <div className="flex gap-4 w-full">
+                            <button onClick={() => setShowWizard(false)} className="flex-1 py-4 rounded-xl font-black text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all">取消</button>
+                            <button onClick={executePromotion} disabled={isPromoting} className="flex-1 py-4 rounded-xl font-black text-white bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-200 transition-all disabled:opacity-50">
+                                {isPromoting ? '處理中...' : '確認執行升級'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
