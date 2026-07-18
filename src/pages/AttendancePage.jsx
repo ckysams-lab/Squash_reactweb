@@ -1,8 +1,9 @@
-// src/pages/AttendancePage.jsx
-import React from 'react';
+// src/pages/AttendancePage.jsx (Version 1.1 - List / Grid View Toggle)
+import React, { useState } from 'react';
 import { 
   ClipboardCheck, Clock, Star, MapPin, Info, Save, 
-  Loader2, FileBarChart, Download, Filter, CheckCircle2 
+  Loader2, FileBarChart, Download, Filter, CheckCircle2,
+  LayoutGrid, List 
 } from 'lucide-react';
 
 export default function AttendancePage({
@@ -18,16 +19,19 @@ export default function AttendancePage({
     attendanceLogs,
     togglePendingAttendance
 }) {
+    // 1.1 新增：管理列表與網格視角的本地狀態
+    const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
+
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 font-bold">
             
-            {/* 頂部今日日程看板 */}
+            {/* 頂部今日日程看板 (維持不變) */}
             <div className={`p-12 rounded-[4rem] text-white flex flex-col md:flex-row justify-between items-center shadow-2xl relative overflow-hidden transition-all duration-1000 ${todaySchedule ? 'bg-gradient-to-br from-blue-600 to-indigo-700' : 'bg-slate-800'}`}>
                 <div className="absolute -right-20 -bottom-20 opacity-10 rotate-12">
                     <ClipboardCheck size={300}/>
                 </div>
                 <div className="relative z-10">
-                    <h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/></h3>
+                    <h3 className="text-4xl font-black flex items-center gap-4 mb-4">教練點名工具 <Clock size={32}/> <span className="text-sm bg-white/20 px-3 py-1 rounded-full border border-white/30">v1.1</span></h3>
                     <div className="flex flex-wrap gap-4">
                         {todaySchedule ? (
                             <>
@@ -54,7 +58,7 @@ export default function AttendancePage({
                 </div>
             </div>
 
-            {/* 懸浮儲存按鈕 (只有在有待儲存點名時才出現) */}
+            {/* 懸浮儲存按鈕 */}
             {pendingAttendance.length > 0 && (
                 <div className="fixed bottom-10 right-10 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300">
                     <button 
@@ -87,72 +91,132 @@ export default function AttendancePage({
                 </div>
             </div>
 
-            {/* 班別過濾器 */}
-            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-6">
-                <div className="flex items-center gap-3 text-slate-400 min-w-max">
-                    <Filter size={20} /><span>選擇點名班別：</span>
+            {/* 班別過濾器 & 1.1 視角切換器 */}
+            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col lg:flex-row items-center justify-between gap-6">
+                <div className="flex flex-col md:flex-row items-center gap-6 w-full">
+                    <div className="flex items-center gap-3 text-slate-400 min-w-max">
+                        <Filter size={20} /><span>選擇點名班別：</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {uniqueTrainingClasses.map(cls => (
+                            <button 
+                                key={cls} 
+                                onClick={() => setAttendanceClassFilter(cls)} 
+                                className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${attendanceClassFilter === cls ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'}`}
+                            >
+                                {cls === 'ALL' ? '🌍 全部學員' : cls}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    {uniqueTrainingClasses.map(cls => (
-                        <button 
-                            key={cls} 
-                            onClick={() => setAttendanceClassFilter(cls)} 
-                            className={`px-6 py-3 rounded-2xl text-sm font-black transition-all ${attendanceClassFilter === cls ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 border border-slate-100'}`}
-                        >
-                            {cls === 'ALL' ? '🌍 全部學員' : cls}
-                        </button>
-                    ))}
+                
+                {/* 新增：雙模式切換按鈕 */}
+                <div className="flex bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-100 shrink-0">
+                    <button 
+                        onClick={() => setViewMode('grid')} 
+                        className={`p-3 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        title="網格模式"
+                    >
+                        <LayoutGrid size={20}/>
+                    </button>
+                    <button 
+                        onClick={() => setViewMode('list')} 
+                        className={`p-3 rounded-xl transition-all ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        title="列表模式"
+                    >
+                        <List size={20}/>
+                    </button>
                 </div>
             </div>
 
-            {/* 學生點名網格 */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                {studentsInSelectedAttendanceClass.length > 0 ? (
-                    studentsInSelectedAttendanceClass.map(s => {
-                        const isAttended = todaySchedule && attendanceLogs.some(log => log.studentId === s.id && log.date === todaySchedule.date && log.trainingClass === todaySchedule.trainingClass);
-                        const isPending = pendingAttendance.includes(s.id);
-                        return (
-                            <button 
-                                key={s.id} 
-                                onClick={() => {
-                                    if (!isAttended) togglePendingAttendance(s.id);
-                                }}
-                                disabled={isAttended}
-                                className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden 
-                                    ${isAttended 
-                                        ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-not-allowed' 
-                                        : isPending 
-                                        ? 'border-blue-500 shadow-xl shadow-blue-50 ring-4 ring-blue-100' 
-                                        : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-lg'
-                                    }`}
-                            >
-                                <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase 
-                                    ${isAttended 
-                                        ? 'bg-emerald-200 text-white rotate-12' 
-                                        : isPending 
-                                        ? 'bg-blue-600 text-white rotate-6' 
-                                        : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-100'
-                                    }`}
+            {/* 學生點名區：根據 viewMode 切換渲染版面 */}
+            {studentsInSelectedAttendanceClass.length > 0 ? (
+                viewMode === 'grid' ? (
+                    /* ====== 網格模式 (Grid View) ====== */
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6 animate-in fade-in">
+                        {studentsInSelectedAttendanceClass.map(s => {
+                            const isAttended = todaySchedule && attendanceLogs.some(log => log.studentId === s.id && log.date === todaySchedule.date && log.trainingClass === todaySchedule.trainingClass);
+                            const isPending = pendingAttendance.includes(s.id);
+                            return (
+                                <button 
+                                    key={s.id} 
+                                    onClick={() => { if (!isAttended) togglePendingAttendance(s.id); }}
+                                    disabled={isAttended}
+                                    className={`group p-8 rounded-[3rem] border shadow-sm transition-all flex flex-col items-center text-center relative overflow-hidden 
+                                        ${isAttended 
+                                            ? 'bg-emerald-50 border-emerald-200 shadow-emerald-50 cursor-not-allowed' 
+                                            : isPending 
+                                            ? 'border-blue-500 shadow-xl shadow-blue-50 ring-4 ring-blue-100' 
+                                            : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-lg'
+                                        }`}
                                 >
-                                    {s.name[0]}
-                                </div>
-                                <p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : isPending ? 'text-blue-600' : 'text-slate-800'}`}>{s.name}</p>
-                                <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
-                                <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>{s.squashClass}</div>
-                                
-                                <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : isPending ? 'text-blue-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
-                                    <CheckCircle2 size={24}/>
-                                </div>
-                                
-                                {isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">已出席</div>)}
-                                {isPending && !isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] py-1 font-black uppercase tracking-widest">待儲存</div>)}
-                            </button>
-                        );
-                    })
+                                    <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center text-3xl mb-4 transition-all font-black uppercase 
+                                        ${isAttended ? 'bg-emerald-200 text-white rotate-12' : isPending ? 'bg-blue-600 text-white rotate-6' : 'bg-slate-50 text-slate-300 border border-slate-100 group-hover:bg-blue-100'}
+                                    `}>
+                                        {s.name[0]}
+                                    </div>
+                                    <p className={`font-black text-xl transition-all ${isAttended ? 'text-emerald-700' : isPending ? 'text-blue-600' : 'text-slate-800'}`}>{s.name}</p>
+                                    <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">{s.class} ({s.classNo})</p>
+                                    <div className="mt-1 text-[10px] text-blue-500 font-bold truncate max-w-full px-2" title={s.squashClass}>{s.squashClass}</div>
+                                    
+                                    <div className={`absolute top-4 right-4 transition-all ${isAttended ? 'text-emerald-500' : isPending ? 'text-blue-500' : 'text-slate-100 group-hover:text-blue-100'}`}>
+                                        <CheckCircle2 size={24}/>
+                                    </div>
+                                    
+                                    {isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[10px] py-1 font-black uppercase tracking-widest">已出席</div>)}
+                                    {isPending && !isAttended && (<div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] py-1 font-black uppercase tracking-widest">待儲存</div>)}
+                                </button>
+                            );
+                        })}
+                    </div>
                 ) : (
-                    <div className="col-span-full py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">此班別暫無學員資料</div>
-                )}
-            </div>
+                    /* ====== 列表模式 (List View) ====== */
+                    <div className="flex flex-col gap-3 animate-in fade-in">
+                        {studentsInSelectedAttendanceClass.map(s => {
+                            const isAttended = todaySchedule && attendanceLogs.some(log => log.studentId === s.id && log.date === todaySchedule.date && log.trainingClass === todaySchedule.trainingClass);
+                            const isPending = pendingAttendance.includes(s.id);
+                            return (
+                                <button 
+                                    key={s.id} 
+                                    onClick={() => { if (!isAttended) togglePendingAttendance(s.id); }}
+                                    disabled={isAttended}
+                                    className={`w-full group p-4 rounded-[2rem] border transition-all flex items-center justify-between relative overflow-hidden
+                                        ${isAttended 
+                                            ? 'bg-emerald-50 border-emerald-200 cursor-not-allowed' 
+                                            : isPending 
+                                            ? 'border-blue-500 shadow-md shadow-blue-50 ring-2 ring-blue-100 bg-white' 
+                                            : 'bg-white border-slate-100 hover:border-blue-500 hover:shadow-md'
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-12 h-12 rounded-[1rem] flex items-center justify-center text-xl transition-all font-black uppercase shrink-0
+                                            ${isAttended ? 'bg-emerald-200 text-white' : isPending ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400 border border-slate-100 group-hover:bg-blue-100'}
+                                        `}>
+                                            {s.name[0]}
+                                        </div>
+                                        <div className="text-left">
+                                            <p className={`font-black text-lg transition-all ${isAttended ? 'text-emerald-700' : isPending ? 'text-blue-600' : 'text-slate-800'}`}>{s.name}</p>
+                                            <p className="text-xs text-slate-400 uppercase font-black tracking-widest">{s.class} ({s.classNo}) • <span className="text-blue-500">{s.squashClass}</span></p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-3 shrink-0">
+                                        {isAttended ? (
+                                            <span className="bg-emerald-100 text-emerald-700 text-xs px-3 py-1.5 rounded-xl font-black flex items-center gap-1"><CheckCircle2 size={16}/> 已出席</span>
+                                        ) : isPending ? (
+                                            <span className="bg-blue-100 text-blue-700 text-xs px-3 py-1.5 rounded-xl font-black flex items-center gap-1"><CheckCircle2 size={16}/> 待儲存</span>
+                                        ) : (
+                                            <span className="text-slate-300 group-hover:text-blue-400 text-xs font-black transition-colors px-3">點擊點名</span>
+                                        )}
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )
+            ) : (
+                <div className="py-20 text-center text-slate-300 font-bold bg-white rounded-[3rem] border border-dashed">此班別暫無學員資料</div>
+            )}
         </div>
     );
 }
