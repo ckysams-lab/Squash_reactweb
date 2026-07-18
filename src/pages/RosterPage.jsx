@@ -1,16 +1,15 @@
-// src/pages/RosterPage.jsx (Version 3.5 - Emergency Recovery & Clean UI)
+// src/pages/RosterPage.jsx (Version 3.1 - UI Standardized)
 
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   Users, Filter, ChevronDown, Upload, 
-  Cake, Award, Layers, UserCog, Trash2, Plus, 
-  FileSpreadsheet, AlertTriangle, ShieldCheck, Loader2
+  Cake, Award, Layers, Key, UserCog, Trash2, Plus 
 } from 'lucide-react';
 import { BADGE_DATA, ACHIEVEMENT_DATA } from '../constants/data';
 import TemplateDownloader from '../components/TemplateDownloader';
-import { doc, writeBatch } from 'firebase/firestore'; // 引入修復資料庫所需的工具
 
-import { PageHeader, Card } from '../components/ui.jsx';
+// 👇 引入我們的共用 UI 元件
+import { PageHeader, Card, PrimaryButton } from '../components/ui.jsx';
 
 export default function RosterPage({
     students,
@@ -22,65 +21,22 @@ export default function RosterPage({
     setViewingStudent,
     handleManualAward,
     handleUpdateSquashClass,
+    handleSetupStudentAuth,
     setEditingStudent,
     deleteItem,
-    setShowAddPlayerModal,
-    db,    // 3.5 新增：需要資料庫連線來執行修復
-    appId  // 3.5 新增：需要 App ID 來定位資料
+    setShowAddPlayerModal
 }) {
-    const [isFixing, setIsFixing] = useState(false);
-
-    // 3.5 核心：抓出所有被隱藏的「待編班」學生
-    const hiddenPendingStudents = students.filter(s => s.enrollmentStatus === '待編班');
-
-    // 3.5 核心：一鍵修復函數
-    const handleFixHiddenStudents = async () => {
-        if (!db || !appId) return alert("無法連接資料庫，請確認 App.jsx 有傳入 db 與 appId");
-        setIsFixing(true);
-        try {
-            const batch = writeBatch(db);
-            hiddenPendingStudents.forEach(s => {
-                const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
-                // 把狀態改回 active，撕掉待編班標籤
-                batch.update(studentRef, { enrollmentStatus: 'active' });
-            });
-            await batch.commit();
-            alert("✅ 修復成功！隱藏的學生已經全數回歸名單！");
-        } catch (error) {
-            console.error("修復失敗:", error);
-            alert("❌ 修復過程中發生錯誤。");
-        }
-        setIsFixing(false);
-    };
-
-    const safeSortedStudents = [...filteredStudents].sort((a, b) => (a.class || '').localeCompare(b.class || ''));
-
     return (
         <div className="space-y-8 animate-in slide-in-from-right-10 duration-700 font-bold">
-            <PageHeader title="隊員檔案庫" subtitle="管理所有學員資料與章別" icon={Users} />
+            
+            {/* 統一的頁面大標題 */}
+            <PageHeader 
+                title="隊員檔案庫" 
+                subtitle="管理所有學員資料與章別" 
+                icon={Users} 
+            />
 
-            {/* 3.5 緊急救援橫幅：只有當有學生被隱藏時才會出現 */}
-            {hiddenPendingStudents.length > 0 && (
-                <div className="bg-red-50 border-2 border-red-200 p-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm animate-pulse">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-red-100 text-red-600 rounded-2xl"><AlertTriangle size={28}/></div>
-                        <div>
-                            <h4 className="text-xl font-black text-red-600">系統警告：發現 {hiddenPendingStudents.length} 名被隱藏的學生</h4>
-                            <p className="text-sm font-bold text-red-500 mt-1">這些學生目前帶有「待編班」的舊標籤。請點擊右方按鈕修復，讓他們回到名單中。</p>
-                        </div>
-                    </div>
-                    <button 
-                        onClick={handleFixHiddenStudents} 
-                        disabled={isFixing}
-                        className="w-full md:w-auto px-8 py-4 bg-red-600 text-white rounded-2xl font-black hover:bg-red-700 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                        {isFixing ? <Loader2 className="animate-spin" size={20}/> : <ShieldCheck size={20}/>}
-                        一鍵修復隱藏學生
-                    </button>
-                </div>
-            )}
-
-            {/* 頂部統計區 */}
+            {/* 頂部總人數與年份統計 */}
             <div className="flex overflow-x-auto gap-4 pb-2">
                 <div className="bg-blue-600 text-white px-6 py-4 rounded-3xl whitespace-nowrap shadow-md flex-shrink-0 flex flex-col justify-center">
                     <span className="text-[10px] uppercase tracking-widest text-blue-200 block mb-1">總人數</span>
@@ -94,9 +50,10 @@ export default function RosterPage({
                 ))}
             </div>
 
-            {/* 控制面板：專注於過濾與 CSV 匯入 */}
+            {/* 控制面板：過濾器與匯入/匯出按鈕 (使用 Card 元件) */}
             <Card className="flex flex-col lg:flex-row items-center justify-between gap-6 overflow-visible">
                  <div className="flex-1 w-full flex flex-col sm:flex-row gap-4">
+                    {/* 年份過濾器 */}
                     <div className="relative flex-1 sm:flex-none sm:w-64">
                         <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
                         <select 
@@ -113,16 +70,14 @@ export default function RosterPage({
                     </div>
                 </div>
 
-                <div className="flex w-full lg:w-auto flex-col sm:flex-row items-center gap-3 bg-slate-50 p-2 rounded-3xl border border-slate-200">
-                    <div className="hidden sm:flex items-center gap-2 px-4 text-slate-400">
-                        <FileSpreadsheet size={20} />
-                        <span className="text-xs font-black uppercase tracking-widest">Excel 更新區</span>
-                    </div>
-                    
+                <div className="flex w-full lg:w-auto flex-col sm:flex-row gap-4">
+                    {/* 下載範本 */}
                     <TemplateDownloader type="students" />
 
-                    <label className="w-full sm:w-auto bg-slate-800 text-white px-8 py-4 rounded-2xl cursor-pointer hover:bg-slate-700 shadow-md flex items-center justify-center gap-2 transition-all font-black active:scale-95">
-                        <Upload size={18}/> 匯入新學年名單 (CSV)
+                    {/* 匯入名單 */}
+                    {/* 這裡保留原生寫法，因為它需要 <input type="file"> */}
+                    <label className="bg-slate-800 text-white px-8 py-4 rounded-2xl cursor-pointer hover:bg-slate-700 shadow-lg flex items-center justify-center gap-2 transition-all font-bold active:scale-95">
+                        <Upload size={18}/> 批量匯入名單
                         <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportStudents}/>
                     </label>
                 </div>
@@ -130,23 +85,23 @@ export default function RosterPage({
 
             {/* 學員網格列表 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {safeSortedStudents.map(s => (
-                    <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[2.5rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col items-center group relative cursor-pointer" onClick={() => setViewingStudent(s)}>
+                {filteredStudents.sort((a,b) => a.class.localeCompare(b.class)).map(s => (
+                    <div key={s.id} className="p-8 bg-white border border-slate-100 rounded-[2.5rem] shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 flex flex-col items-center group relative cursor-pointer hover:-translate-y-1" onClick={() => setViewingStudent(s)}>
                         
+                        {/* 章別標籤 */}
                         <div className={`absolute top-6 right-6 px-3 py-1 rounded-full text-[10px] font-black border ${BADGE_DATA[s.badge]?.bg} ${BADGE_DATA[s.badge]?.color}`}>
                             {s.badge}
                         </div>
 
-                        <div className={`w-24 h-24 rounded-[2rem] flex items-center justify-center text-4xl mb-4 transition-all duration-300 font-black uppercase shadow-inner border-2 bg-slate-50 text-slate-300 border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600`}>
+                        {/* 姓名頭像 */}
+                        <div className="w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center text-4xl mb-4 text-slate-300 border-2 border-slate-100 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-all duration-300 font-black uppercase shadow-inner">
                             {s.name[0]}
                         </div>
                         
                         <p className="text-xl font-black text-slate-800">{s.name}</p>
-                        
-                        <p className="text-xs mt-1 font-bold uppercase tracking-widest text-slate-400">
-                            {s.class} ({s.classNo || '-'})
-                        </p>
+                        <p className="text-xs text-slate-400 mt-1 font-bold uppercase tracking-widest">{s.class} ({s.classNo})</p>
 
+                        {/* 顯示主打勳章 */}
                         <div className="flex items-center justify-center gap-2 mt-3 h-6">
                             {s.featuredBadges?.map(badgeId => {
                                 const badge = ACHIEVEMENT_DATA[badgeId];
@@ -159,6 +114,7 @@ export default function RosterPage({
                             })}
                         </div>
 
+                        {/* 生日與班別 */}
                         <div className="mt-4 flex flex-wrap justify-center gap-2 w-full">
                              {s.dob ? (
                                 <div className="text-[10px] bg-slate-50 text-slate-500 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 border border-slate-100"><Cake size={12}/> {s.dob}</div>
@@ -172,16 +128,17 @@ export default function RosterPage({
                             )}
                         </div>
                         
+                        {/* 操作按鈕 */}
                         <div className="mt-6 pt-5 border-t border-slate-100 w-full flex justify-center gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => handleManualAward(s)} className="text-slate-400 hover:text-yellow-600 hover:bg-yellow-50 p-2.5 rounded-xl transition-all"><Award size={18}/></button>
-                            <button onClick={() => handleUpdateSquashClass(s)} className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 p-2.5 rounded-xl transition-all"><Layers size={18}/></button>
-                            <button onClick={(e) => { e.stopPropagation(); setEditingStudent(s); }} className="text-slate-400 hover:text-amber-600 hover:bg-amber-50 p-2.5 rounded-xl transition-all"><UserCog size={18} /></button> 
-                            <button onClick={(e) => { e.stopPropagation(); if(window.confirm('確定要刪除嗎?')) deleteItem('students', s.id); }} className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2.5 rounded-xl transition-all"><Trash2 size={18} /></button>
+                            <button onClick={() => handleManualAward(s)} className="text-slate-400 hover:text-yellow-600 hover:bg-yellow-50 p-2.5 rounded-xl transition-all" title="授予徽章"><Award size={18}/></button>
+                            <button onClick={() => handleUpdateSquashClass(s)} className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 p-2.5 rounded-xl transition-all" title="設定報名班別"><Layers size={18}/></button>
+                            <button onClick={(e) => { e.stopPropagation(); setEditingStudent(s); }} className="text-slate-400 hover:text-amber-600 hover:bg-amber-50 p-2.5 rounded-xl transition-all" title="編輯此隊員"><UserCog size={18} /></button> 
+                            <button onClick={(e) => { e.stopPropagation(); if(window.confirm('確定要刪除此隊員嗎?')) deleteItem('students', s.id); }} className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2.5 rounded-xl transition-all" title="刪除此隊員"><Trash2 size={18} /></button>
                         </div>
                     </div>
                 ))}
                 
-                {/* 新增單一隊員按鈕 */}
+                {/* 新增單一隊員按鈕 (改為卡片風格) */}
                 <button 
                     onClick={() => setShowAddPlayerModal(true)} 
                     className="p-8 bg-slate-50/50 border-2 border-dashed border-slate-300 rounded-[2.5rem] flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-500 hover:bg-blue-50/50 transition-all duration-300 group min-h-[300px]"
