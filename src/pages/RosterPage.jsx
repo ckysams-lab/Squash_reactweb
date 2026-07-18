@@ -1,15 +1,15 @@
-// src/pages/RosterPage.jsx (Version 3.4 - Back to Basics & CSV Import Focus)
+// src/pages/RosterPage.jsx (Version 3.5 - Emergency Recovery & Clean UI)
 
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Users, Filter, ChevronDown, Upload, 
   Cake, Award, Layers, UserCog, Trash2, Plus, 
-  FileSpreadsheet, Download
+  FileSpreadsheet, AlertTriangle, ShieldCheck, Loader2
 } from 'lucide-react';
 import { BADGE_DATA, ACHIEVEMENT_DATA } from '../constants/data';
 import TemplateDownloader from '../components/TemplateDownloader';
+import { doc, writeBatch } from 'firebase/firestore'; // 引入修復資料庫所需的工具
 
-// 👇 引入我們的共用 UI 元件
 import { PageHeader, Card } from '../components/ui.jsx';
 
 export default function RosterPage({
@@ -24,15 +24,61 @@ export default function RosterPage({
     handleUpdateSquashClass,
     setEditingStudent,
     deleteItem,
-    setShowAddPlayerModal
+    setShowAddPlayerModal,
+    db,    // 3.5 新增：需要資料庫連線來執行修復
+    appId  // 3.5 新增：需要 App ID 來定位資料
 }) {
-    
-    // 3.4 更新：移除所有複雜的派班狀態，回歸單純的名單渲染
+    const [isFixing, setIsFixing] = useState(false);
+
+    // 3.5 核心：抓出所有被隱藏的「待編班」學生
+    const hiddenPendingStudents = students.filter(s => s.enrollmentStatus === '待編班');
+
+    // 3.5 核心：一鍵修復函數
+    const handleFixHiddenStudents = async () => {
+        if (!db || !appId) return alert("無法連接資料庫，請確認 App.jsx 有傳入 db 與 appId");
+        setIsFixing(true);
+        try {
+            const batch = writeBatch(db);
+            hiddenPendingStudents.forEach(s => {
+                const studentRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', s.id);
+                // 把狀態改回 active，撕掉待編班標籤
+                batch.update(studentRef, { enrollmentStatus: 'active' });
+            });
+            await batch.commit();
+            alert("✅ 修復成功！隱藏的學生已經全數回歸名單！");
+        } catch (error) {
+            console.error("修復失敗:", error);
+            alert("❌ 修復過程中發生錯誤。");
+        }
+        setIsFixing(false);
+    };
+
     const safeSortedStudents = [...filteredStudents].sort((a, b) => (a.class || '').localeCompare(b.class || ''));
 
     return (
         <div className="space-y-8 animate-in slide-in-from-right-10 duration-700 font-bold">
             <PageHeader title="隊員檔案庫" subtitle="管理所有學員資料與章別" icon={Users} />
+
+            {/* 3.5 緊急救援橫幅：只有當有學生被隱藏時才會出現 */}
+            {hiddenPendingStudents.length > 0 && (
+                <div className="bg-red-50 border-2 border-red-200 p-6 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm animate-pulse">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-red-100 text-red-600 rounded-2xl"><AlertTriangle size={28}/></div>
+                        <div>
+                            <h4 className="text-xl font-black text-red-600">系統警告：發現 {hiddenPendingStudents.length} 名被隱藏的學生</h4>
+                            <p className="text-sm font-bold text-red-500 mt-1">這些學生目前帶有「待編班」的舊標籤。請點擊右方按鈕修復，讓他們回到名單中。</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={handleFixHiddenStudents} 
+                        disabled={isFixing}
+                        className="w-full md:w-auto px-8 py-4 bg-red-600 text-white rounded-2xl font-black hover:bg-red-700 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {isFixing ? <Loader2 className="animate-spin" size={20}/> : <ShieldCheck size={20}/>}
+                        一鍵修復隱藏學生
+                    </button>
+                </div>
+            )}
 
             {/* 頂部統計區 */}
             <div className="flex overflow-x-auto gap-4 pb-2">
@@ -51,7 +97,6 @@ export default function RosterPage({
             {/* 控制面板：專注於過濾與 CSV 匯入 */}
             <Card className="flex flex-col lg:flex-row items-center justify-between gap-6 overflow-visible">
                  <div className="flex-1 w-full flex flex-col sm:flex-row gap-4">
-                    {/* 年份過濾器 */}
                     <div className="relative flex-1 sm:flex-none sm:w-64">
                         <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
                         <select 
@@ -68,7 +113,6 @@ export default function RosterPage({
                     </div>
                 </div>
 
-                {/* 3.4 核心：新學年 CSV 批次匯入區 */}
                 <div className="flex w-full lg:w-auto flex-col sm:flex-row items-center gap-3 bg-slate-50 p-2 rounded-3xl border border-slate-200">
                     <div className="hidden sm:flex items-center gap-2 px-4 text-slate-400">
                         <FileSpreadsheet size={20} />
