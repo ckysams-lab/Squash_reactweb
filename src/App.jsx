@@ -1412,7 +1412,7 @@ export default function App() {
           )}
 
           {!viewingStudent && activeTab === 'students' && role === 'admin' && (
-            <RosterPage students={students} filteredStudents={filteredStudents} birthYearStats={birthYearStats} selectedYearFilter={selectedYearFilter} setSelectedYearFilter={setSelectedYearFilter} handleCSVImportStudents={handleCSVImportStudents} setViewingStudent={setViewingStudent} handleManualAward={handleManualAward} handleUpdateSquashClass={handleUpdateSquashClass} setEditingStudent={setEditingStudent} deleteItem={deleteItem} setShowAddPlayerModal={setShowAddPlayerModal} />
+            <RosterPage students={students} filteredStudents={filteredStudents} birthYearStats={birthYearStats} selectedYearFilter={selectedYearFilter} setSelectedYearFilter={setSelectedYearFilter} handleCSVImportStudents={handleCSVImportStudents} setViewingStudent={setViewingStudent} handleManualAward={handleManualAward} handleUpdateSquashClass={handleUpdateSquashClass} setEditingStudent={setEditingStudent} deleteItem={deleteItem} setShowAddPlayerModal={setShowAddPlayerModal} db={db} appId={appId} />
           )}
 
           {!viewingStudent && activeTab === 'monthlyStarsAdmin' && role === 'admin' && (
