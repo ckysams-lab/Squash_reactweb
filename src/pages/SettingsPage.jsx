@@ -1,4 +1,4 @@
-// src/pages/SettingsPage.jsx (Version 3.0 - UI Standardized)
+// src/pages/SettingsPage.jsx (Version 3.1 - Disable Unused Import Functions to fix crash)
 
 import React from 'react';
 import { ImageIcon, Trash2, Upload, Plus, History, Save, Settings2 } from 'lucide-react';
@@ -10,11 +10,12 @@ import { PageHeader, Card, PrimaryButton, SecondaryButton, DangerButton } from '
 
 export default function SettingsPage({
     systemConfig, setSystemConfig, importEncoding, setImportEncoding,
-    externalTournaments, handleCSVImportExternalTournaments, deleteItem,
-    handleSeasonReset, setIsUpdating, db, appId, handleCSVImportTrophies, handleCSVImportAlumni
+    externalTournaments, deleteItem,
+    handleSeasonReset, setIsUpdating, db, appId
+    // 3.1 更新：移除了未定義的 handleCSVImportExternalTournaments, handleCSVImportTrophies, handleCSVImportAlumni
 }) {
     
-    const handleAddSingleTournament = async () => { /* ... 內容不變 ... */ 
+    const handleAddSingleTournament = async () => { 
         const name = prompt('請輸入單一賽事名稱:'); 
         if (name) {
             try { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'external_tournaments'), { name, timestamp: serverTimestamp() }); } 
@@ -22,11 +23,16 @@ export default function SettingsPage({
         }
     };
     
-    const handleSaveSystemConfig = async () => { /* ... 內容不變 ... */ 
+    const handleSaveSystemConfig = async () => { 
         setIsUpdating(true); 
         try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'system'), systemConfig); alert('系統設定已更新！'); } 
         catch (e) { console.error(e); alert("儲存失敗。"); }
         setIsUpdating(false); 
+    };
+
+    // 3.1 新增：用來攔截點擊的提示函數
+    const handleDisabledFeature = () => {
+        alert("此批量匯入功能目前暫停使用。");
     };
 
     return (
@@ -83,18 +89,18 @@ export default function SettingsPage({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-slate-50 p-6 rounded-2xl space-y-4">
                         <h4 className="font-bold text-slate-700">團隊獎項</h4>
-                        <label className="w-full flex items-center justify-center gap-2 bg-amber-500 text-white p-4 rounded-xl cursor-pointer hover:bg-amber-600 transition-all font-bold shadow-md active:scale-95">
-                            <Upload size={18}/> 匯入 (.csv)
-                            <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportTrophies}/>
-                        </label>
+                        {/* 3.1 更新：禁用按鈕 */}
+                        <div onClick={handleDisabledFeature} className="w-full flex items-center justify-center gap-2 bg-amber-500/50 text-white p-4 rounded-xl cursor-not-allowed transition-all font-bold shadow-sm">
+                            <Upload size={18}/> 匯入 (.csv) (暫停使用)
+                        </div>
                         <TemplateDownloader type="trophies" />
                     </div>
                     <div className="bg-slate-50 p-6 rounded-2xl space-y-4">
                          <h4 className="font-bold text-slate-700">傳奇校友</h4>
-                        <label className="w-full flex items-center justify-center gap-2 bg-indigo-500 text-white p-4 rounded-xl cursor-pointer hover:bg-indigo-600 transition-all font-bold shadow-md active:scale-95">
-                            <Upload size={18}/> 匯入 (.csv)
-                            <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportAlumni}/>
-                        </label>
+                         {/* 3.1 更新：禁用按鈕 */}
+                        <div onClick={handleDisabledFeature} className="w-full flex items-center justify-center gap-2 bg-indigo-500/50 text-white p-4 rounded-xl cursor-not-allowed transition-all font-bold shadow-sm">
+                            <Upload size={18}/> 匯入 (.csv) (暫停使用)
+                        </div>
                         <TemplateDownloader type="alumni" />
                     </div>
                 </div>
@@ -106,11 +112,10 @@ export default function SettingsPage({
                 <p className="text-slate-400 text-sm mb-8 border-b pb-4">批量或單一新增賽事名稱，供錄入成績時選擇。</p>
                 
                 <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                    {/* 注意：這裡我們暫時保留原生寫法，因為它包含 file input */}
-                    <label className="flex-1 w-full bg-slate-800 text-white px-6 py-4 rounded-2xl cursor-pointer hover:bg-slate-700 shadow-md flex items-center justify-center gap-2 transition-all font-bold active:scale-95">
-                        <Upload size={18}/> 批量匯入 (CSV)
-                        <input type="file" className="hidden" accept=".csv" onChange={handleCSVImportExternalTournaments}/>
-                    </label>
+                    {/* 3.1 更新：禁用批量匯入按鈕，只保留單一新增功能 */}
+                    <div onClick={handleDisabledFeature} className="flex-1 w-full bg-slate-800/50 text-white px-6 py-4 rounded-2xl cursor-not-allowed shadow-sm flex items-center justify-center gap-2 transition-all font-bold">
+                        <Upload size={18}/> 批量匯入 (CSV) (暫停使用)
+                    </div>
                     <SecondaryButton icon={Plus} onClick={handleAddSingleTournament}>
                         新增單一
                     </SecondaryButton>
@@ -134,7 +139,6 @@ export default function SettingsPage({
                     重置積分 (新賽季)
                 </DangerButton>
                 
-                {/* 使用統一的 PrimaryButton */}
                 <PrimaryButton icon={Save} onClick={handleSaveSystemConfig} className="w-full md:w-auto md:px-16 text-lg">
                     保存所有設定
                 </PrimaryButton>
