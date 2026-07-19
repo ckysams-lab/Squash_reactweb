@@ -2,7 +2,7 @@
 // Version 6.0: 🏆 盃賽引擎降臨：新增支援最高 32 人的單敗淘汰樹狀圖引擎、自動排種子與晉級邏輯。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
-import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users } from 'lucide-react';
+import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
 import { collection, addDoc, doc, updateDoc, writeBatch, increment, serverTimestamp } from 'firebase/firestore';
