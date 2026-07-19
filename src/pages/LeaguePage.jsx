@@ -1,5 +1,5 @@
 // File: src/pages/LeaguePage.jsx
-// Version 6.0: 🏆 盃賽引擎降臨：新增支援最高 32 人的單敗淘汰樹狀圖引擎、自動排種子與晉級邏輯。
+// Version 6.1: 🛡️ 聯賽與盃賽徹底分離：雙軌下拉選單與獨立盃賽建立介面。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2 } from 'lucide-react';
@@ -7,7 +7,6 @@ import html2canvas from 'html2canvas';
 import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
 import { collection, addDoc, doc, updateDoc, writeBatch, increment, serverTimestamp } from 'firebase/firestore';
 
-// 👉 引入我們剛剛建立的樹狀圖元件
 import TournamentBracket from '../components/TournamentBracket';
 
 const TrendIndicator = ({ trend }) => {
@@ -322,15 +321,14 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
 
 export default function LeaguePage({
   role, currentUserInfo, setShowTacticalBoard, setShowUmpirePanel,
-  setActiveLeagueMatch, setShowTournamentModal, selectedTournament,
+  setActiveLeagueMatch, setShowTournamentModal, selectedTournament, // selectedTournament 保留，作為聯賽模式的選單
   setSelectedTournament, tournamentList, leagueMatches, myTournamentStats,
-  myUpcomingMatches, groupedMatches, tournamentStandings, handleCheerMatch,
+  myUpcomingMatches, tournamentStandings, handleCheerMatch,
   handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, schoolLogo,
   students, db, appId 
 }) {
   const posterRef = useRef();
   const [isRenderingPoster, setIsRenderingPoster] = useState(false);
-  const [previousStandings, setPreviousStandings] = useState({});
   const [showAddSingleMatch, setShowAddSingleMatch] = useState(false);
   const [isUpdatingMatch, setIsUpdatingMatch] = useState(false);
   const [newMatch, setNewMatch] = useState({ groupName: 'Group A', date: new Date().toISOString().split('T')[0], time: '16:00', player1Id: '', isExternal: false, player2Id: '', extName: '', extElo: '1000' });
@@ -339,33 +337,51 @@ export default function LeaguePage({
   const [matchToOverride, setMatchToOverride] = useState(null);
   const [overrideScores, setOverrideScores] = useState({ s1: 0, s2: 0 });
 
-  // 👉 6.0 新增：視圖切換與盃賽引擎狀態
+  // 👉 6.1 核心：雙軌視圖切換與獨立的盃賽狀態
   const [viewMode, setViewMode] = useState('league'); // 'league' | 'bracket'
   const [showBracketGenerator, setShowBracketGenerator] = useState(false);
   const [bracketPlayers, setBracketPlayers] = useState([]);
-  const [bracketName, setBracketName] = useState('淘汰盃賽');
+  const [bracketEventName, setBracketEventName] = useState('2026 校慶盃'); // 獨立的盃賽名稱
+  const [bracketName, setBracketName] = useState('男子公開組');
+  const [selectedBracket, setSelectedBracket] = useState('');
 
-  // 👉 6.0 分離賽事類型
-  const trulyFilteredMatches = useMemo(() => {
-    if (!selectedTournament) return [];
-    return leagueMatches.filter(match => match.tournamentName === selectedTournament);
+  // 1. 將所有比賽拆分成「聯賽」與「盃賽」兩疊資料
+  const leagueNames = useMemo(() => {
+    return [...new Set(leagueMatches.filter(m => m.matchType !== 'tournament_bracket').map(m => m.tournamentName).filter(Boolean))].sort();
+  }, [leagueMatches]);
+
+  const bracketNames = useMemo(() => {
+    return [...new Set(leagueMatches.filter(m => m.matchType === 'tournament_bracket').map(m => m.tournamentName).filter(Boolean))].sort();
+  }, [leagueMatches]);
+
+  // 當盃賽清單有變化，或是剛切換到盃賽模式時，確保下拉選單有選中值
+  useEffect(() => {
+      if (bracketNames.length > 0 && !selectedBracket) {
+          setSelectedBracket(bracketNames[0]);
+      }
+  }, [bracketNames, selectedBracket]);
+
+  // 2. 獨立過濾各自的比賽
+  const currentLeagueMatches = useMemo(() => {
+    return leagueMatches.filter(m => m.tournamentName === selectedTournament && m.matchType !== 'tournament_bracket');
   }, [leagueMatches, selectedTournament]);
 
-  const standardMatches = trulyFilteredMatches.filter(m => m.matchType !== 'tournament_bracket');
-  const bracketMatches = trulyFilteredMatches.filter(m => m.matchType === 'tournament_bracket');
+  const currentBracketMatches = useMemo(() => {
+    return leagueMatches.filter(m => m.tournamentName === selectedBracket && m.matchType === 'tournament_bracket');
+  }, [leagueMatches, selectedBracket]);
 
-  // 將原本的邏輯套用在 standardMatches 上 (保護第一道防線)
-  const safeGroupedMatches = useMemo(() => {
+  // 3. 只針對「聯賽」進行分組 (Group Section 使用)
+  const localGroupedLeagueMatches = useMemo(() => {
     const groups = {};
-    if (standardMatches.length > 0) {
-        standardMatches.forEach(match => {
+    if (currentLeagueMatches.length > 0) {
+        currentLeagueMatches.forEach(match => {
             const groupKey = match.groupName || '所有比賽';
             if (!groups[groupKey]) groups[groupKey] = [];
             groups[groupKey].push(match);
         });
     }
     return groups;
-  }, [standardMatches]);
+  }, [currentLeagueMatches]);
 
   const handleSaveSingleMatch = async () => {
       if (!newMatch.player1Id) return alert("必須選擇一位本校出賽球員！");
@@ -385,7 +401,8 @@ export default function LeaguePage({
           }
 
           const matchData = {
-              tournamentName: selectedTournament, groupName: newMatch.groupName || '預設組別', date: newMatch.date, time: newMatch.time,
+              tournamentName: selectedTournament, // 聯賽模式新增，綁定目前的聯賽
+              groupName: newMatch.groupName || '預設組別', date: newMatch.date, time: newMatch.time,
               player1Id: p1.id, player1Name: p1.name, player2Id: p2Id, player2Name: p2Name,
               matchType: newMatch.isExternal ? 'friendly_match' : 'internal_challenge', status: 'scheduled', timestamp: serverTimestamp()
           };
@@ -398,25 +415,23 @@ export default function LeaguePage({
       setIsUpdatingMatch(false);
   };
 
-  // 👉 6.0 盃賽引擎核心邏輯：自動排種與生成 32籤表
+  // 👉 6.1 更新：盃賽生成器使用獨立的 bracketEventName
   const handleGenerateBracket = async () => {
       if(bracketPlayers.length < 3) return alert("舉辦淘汰賽至少需要 3 名選手！");
       if(bracketPlayers.length > 32) return alert("本引擎最高支援 32 人籤表，請減少人數。");
+      if(!bracketEventName.trim()) return alert("請輸入盃賽大會名稱！");
 
-      // 決定籤表大小
       let size = 4;
       if (bracketPlayers.length > 4) size = 8;
       if (bracketPlayers.length > 8) size = 16;
       if (bracketPlayers.length > 16) size = 32;
 
-      // 依據現有總積分 (Elo) 排序以排定種子
       const sortedPlayers = [...bracketPlayers].sort((a, b) => {
           const pA = students.find(s=>s.id===a)?.points || 0;
           const pB = students.find(s=>s.id===b)?.points || 0;
           return pB - pA;
       });
 
-      // 標準蛇形排陣演算法 (1 對 32, 2 對 31 ...)
       let pl = [1];
       let rounds = Math.log2(size);
       for (let i = 0; i < rounds; i++) {
@@ -426,7 +441,6 @@ export default function LeaguePage({
           pl = next_pl;
       }
 
-      // 將學生套入種子順位，不夠的補 BYE
       const seededPlayers = pl.map(seedNum => {
           if (seedNum <= sortedPlayers.length) {
               const sId = sortedPlayers[seedNum - 1];
@@ -446,7 +460,6 @@ export default function LeaguePage({
           let currentRoundPlayers = seededPlayers;
           let currentRoundNodes = [];
 
-          // 第一輪比賽 (Round 5 for 32, Round 4 for 16...)
           let r = rounds;
           for(let i=0; i<size/2; i++){
               const p1 = currentRoundPlayers[i*2];
@@ -458,10 +471,10 @@ export default function LeaguePage({
               const matchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
               const matchObj = {
                   id: matchRef.id,
-                  tournamentName: selectedTournament,
+                  tournamentName: bracketEventName.trim(), // 獨立的大會名稱
                   groupName: bracketName,
                   matchType: 'tournament_bracket',
-                  bracketRound: r, // 輪次標記
+                  bracketRound: r, 
                   bracketMatchNumber: matchCounter++,
                   player1Id: p1.id, player1Name: p1.name,
                   player2Id: p2.id, player2Name: p2.name,
@@ -477,7 +490,6 @@ export default function LeaguePage({
               matchesToCreate.push({ ref: matchRef, data: matchObj });
           }
 
-          // 後續輪次 (建立空殼並串接)
           let previousRoundNodes = currentRoundNodes;
           for(r = rounds - 1; r >= 1; r--) {
               let nextRoundNodes = [];
@@ -486,7 +498,6 @@ export default function LeaguePage({
                   const m2 = previousRoundNodes[i+1];
                   const matchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
                   
-                  // 如果上一輪有因為輪空而直接保送的，這輪直接填名字
                   const p1Id = m1.winnerId || null;
                   const p1Name = p1Id ? students.find(s=>s.id===p1Id)?.name : null;
                   const p2Id = m2.winnerId || null;
@@ -494,7 +505,7 @@ export default function LeaguePage({
 
                   const matchObj = {
                       id: matchRef.id,
-                      tournamentName: selectedTournament,
+                      tournamentName: bracketEventName.trim(), // 獨立的大會名稱
                       groupName: bracketName,
                       matchType: 'tournament_bracket',
                       bracketRound: r,
@@ -509,7 +520,6 @@ export default function LeaguePage({
                       timestamp: serverTimestamp()
                   };
                   
-                  // 雙向鏈結：把未來的 ID 寫進過去的比賽，方便贏了直接推進
                   m1.nextMatchId = matchObj.id;
                   m1.nextMatchSlot = 'player1';
                   m2.nextMatchId = matchObj.id;
@@ -521,13 +531,13 @@ export default function LeaguePage({
               previousRoundNodes = nextRoundNodes;
           }
 
-          // 一口氣寫入 Firebase
           matchesToCreate.forEach(m => { batch.set(m.ref, m.data); });
 
           await batch.commit();
           alert("✅ 盃賽樹狀圖與賽程生成成功！");
           setShowBracketGenerator(false);
-          setViewMode('bracket'); // 自動切換到樹狀圖視角
+          setSelectedBracket(bracketEventName.trim()); // 自動跳轉到剛建立的盃賽
+          setViewMode('bracket'); 
       } catch (e) {
           console.error(e);
           alert("生成失敗，請檢查網路連線。");
@@ -535,7 +545,6 @@ export default function LeaguePage({
       setIsUpdatingMatch(false);
   };
 
-  // 攔截原本的更新成績邏輯，為淘汰賽客製化晉級推進
   const handleScoreUpdateIntercept = async (match) => {
       if (match.matchType === 'tournament_bracket') {
           const p1Raw = prompt(`請輸入 ${match.player1Name} 總局數得分 (例如: 3)`); if (p1Raw === null) return;
@@ -555,7 +564,6 @@ export default function LeaguePage({
               const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
               batch.update(matchRef, { score1, score2, winnerId, status: 'completed', updatedAt: serverTimestamp() });
               
-              // 🏆 引擎核心：將贏家自動推進下一輪
               if (match.nextMatchId) {
                    const nextMatchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.nextMatchId);
                    const updateObj = {};
@@ -568,7 +576,6 @@ export default function LeaguePage({
               alert("✅ 賽果已儲存，晉級樹狀圖已自動推進！");
           } catch (e) { console.error(e); alert("儲存失敗。"); }
       } else {
-          // 一般聯賽，走原本的複雜 Elo 結算引擎
           handleUpdateLeagueMatchScore(match);
       }
   };
@@ -630,12 +637,11 @@ export default function LeaguePage({
              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Medal size={28}/></div>
              <div>
                <h3 className="text-3xl font-black text-slate-800 tracking-tight">聯賽專區</h3>
-               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v6.0</span></p>
+               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v6.1</span></p>
              </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             
-            {/* 👉 6.0 新增：視圖切換器 */}
             <div className="flex bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-100 shrink-0">
                 <button 
                     onClick={() => setViewMode('league')} 
@@ -651,68 +657,76 @@ export default function LeaguePage({
                 </button>
             </div>
 
+            {/* 👉 6.1 核心：雙軌下拉選單 */}
             <div className="relative shadow-sm rounded-xl">
-              <select value={selectedTournament} onChange={e => setSelectedTournament(e.target.value)} className="appearance-none bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-sm font-black text-slate-700 outline-none cursor-pointer hover:bg-white hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all min-w-[220px]">
-                {tournamentList.length === 0 ? <option value="">暫無賽事</option> : tournamentList.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              {viewMode === 'league' ? (
+                  <select value={selectedTournament} onChange={e => setSelectedTournament(e.target.value)} className="appearance-none bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-3 text-sm font-black text-slate-700 outline-none cursor-pointer hover:bg-white hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all min-w-[220px]">
+                    {leagueNames.length === 0 ? <option value="">暫無聯賽</option> : leagueNames.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+              ) : (
+                  <select value={selectedBracket} onChange={e => setSelectedBracket(e.target.value)} className="appearance-none bg-amber-50 border border-amber-200 rounded-xl pl-4 pr-10 py-3 text-sm font-black text-amber-700 outline-none cursor-pointer hover:bg-white hover:border-amber-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 transition-all min-w-[220px]">
+                    {bracketNames.length === 0 ? <option value="">暫無盃賽</option> : bracketNames.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+              )}
+              <ChevronDown size={16} className={`absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none ${viewMode === 'league' ? 'text-slate-400' : 'text-amber-500'}`} />
             </div>
 
             {role === 'admin' && (
               <>
-                {selectedTournament && viewMode === 'league' && (
+                {viewMode === 'league' && selectedTournament && (
                     <button onClick={() => setShowAddSingleMatch(true)} className="p-3 bg-white border border-slate-200 text-emerald-600 rounded-xl hover:bg-emerald-50 hover:border-emerald-300 transition-all shadow-sm" title={`新增單場賽程`}>
                       <UserPlus size={18} />
                     </button>
                 )}
-                {selectedTournament && viewMode === 'bracket' && (
+                {viewMode === 'bracket' && (
                     <button onClick={() => setShowBracketGenerator(true)} className="flex items-center gap-2 px-4 py-3 bg-amber-500 text-white rounded-xl text-sm font-black hover:bg-amber-600 transition-all shadow-md">
                       <Trophy size={16} /> 舉辦盃賽
                     </button>
                 )}
                 <button onClick={setShowTacticalBoard.bind(null, true)} className="flex items-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700 transition-all shadow-md"><Target size={16} /> 戰術板</button>
                 <button onClick={setShowUmpirePanel.bind(null, true)} className="flex items-center gap-2 px-4 py-3 bg-red-500 text-white rounded-xl text-xs font-black hover:bg-red-600 transition-all shadow-md animate-pulse"><Activity size={16} /> 轉播室</button>
-                <button onClick={handleDownloadPoster} disabled={isRenderingPoster || !hasStandings} className="p-3 bg-white border border-slate-200 text-blue-600 rounded-xl hover:bg-blue-50 hover:border-blue-300 transition-all disabled:opacity-40 shadow-sm" title="下載積分榜海報">{isRenderingPoster ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}</button>
-                <button onClick={() => setShowTournamentModal(true)} className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-md shadow-blue-200" title="建立新聯賽賽季"><Plus size={18} /></button>
+                {viewMode === 'league' && (
+                  <button onClick={handleDownloadPoster} disabled={isRenderingPoster || !hasStandings} className="p-3 bg-white border border-slate-200 text-blue-600 rounded-xl hover:bg-blue-50 hover:border-blue-300 transition-all disabled:opacity-40 shadow-sm" title="下載積分榜海報">{isRenderingPoster ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}</button>
+                )}
+                {viewMode === 'league' && (
+                  <button onClick={() => setShowTournamentModal(true)} className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-md shadow-blue-200" title="建立新聯賽賽季"><Plus size={18} /></button>
+                )}
               </>
             )}
           </div>
         </div>
       </div>
 
-      {/* 依據模式切換顯示 */}
       {viewMode === 'bracket' ? (
           <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden animate-in zoom-in-95 duration-300">
               <TournamentBracket 
-                  bracketMatches={bracketMatches} 
+                  bracketMatches={currentBracketMatches} 
                   students={students} 
                   role={role} 
                   onMatchClick={role === 'admin' ? handleScoreUpdateIntercept : null} 
               />
           </div>
       ) : (
-          Object.keys(safeGroupedMatches).length === 0 ? (
+          Object.keys(localGroupedLeagueMatches).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-slate-300">
                 <div className="p-6 bg-slate-50 rounded-full mb-4"><Trophy size={48} strokeWidth={1.5} className="text-slate-300" /></div>
-                <p className="font-black text-slate-400 text-lg">{leagueMatches.length > 0 ? '目前賽事無聯賽紀錄' : '暫無賽事，教練可建立新賽事'}</p>
+                <p className="font-black text-slate-400 text-lg">{currentLeagueMatches.length > 0 ? '目前賽事無聯賽紀錄' : '暫無聯賽，教練可建立新聯賽'}</p>
               </div>
           ) : (
-              Object.keys(safeGroupedMatches).map(groupName => (
-                <GroupSection key={groupName} groupName={groupName} matches={safeGroupedMatches[groupName]} enrichedStandings={tournamentStandings /* 傳入安全過濾的排行榜 */} tournamentStandings={tournamentStandings} role={role} currentUserInfo={currentUserInfo} handleCheerMatch={handleCheerMatch} setActiveLeagueMatch={setActiveLeagueMatch} setShowUmpirePanel={setShowUmpirePanel} handleUpdateLeagueMatchScore={handleScoreUpdateIntercept} handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} students={students} openScoreOverrideModal={openScoreOverrideModal} />
+              Object.keys(localGroupedLeagueMatches).map(groupName => (
+                <GroupSection key={groupName} groupName={groupName} matches={localGroupedLeagueMatches[groupName]} enrichedStandings={tournamentStandings} tournamentStandings={tournamentStandings} role={role} currentUserInfo={currentUserInfo} handleCheerMatch={handleCheerMatch} setActiveLeagueMatch={setActiveLeagueMatch} setShowUmpirePanel={setShowUmpirePanel} handleUpdateLeagueMatchScore={handleScoreUpdateIntercept} handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} students={students} openScoreOverrideModal={openScoreOverrideModal} />
               ))
           )
       )}
 
       {isRenderingPoster && (
         <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -100 }}>
-          <LeagueStandingsPoster ref={posterRef} tournamentName={selectedTournament} standings={hasStandings ? Object.values(tournamentStandings).flat().sort((a, b) => b.leaguePoints - a.leaguePoints) : []} upcomingMatches={standardMatches} schoolLogo={schoolLogo} />
+          <LeagueStandingsPoster ref={posterRef} tournamentName={selectedTournament} standings={hasStandings ? Object.values(tournamentStandings).flat().sort((a, b) => b.leaguePoints - a.leaguePoints) : []} upcomingMatches={currentLeagueMatches} schoolLogo={schoolLogo} />
         </div>
       )}
 
-      {/* 覆寫賽果視窗 (維持不變) */}
       {overrideModalOpen && matchToOverride && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[500] flex items-center justify-center p-4">
-             {/* ... UI 內容 ... */}
              <div className="bg-white rounded-2xl p-8 max-w-md w-full">
                 <h3 className="text-xl font-black mb-4">覆寫賽果</h3>
                 <div className="flex justify-between items-center mb-6">
@@ -728,13 +742,16 @@ export default function LeaguePage({
           </div>
       )}
 
-      {/* 單一賽事新增視窗 (維持不變) */}
       {showAddSingleMatch && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[500] flex items-center justify-center p-4">
              <div className="bg-white rounded-2xl p-8 max-w-md w-full">
                  <h3 className="text-xl font-black mb-4">新增單場聯賽</h3>
-                 {/* ... 表單內容省略以節省版面，維持你原有的 ... */}
-                 <div className="flex justify-end gap-2 mt-4">
+                 {/* 簡化版表單供展示 */}
+                 <div className="space-y-4">
+                     <div><label className="text-xs font-bold text-slate-400">出賽球員</label><select className="w-full p-2 border rounded" value={newMatch.player1Id} onChange={e=>setNewMatch({...newMatch, player1Id: e.target.value})}><option value="">請選擇</option>{students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                     <div><label className="text-xs font-bold text-slate-400">對手球員</label><select className="w-full p-2 border rounded" value={newMatch.player2Id} onChange={e=>setNewMatch({...newMatch, player2Id: e.target.value})}><option value="">請選擇</option>{students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                 </div>
+                 <div className="flex justify-end gap-2 mt-6">
                     <button onClick={() => setShowAddSingleMatch(false)} className="px-4 py-2 bg-slate-100 rounded">取消</button>
                     <button onClick={handleSaveSingleMatch} className="px-4 py-2 bg-blue-600 text-white rounded">儲存</button>
                  </div>
@@ -742,7 +759,7 @@ export default function LeaguePage({
           </div>
       )}
 
-      {/* 👉 6.0 新增：盃賽生成器視窗 */}
+      {/* 👉 6.1 更新：獨立命名的盃賽生成器 */}
       {showBracketGenerator && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[500] flex items-center justify-center p-4 animate-in fade-in">
               <div className="bg-white rounded-[2rem] p-8 max-w-2xl w-full shadow-2xl flex flex-col max-h-[90vh]">
@@ -754,9 +771,16 @@ export default function LeaguePage({
                       <button onClick={() => setShowBracketGenerator(false)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200"><X size={20}/></button>
                   </div>
                   
-                  <div className="mb-6">
-                      <label className="text-xs font-black text-slate-400 mb-2 block">盃賽分組名稱</label>
-                      <input type="text" value={bracketName} onChange={e=>setBracketName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-lg outline-none focus:border-amber-500" placeholder="例如: 2026 男子公開組" />
+                  {/* 6.1 核心：新增大會名稱輸入框 */}
+                  <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                          <label className="text-xs font-black text-slate-400 mb-2 block">盃賽大會名稱 (獨立分類)</label>
+                          <input type="text" value={bracketEventName} onChange={e=>setBracketEventName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-lg outline-none focus:border-amber-500" placeholder="例如: 2026 校慶盃" />
+                      </div>
+                      <div>
+                          <label className="text-xs font-black text-slate-400 mb-2 block">分組名稱</label>
+                          <input type="text" value={bracketName} onChange={e=>setBracketName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-lg outline-none focus:border-amber-500" placeholder="例如: 男子公開組" />
+                      </div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl p-4 bg-slate-50 grid grid-cols-2 sm:grid-cols-3 gap-2">
