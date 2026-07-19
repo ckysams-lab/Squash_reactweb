@@ -717,6 +717,7 @@ export default function LeaguePage({
                   role={role} 
                   onMatchClick={role === 'admin' ? handleScoreUpdateIntercept : null} 
                   liveMatches={liveBracketMatches} /* 👉 6.2 新增：注入即時轉播資料流 */
+                  onStartLiveBroadcast={(match) => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }}
               />
           </div>
       ) : (
