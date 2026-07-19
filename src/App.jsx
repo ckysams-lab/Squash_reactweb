@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.14: 新增「賽季封存與歷史殿堂 (Season Archives)」功能。
+// Version 1.15: 🐞 重大修復：修復 rankedStudents 使用 class+classNo 導致升級時學生被當成重複項目而集體消失的嚴重 Bug。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -27,7 +27,6 @@ import FinancialPage from './pages/FinancialPage';
 import PlayerDashboard from './components/PlayerDashboard';
 import MyDashboardPage from './pages/MyDashboardPage';
 import RankingPage from './pages/RankingPage';
-// 👉 引入全新的 Season Archives Page
 import SeasonArchivesPage from './pages/SeasonArchivesPage';
 
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
@@ -42,7 +41,7 @@ import {
   Key, LayoutDashboard, Layers, Link as LinkIcon, ListChecks, Loader2, Lock, LogIn, LogOut, Mail, MapPin, Medal,
   Megaphone, Menu, MinusCircle, Pencil, Percent, PlayCircle, Plus, PlusCircle, Printer, Rocket, Save, Search, Settings2,
   Shield as ShieldIcon, ShieldCheck, Sparkles, Star, Sun, Swords, Target, Trash2, TrendingUp, Trophy, Trophy as TrophyIcon,
-  Upload, User, UserCheck, UserCog, UserPlus, Users, X, Zap, FilePenLine, Archive // 👉 加入 Archive 圖示
+  Upload, User, UserCheck, UserCog, UserPlus, Users, X, Zap, FilePenLine, Archive 
 } from 'lucide-react';
 
 import { 
@@ -62,7 +61,7 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.14";
+const CURRENT_VERSION = "1.15";
 
 momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
@@ -117,7 +116,6 @@ export default function App() {
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   
-  // 👉 歷史賽季資料庫狀態
   const [seasonArchives, setSeasonArchives] = useState([]);
 
   const syncGoogleDriveGallery = async () => {
@@ -379,15 +377,6 @@ export default function App() {
     return Object.values(albums).sort((a,b) => b.lastUpdated - a.lastUpdated);
   }, [galleryItems]);
 
-  useEffect(() => {
-    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
-    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
-    try {
-      const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
-      link.type = 'image/png'; link.rel = 'icon'; link.href = logoUrl; document.getElementsByTagName('head')[0].appendChild(link); document.title = "BCKLAS 壁球校隊系統";
-    } catch(e) { console.error("Favicon error", e); }
-  }, [systemConfig?.schoolLogo]);
-
   const handleSaveAssessment = async () => {
     const { studentId, date, notes = '', situps = 0, shuttleRun = 0, enduranceRun = 0, gripStrength = 0, flexibility = 0, fhDrive = 0, bhDrive = 0, fhVolley = 0, bhVolley = 0, rankT1 = '', rankT2 = '', rankT3 = '', hoursT1 = '', hoursT2 = '', hoursT3 = '' } = newAssessment;
     if (!studentId || !date) { alert("請選擇學員並填寫評估日期！"); return; }
@@ -470,11 +459,13 @@ export default function App() {
     catch (e) { console.error("Logout error", e); }
   };
 
+  // 🐞 核心修復：這就是造成 79 名學生消失的地方！
   const rankedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
     const uniqueMap = new Map();
     students.forEach(s => {
-      const key = `${s.class}-${s.classNo}`;
+      // ✅ 修正點：使用唯一 ID 作為 Key，這樣班別為空的學生就不會互相覆寫了！
+      const key = s.id; 
       const currentPoints = Number(s.points) || 0; 
       if (!uniqueMap.has(key)) { uniqueMap.set(key, { ...s, totalPoints: currentPoints }); } 
       else {
@@ -494,7 +485,6 @@ export default function App() {
     });
   }, [students]);
 
-  // 👉 全新：賽季封存機制 👈
   const handleArchiveSeason = async () => {
       if (role !== 'admin') return;
       const seasonName = prompt("請輸入要封存的賽季名稱 (例如: 2023/24 學年度):");
@@ -755,9 +745,7 @@ export default function App() {
       } catch (error) { console.error("Cheer failed:", error); }
   };
 
-  // --- 賽後自動結算引擎 (Auto-Resolution Engine) ---
   const handleUpdateLeagueMatchScore = async (match) => {
-      // 1. 獲取比分資料
       const p1Raw = prompt(`請輸入 ${match.player1Name} 該場「總得分」\n(例如：直落三贏11-5, 11-5, 11-5，則輸入 33)`);
       if (p1Raw === null) return;
       const p2Raw = prompt(`請輸入 ${match.player2Name || '對手'} 該場「總得分」\n(例如：輸了5分, 5分, 5分，則輸入 15)`);
@@ -771,7 +759,6 @@ export default function App() {
       if (!gamesScoreString || !gamesScoreString.includes("-")) { alert("格式錯誤。"); return; }
       const [g1, g2] = gamesScoreString.split('-'); const score1 = parseInt(g1, 10); const score2 = parseInt(g2, 10);
 
-      // 2. 判定勝負與選手身分
       const isP1Winner = totalP1 > totalP2;
       const winnerId = isP1Winner ? match.player1Id : match.player2Id;
       const loserId = isP1Winner ? match.player2Id : match.player1Id;
@@ -784,7 +771,6 @@ export default function App() {
       const winner = students.find(s => s.id === winnerId);
       const loser = students.find(s => s.id === loserId);
 
-      // 3. Elo 積分計算邏輯 (維持您原本的專業公式)
       const p1Elo = isP1Internal ? (students.find(s=>s.id === match.player1Id)?.totalPoints || 1000) : (match.extElo || 1000);
       const p2Elo = isP2Internal ? (students.find(s=>s.id === match.player2Id)?.totalPoints || 1000) : (match.extElo || 1000);
       const winnerElo = isP1Winner ? p1Elo : p2Elo;
@@ -828,25 +814,20 @@ export default function App() {
       const winnerDelta = Math.round(baseDelta * hybridDominance * gradeBonus);
       const loserDelta = -Math.round(baseDelta * hybridDominance);
 
-      // ✨ 4. 自動成就解鎖引擎 (Auto-Achievement Detection)
       let autoBadgesToAward = [];
       let badgeMsg = "";
       
       if (winner) {
-          // 條件 A: 完美壓制 (Flawless) - 直落三且總失分小於 10 分
           if (winnerGames === 3 && loserGames === 0 && (totalPointsMatch - winnerPoints) <= 10) {
               autoBadgesToAward.push({ badgeId: 'flawless_victory', level: 1, name: '完美壓制' });
           }
-          // 條件 B: 越級打怪 (Giant Killer) - 贏了 OVR 比自己高 100 分以上的對手
           if (loserElo - winnerElo >= 100) {
               autoBadgesToAward.push({ badgeId: 'giant_killer', level: 1, name: '越級打怪' });
           }
-          // 條件 C: 極限反殺 (Clutch Master) - 3-2 險勝
           if (winnerGames === 3 && loserGames === 2) {
               autoBadgesToAward.push({ badgeId: 'clutch_master', level: 1, name: '極限反殺' });
           }
 
-          // 過濾掉該學生已經擁有的徽章
           const studentExistingBadges = achievements.filter(ach => ach.studentId === winner.id).map(ach => ach.badgeId);
           autoBadgesToAward = autoBadgesToAward.filter(b => !studentExistingBadges.includes(b.badgeId));
 
@@ -858,7 +839,6 @@ export default function App() {
       const winnerName = winner ? winner.name : (winnerId === match.player1Id ? match.player1Name : match.player2Name);
       const loserName = loser ? loser.name : (loserId === match.player1Id ? match.player1Name : match.player2Name);
 
-      // 5. 確認視窗
       const confirmMsg = `✍️ 確認賽果與終極 Elo 結算？\n\n` +
                          `對戰: ${match.player1Name} vs ${match.player2Name}\n` +
                          `大局數: ${score1} - ${score2}\n` +
@@ -874,13 +854,11 @@ export default function App() {
           try {
               const batch = writeBatch(db);
               
-              // 更新比賽狀態
               const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
               batch.update(matchRef, { 
                   score1, score2, totalPoints1: totalP1, totalPoints2: totalP2, winnerId, status: 'completed', updatedAt: serverTimestamp() 
               });
 
-              // 更新勝敗雙方積分
               if (winner) {
                   const winnerRef = doc(db, 'artifacts', appId, 'public', 'data', 'students', winner.id);
                   batch.update(winnerRef, { points: increment(winnerDelta), lastUpdated: serverTimestamp() });
@@ -890,7 +868,6 @@ export default function App() {
                   batch.update(loserRef, { points: increment(loserDelta), lastUpdated: serverTimestamp() });
               }
 
-              // 寫入自動解鎖的成就徽章
               autoBadgesToAward.forEach(badge => {
                   const newBadgeRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'achievements'));
                   batch.set(newBadgeRef, {
@@ -1214,7 +1191,6 @@ export default function App() {
                     <NavButton tabName="league" icon={<Swords size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>聯賽專區</NavButton>
                     <NavButton tabName="gallery" icon={<ImageIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>精彩花絮</NavButton>
                     <NavButton tabName="awards" icon={<Award size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>獎項成就</NavButton>
-                    {/* 👉 全新加入：歷年賽季 👈 */}
                     <NavButton tabName="seasonArchives" icon={<Archive size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>歷年賽季</NavButton>
                     
                     <NavButton tabName="schedules" icon={<CalendarIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>訓練日程</NavButton>
@@ -1487,7 +1463,6 @@ export default function App() {
             />
           )}
 
-          {/* 👉 載入新的 SeasonArchivesPage 👈 */}
           {!viewingStudent && activeTab === 'seasonArchives' && (
             <SeasonArchivesPage archives={seasonArchives} handleArchiveSeason={handleArchiveSeason} role={role} deleteItem={deleteItem} />
           )}
