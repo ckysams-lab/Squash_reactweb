@@ -36,6 +36,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 
 // 👉 1.18 新增：引入 React Router 核心套件
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 import {
   Activity, ArrowLeft, Award, BookMarked, BookOpen, Bookmark, Cake, Calendar as CalendarIcon, Camera, CheckCircle2,
@@ -1482,6 +1483,7 @@ export default function AppWrapper() {
   return (
     <Router>
       <MainApp />
+      <SpeedInsights />
     </Router>
   );
 }
