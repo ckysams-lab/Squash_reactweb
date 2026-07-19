@@ -1,10 +1,11 @@
 // File: src/components/TournamentBracket.jsx
-// Version: 1.1 (Live Arena Integration)
-// 升級內容：加入即時轉播脈動，支援深色 LIVE 模式與即時比分顯示。
+// Version: 1.2 (Live Broadcast Link Integration)
 
 import React, { useMemo } from 'react';
+import { PlayCircle } from 'lucide-react'; // 👉 引入播放圖示
 
-export default function TournamentBracket({ bracketMatches, students, role, onMatchClick, liveMatches = [] }) {
+// 👉 加入 onStartLiveBroadcast 作為新的 props
+export default function TournamentBracket({ bracketMatches, students, role, onMatchClick, liveMatches = [], onStartLiveBroadcast }) {
     const bracketRounds = useMemo(() => {
         if (!bracketMatches || bracketMatches.length === 0) return [];
         
@@ -39,22 +40,23 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
         const isDone = match.status === 'completed';
         const isBye = match.player2Id === 'BYE';
         
-        // 🌟 核心升級：偵測這場比賽是否正在「轉播室」進行中
         const liveData = liveMatches.find(l => l.leagueMatchId === match.id && l.status === 'live');
         const isLive = !!liveData;
         
-        // 動態決定顯示的比分 (如果是 LIVE，顯示即時比分；如果完賽，顯示最終比分)
         const displayScore1 = isLive ? liveData.score1 : (isDone ? match.score1 : '-');
         const displayScore2 = isLive ? liveData.score2 : (isDone ? match.score2 : (isBye ? '' : '-'));
 
         return (
             <div 
-                className={`relative w-48 border-2 rounded-xl overflow-hidden transition-all duration-300 
-                ${isBye ? 'opacity-60 grayscale bg-white border-slate-200' : ''} 
+                className={`relative w-48 border-2 rounded-xl overflow-hidden transition-all duration-300 group
+                ${isBye ? 'opacity-60 grayscale bg-white border-slate-200 cursor-not-allowed' : 'cursor-pointer'} 
                 ${isLive ? 'border-red-500 bg-slate-900 shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-105 z-20' : 
-                  (isDone ? 'border-emerald-200 bg-white shadow-sm' : 'border-slate-200 bg-white hover:border-blue-400 hover:shadow-md cursor-pointer')}
+                  (isDone ? 'border-emerald-200 bg-white shadow-sm hover:border-emerald-400' : 'border-slate-200 bg-white hover:border-blue-400 hover:shadow-md')}
                 ${!match.player1Id && !match.player2Id ? 'border-dashed border-slate-300 bg-slate-50' : ''}`}
-                onClick={() => !isBye && onMatchClick && onMatchClick(match)}
+                onClick={() => {
+                    // 如果點擊卡片本體，呼叫原本的輸入比分/覆寫比分邏輯
+                    if (!isBye && onMatchClick) onMatchClick(match);
+                }}
             >
                 {/* 🔴 LIVE 閃爍標籤 */}
                 {isLive && (
@@ -63,7 +65,6 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
                     </div>
                 )}
 
-                {/* 第一位選手 */}
                 <div className={`p-2 flex justify-between items-center border-b ${isLive ? 'border-slate-700' : 'border-slate-100'} ${match.winnerId === match.player1Id && !isLive ? 'bg-emerald-50' : ''}`}>
                     <span className={`text-xs font-black truncate max-w-[120px] 
                         ${isLive ? 'text-white' : (match.winnerId === match.player1Id ? 'text-emerald-700' : (match.player1Id ? 'text-slate-700' : 'text-slate-300'))}`}>
@@ -74,7 +75,6 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
                     </span>
                 </div>
                 
-                {/* 第二位選手 */}
                 <div className={`p-2 flex justify-between items-center ${match.winnerId === match.player2Id && !isLive ? 'bg-emerald-50' : ''}`}>
                     <span className={`text-xs font-black truncate max-w-[120px] 
                         ${isLive ? 'text-white' : (match.winnerId === match.player2Id ? 'text-emerald-700' : (match.player2Id ? 'text-slate-700' : 'text-slate-300'))} ${isBye ? 'italic' : ''}`}>
@@ -85,9 +85,24 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
                     </span>
                 </div>
 
-                {/* 比賽編號 */}
+                {/* 🌟 核心升級：教練專屬轉播室捷徑按鈕 */}
+                {role === 'admin' && !isDone && !isBye && match.player1Id && match.player2Id && (
+                    <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-40">
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation(); // 防止觸發卡片本體的 onClick
+                                if(onStartLiveBroadcast) onStartLiveBroadcast(match);
+                            }} 
+                            className="flex flex-col items-center gap-1 text-white hover:text-red-400 transition-colors hover:scale-110"
+                        >
+                            <PlayCircle size={28} className="fill-red-500/20 stroke-red-500" />
+                            <span className="text-[10px] font-black tracking-widest uppercase">開啟轉播台</span>
+                        </button>
+                    </div>
+                )}
+
                 {!isLive && (
-                    <div className="absolute top-1/2 -right-3 -translate-y-1/2 w-6 h-6 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center text-[8px] font-black text-slate-400 shadow-sm">
+                    <div className="absolute top-1/2 -right-3 -translate-y-1/2 w-6 h-6 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center text-[8px] font-black text-slate-400 shadow-sm z-30">
                        #{match.bracketMatchNumber}
                     </div>
                 )}
