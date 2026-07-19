@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.15: 🐞 重大修復：修復 rankedStudents 使用 class+classNo 導致升級時學生被當成重複項目而集體消失的嚴重 Bug。
+// Version 1.18: 🚀 路由架構升級：引入 React Router，實現專屬網址與瀏覽器歷史紀錄支援。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -34,6 +34,9 @@ import { useFirebaseData } from './hooks/useFirebaseData';
 import LiveScoreboardDisplay from './components/LiveScoreboardDisplay';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 
+// 👉 1.18 新增：引入 React Router 核心套件
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+
 import {
   Activity, ArrowLeft, Award, BookMarked, BookOpen, Bookmark, Cake, Calendar as CalendarIcon, Camera, CheckCircle2,
   ChevronDown, ChevronRight, ClipboardCheck, Clock, Coffee, Columns, Crown, DollarSign, Download, ExternalLink, Eye,
@@ -61,7 +64,7 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.15";
+const CURRENT_VERSION = "1.18";
 
 momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
@@ -83,9 +86,14 @@ const SchoolLogo = ({ size = 48, className = "", systemConfig }) => {
   );
 };
 
-const NavButton = ({ tabName, activeTab, setActiveTab, setSidebarOpen, icon, children }) => {
+// 👉 1.18 修改：使用 useNavigate 進行路由跳轉
+const NavButton = ({ to, setSidebarOpen, icon, children }) => {
     const [isHovered, setIsHovered] = useState(false);
-    const isActive = activeTab === tabName;
+    const navigate = useNavigate();
+    const location = useLocation();
+    
+    const isActive = location.pathname === to;
+    
     const activeStyle = { backgroundColor: 'var(--theme-sidebar-active-bg)', color: 'var(--theme-sidebar-active-text)', boxShadow: '0 10px 15px -3px rgba(var(--theme-accent-rgb, 59, 130, 246), 0.2)' };
     const inactiveStyle = { color: 'var(--theme-sidebar-text)', backgroundColor: 'transparent' };
     const hoverStyle = { backgroundColor: 'rgba(128, 128, 128, 0.05)' };
@@ -93,13 +101,20 @@ const NavButton = ({ tabName, activeTab, setActiveTab, setSidebarOpen, icon, chi
     if (!isActive && isHovered) style = {...style, ...hoverStyle};
     
     return (
-        <button onClick={() => { setActiveTab(tabName); setSidebarOpen(false); }} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all text-left font-bold" style={style} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
+        <button 
+            onClick={() => { navigate(to); setSidebarOpen(false); }} 
+            className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all text-left font-bold" 
+            style={style} 
+            onMouseEnter={() => setIsHovered(true)} 
+            onMouseLeave={() => setIsHovered(false)}
+        >
           {icon} {children}
         </button>
     );
 };
 
-export default function App() {
+// 👉 1.18: 核心應用程式包裝
+function MainApp() {
   const [user, setUser] = useState(null);
 
   const { 
@@ -108,15 +123,17 @@ export default function App() {
 
   const [role, setRole] = useState(null);
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
-  const [activeTab, setActiveTab] = useState('');
   const [liveMatches, setLiveMatches] = useState([]);
   const [showUmpirePanel, setShowUmpirePanel] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
-  
   const [seasonArchives, setSeasonArchives] = useState([]);
+  
+  // 👉 1.18 新增：路由資訊
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const syncGoogleDriveGallery = async () => {
     setIsSyncingDrive(true);
@@ -377,6 +394,15 @@ export default function App() {
     return Object.values(albums).sort((a,b) => b.lastUpdated - a.lastUpdated);
   }, [galleryItems]);
 
+  useEffect(() => {
+    const defaultLogoUrl = "https://cdn.jsdelivr.net/gh/ckysams-lab/Squash_reactweb@56552b6e92b3e5d025c5971640eeb4e5b1973e13/image%20(1).png";
+    const logoUrl = systemConfig?.schoolLogo || defaultLogoUrl;
+    try {
+      const link = document.querySelector("link[rel~='icon']") || document.createElement('link');
+      link.type = 'image/png'; link.rel = 'icon'; link.href = logoUrl; document.getElementsByTagName('head')[0].appendChild(link); document.title = "BCKLAS 壁球校隊系統";
+    } catch(e) { console.error("Favicon error", e); }
+  }, [systemConfig?.schoolLogo]);
+
   const handleSaveAssessment = async () => {
     const { studentId, date, notes = '', situps = 0, shuttleRun = 0, enduranceRun = 0, gripStrength = 0, flexibility = 0, fhDrive = 0, bhDrive = 0, fhVolley = 0, bhVolley = 0, rankT1 = '', rankT2 = '', rankT3 = '', hoursT1 = '', hoursT2 = '', hoursT3 = '' } = newAssessment;
     if (!studentId || !date) { alert("請選擇學員並填寫評估日期！"); return; }
@@ -432,13 +458,14 @@ export default function App() {
     setIsUpdating(false);
   };
 
+  // 👉 1.18 修改：登入成功後，使用 navigate 進行跳轉
   const handleLogin = async (type, credentials) => {
     if (type === 'admin') {
       const { email, password } = credentials;
       if (!email || !password) { alert('請輸入教練電郵和密碼'); return; }
       try {
         await signInWithEmailAndPassword(auth, email, password);
-        setRole('admin'); setShowLoginModal(false); setActiveTab('competitions');
+        setRole('admin'); setShowLoginModal(false); navigate('/competitions');
       } catch (error) { console.error("Admin Login failed", error); alert('登入失敗：' + error.message + '\n(請確認教練帳號密碼是否正確)'); }
     } else {
       const { classStr, classNo, password } = credentials;
@@ -449,23 +476,22 @@ export default function App() {
         const matchedStudent = students.find(s => s.authEmail === studentAuthEmail);
         if (matchedStudent) { setCurrentUserInfo(matchedStudent); } 
         else { setCurrentUserInfo({ name: '同學', authEmail: studentAuthEmail }); }
-        setRole('student'); setShowLoginModal(false); setActiveTab('competitions');
+        setRole('student'); setShowLoginModal(false); navigate('/competitions');
       } catch (error) { console.error("Student Login failed", error); alert('登入失敗：\n(請確認班別、班號和密碼是否正確)'); }
     }
   };
 
+  // 👉 1.18 修改：登出後導向首頁
   const handleLogout = async () => { 
-    try { await signOut(auth); setRole(null); setCurrentUserInfo(null); setShowLoginModal(true); setSidebarOpen(false); } 
+    try { await signOut(auth); setRole(null); setCurrentUserInfo(null); setShowLoginModal(true); setSidebarOpen(false); navigate('/'); } 
     catch (e) { console.error("Logout error", e); }
   };
 
-  // 🐞 核心修復：這就是造成 79 名學生消失的地方！
   const rankedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
     const uniqueMap = new Map();
     students.forEach(s => {
-      // ✅ 修正點：使用唯一 ID 作為 Key，這樣班別為空的學生就不會互相覆寫了！
-      const key = s.id; 
+      const key = s.id; // ✅ 沿用修正過的以 s.id 判斷
       const currentPoints = Number(s.points) || 0; 
       if (!uniqueMap.has(key)) { uniqueMap.set(key, { ...s, totalPoints: currentPoints }); } 
       else {
@@ -1072,7 +1098,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if(activeTab === 'monthlyStarsAdmin') {
+    if(location.pathname === '/admin/monthly-stars') {
       const dataForMonth = monthlyStars.find(ms => ms.id === selectedMonthForAdmin);
       const emptyData = {
           month: selectedMonthForAdmin,
@@ -1083,7 +1109,7 @@ export default function App() {
       setMalePhotoPreview(dataForMonth?.maleWinner?.fullBodyPhotoUrl || null);
       setFemalePhotoPreview(dataForMonth?.femaleWinner?.fullBodyPhotoUrl || null);
     }
-  }, [selectedMonthForAdmin, monthlyStars, activeTab]);
+  }, [selectedMonthForAdmin, monthlyStars, location.pathname]);
 
   const handleGeneratePoster = async () => {
     setIsGeneratingPoster(true);
@@ -1185,28 +1211,27 @@ export default function App() {
                 {(role === 'admin' || role === 'student') && (
                   <>
                     <div className="text-[10px] uppercase tracking-widest mb-4 px-6" style={{ color: 'var(--theme-text-faint)' }}>主選單</div>
-                    <NavButton tabName="myDashboard" icon={<UserCheck size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>我的表現</NavButton>
-                    <NavButton tabName="monthlyStars" icon={<Star size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>每月之星</NavButton>
-                    <NavButton tabName="rankings" icon={<Trophy size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>積分排行</NavButton>
-                    <NavButton tabName="league" icon={<Swords size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>聯賽專區</NavButton>
-                    <NavButton tabName="gallery" icon={<ImageIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>精彩花絮</NavButton>
-                    <NavButton tabName="awards" icon={<Award size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>獎項成就</NavButton>
-                    <NavButton tabName="seasonArchives" icon={<Archive size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>歷年賽季</NavButton>
-                    
-                    <NavButton tabName="schedules" icon={<CalendarIcon size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>訓練日程</NavButton>
-                    <NavButton tabName="competitions" icon={<Megaphone size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>比賽與公告</NavButton>
+                    <NavButton to="/my-dashboard" icon={<UserCheck size={20} />} setSidebarOpen={setSidebarOpen}>我的表現</NavButton>
+                    <NavButton to="/monthly-stars" icon={<Star size={20} />} setSidebarOpen={setSidebarOpen}>每月之星</NavButton>
+                    <NavButton to="/rankings" icon={<Trophy size={20} />} setSidebarOpen={setSidebarOpen}>積分排行</NavButton>
+                    <NavButton to="/league" icon={<Swords size={20} />} setSidebarOpen={setSidebarOpen}>聯賽專區</NavButton>
+                    <NavButton to="/gallery" icon={<ImageIcon size={20} />} setSidebarOpen={setSidebarOpen}>精彩花絮</NavButton>
+                    <NavButton to="/awards" icon={<Award size={20} />} setSidebarOpen={setSidebarOpen}>獎項成就</NavButton>
+                    <NavButton to="/season-archives" icon={<Archive size={20} />} setSidebarOpen={setSidebarOpen}>歷年賽季</NavButton>
+                    <NavButton to="/schedules" icon={<CalendarIcon size={20} />} setSidebarOpen={setSidebarOpen}>訓練日程</NavButton>
+                    <NavButton to="/competitions" icon={<Megaphone size={20} />} setSidebarOpen={setSidebarOpen}>比賽與公告</NavButton>
                   </>
                 )}
                 {role === 'admin' && (
                   <>
                     <div className="text-[10px] uppercase tracking-widest my-6 px-6 pt-6 border-t" style={{ color: 'var(--theme-text-faint)', borderColor: 'var(--theme-border)' }}>教練工具</div>
-                    <NavButton tabName="dashboard" icon={<LayoutDashboard size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>管理概況</NavButton>
-                    <NavButton tabName="assessments" icon={<Activity size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>綜合能力評估</NavButton>
-                    <NavButton tabName="monthlyStarsAdmin" icon={<Crown size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>每月之星管理</NavButton>
-                    <NavButton tabName="students" icon={<Users size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>隊員管理</NavButton>
-                    <NavButton tabName="attendance" icon={<ClipboardCheck size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>快速點名</NavButton>
-                    <NavButton tabName="financial" icon={<DollarSign size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>財務收支</NavButton>
-                    <NavButton tabName="settings" icon={<Settings2 size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} setSidebarOpen={setSidebarOpen}>系統設定</NavButton>
+                    <NavButton to="/dashboard" icon={<LayoutDashboard size={20} />} setSidebarOpen={setSidebarOpen}>管理概況</NavButton>
+                    <NavButton to="/assessments" icon={<Activity size={20} />} setSidebarOpen={setSidebarOpen}>綜合能力評估</NavButton>
+                    <NavButton to="/admin/monthly-stars" icon={<Crown size={20} />} setSidebarOpen={setSidebarOpen}>每月之星管理</NavButton>
+                    <NavButton to="/admin/students" icon={<Users size={20} />} setSidebarOpen={setSidebarOpen}>隊員管理</NavButton>
+                    <NavButton to="/admin/attendance" icon={<ClipboardCheck size={20} />} setSidebarOpen={setSidebarOpen}>快速點名</NavButton>
+                    <NavButton to="/admin/financial" icon={<DollarSign size={20} />} setSidebarOpen={setSidebarOpen}>財務收支</NavButton>
+                    <NavButton to="/admin/settings" icon={<Settings2 size={20} />} setSidebarOpen={setSidebarOpen}>系統設定</NavButton>
                   </>
                 )}
               </>
@@ -1238,22 +1263,22 @@ export default function App() {
             <div>
               <h1 className="text-3xl font-black tracking-tight text-slate-800">
                 {viewingStudent ? "👨‍🎓 球員儀表板" :
-                 activeTab === 'myDashboard' ? "📊 我的儀表板" :
-                 activeTab === 'rankings' ? "🏆 積分排行榜" :
-                 activeTab === 'dashboard' ? "📊 管理總結" :
-                 activeTab === 'students' ? "👥 隊員檔案庫" :
-                 activeTab === 'attendance' ? "✅ 日程連動點名" :
-                 activeTab === 'competitions' ? "🏸 比賽資訊公告" :
-                 activeTab === 'schedules' ? "📅 訓練班日程表" :
-                 activeTab === 'gallery' ? "📸 精彩花絮" :
-                 activeTab === 'awards' ? "🏆 獎項成就" :
-                 activeTab === 'league' ? "🗓️ 聯賽專區" :
-                 activeTab === 'seasonArchives' ? "🏛️ 歷年賽季" : 
-                 activeTab === 'financial' ? "💰 財務收支管理" :
-                 activeTab === 'settings' ? "⚙️ 系統核心設定" :
-                 activeTab === 'monthlyStarsAdmin' ? "🌟 每月之星管理" :
-                 activeTab === 'monthlyStars' ? "🌟 每月之星" :
-                 activeTab === 'assessments' ? "📋 綜合能力評估" : ""}
+                 location.pathname === '/my-dashboard' ? "📊 我的儀表板" :
+                 location.pathname === '/rankings' ? "🏆 積分排行榜" :
+                 location.pathname === '/dashboard' ? "📊 管理總結" :
+                 location.pathname === '/admin/students' ? "👥 隊員檔案庫" :
+                 location.pathname === '/admin/attendance' ? "✅ 日程連動點名" :
+                 location.pathname === '/competitions' ? "🏸 比賽資訊公告" :
+                 location.pathname === '/schedules' ? "📅 訓練班日程表" :
+                 location.pathname === '/gallery' ? "📸 精彩花絮" :
+                 location.pathname === '/awards' ? "🏆 獎項成就" :
+                 location.pathname === '/league' ? "🗓️ 聯賽專區" :
+                 location.pathname === '/season-archives' ? "🏛️ 歷年賽季" : 
+                 location.pathname === '/admin/financial' ? "💰 財務收支管理" :
+                 location.pathname === '/admin/settings' ? "⚙️ 系統核心設定" :
+                 location.pathname === '/admin/monthly-stars' ? "🌟 每月之星管理" :
+                 location.pathname === '/monthly-stars' ? "🌟 每月之星" :
+                 location.pathname === '/assessments' ? "📋 綜合能力評估" : ""}
               </h1>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
                 BCKLAS SQUASH TEAM MANAGEMENT SYSTEM
@@ -1314,7 +1339,7 @@ export default function App() {
                         <Trash2 size={18}/> 刪除此課程
                     </button>
                     {moment(selectedSchedule.date).isSame(new Date(), 'day') && (
-                        <button onClick={() => { setActiveTab('attendance'); setSelectedSchedule(null); }} className="flex-1 text-center py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all shadow-md">前往點名</button>
+                        <button onClick={() => { navigate('/admin/attendance'); setSelectedSchedule(null); }} className="flex-1 text-center py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition-all shadow-md">前往點名</button>
                     )}
                   </div>
                 )}
@@ -1358,133 +1383,105 @@ export default function App() {
           {viewingStudent && (
               <PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} onBadgeClick={setViewingBadge} tacticalShots={tacticalShots} currentUserInfo={currentUserInfo} role={role} handleCheerMatch={handleCheerMatch} playerJournals={playerJournals} handleAddJournalEntry={handleAddJournalEntry} handleReplyJournalEntry={handleReplyJournalEntry} />
           )}
-          
-          {!viewingStudent && activeTab === 'myDashboard' && role === 'student' && (
-              <MyDashboardPage currentUserInfo={currentUserInfo} rankedStudents={rankedStudents} playerDashboardData={myDashboardData} setViewingBadge={setViewingBadge} tacticalShots={tacticalShots} role={role} handleCheerMatch={handleCheerMatch} showcaseEditorOpen={showcaseEditorOpen} setShowcaseEditorOpen={setShowcaseEditorOpen} selectedFeaturedBadges={selectedFeaturedBadges} setSelectedFeaturedBadges={setSelectedFeaturedBadges} handleSaveFeaturedBadges={handleSaveFeaturedBadges} isUpdating={isUpdating} playerJournals={playerJournals} handleAddJournalEntry={handleAddJournalEntry} handleReplyJournalEntry={handleReplyJournalEntry} />
-          )}
-        
-          {!viewingStudent && activeTab === 'dashboard' && role === 'admin' && (
-            <DashboardPage dashboardStats={dashboardStats} assessments={assessments} />
-          )}
-                              
-          {!viewingStudent && activeTab === 'monthlyStars' && (<MonthlyStarsPage monthlyStarsData={monthlyStars} />)}
 
-          {!viewingStudent && activeTab === 'assessments' && role === 'admin' && (
-              <AssessmentsPage students={students} assessments={assessments} newAssessment={newAssessment} setNewAssessment={setNewAssessment} handleSaveAssessment={handleSaveAssessment} isUpdating={isUpdating} />
-          )}
+          {/* 👉 1.18 核心：以 React Router 處理所有頁面導航 */}
+          {!viewingStudent && role && (
+            <Routes>
+                <Route path="/" element={<Navigate to="/competitions" replace />} />
+                
+                <Route path="/my-dashboard" element={role === 'student' ? <MyDashboardPage currentUserInfo={currentUserInfo} rankedStudents={rankedStudents} playerDashboardData={playerDashboardData} setViewingBadge={setViewingBadge} tacticalShots={tacticalShots} role={role} handleCheerMatch={handleCheerMatch} showcaseEditorOpen={showcaseEditorOpen} setShowcaseEditorOpen={setShowcaseEditorOpen} selectedFeaturedBadges={selectedFeaturedBadges} setSelectedFeaturedBadges={setSelectedFeaturedBadges} handleSaveFeaturedBadges={handleSaveFeaturedBadges} isUpdating={isUpdating} playerJournals={playerJournals} handleAddJournalEntry={handleAddJournalEntry} handleReplyJournalEntry={handleReplyJournalEntry} /> : <Navigate to="/" />} />
+                <Route path="/monthly-stars" element={<MonthlyStarsPage monthlyStarsData={monthlyStars} />} />
+                <Route path="/rankings" element={<RankingPage role={role} rankedStudents={rankedStudents} filteredStudents={filteredStudents} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setShowPlayerCard={setShowPlayerCard} adjustPoints={adjustPoints} deleteItem={deleteItem} leagueMatches={leagueMatches} />} />
+                <Route path="/league" element={<LeaguePage role={role} currentUserInfo={currentUserInfo} setShowTacticalBoard={setShowTacticalBoard} setShowUmpirePanel={setShowUmpirePanel} setActiveLeagueMatch={setActiveLeagueMatch} setShowTournamentModal={setShowTournamentModal} selectedTournament={selectedTournament} setSelectedTournament={setSelectedTournament} tournamentList={tournamentList} leagueMatches={leagueMatches} myTournamentStats={myTournamentStats} myUpcomingMatches={myUpcomingMatches} groupedMatches={groupedMatches} tournamentStandings={tournamentStandings} handleCheerMatch={handleCheerMatch} handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore} handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} schoolLogo={systemConfig.schoolLogo} students={students} db={db} appId={appId} />} />
+                <Route path="/gallery" element={<GalleryPage role={role} currentAlbum={currentAlbum} setCurrentAlbum={setCurrentAlbum} isUploading={isUploading} isSyncingDrive={isSyncingDrive} syncGoogleDriveGallery={syncGoogleDriveGallery} handleAddMedia={handleAddMedia} galleryAlbums={galleryAlbums} setViewingImage={setViewingImage} getYouTubeEmbedUrl={getYouTubeEmbedUrl} deleteItem={deleteItem} />} />
+                <Route path="/awards" element={<AwardsPage role={role} awards={awards} students={students} awardsViewMode={awardsViewMode} setAwardsViewMode={setAwardsViewMode} setShowAddAwardModal={setShowAddAwardModal} deleteItem={deleteItem} setShowPlayerCard={setShowPlayerCard} />} />
+                <Route path="/season-archives" element={<SeasonArchivesPage archives={seasonArchives} handleArchiveSeason={handleArchiveSeason} role={role} deleteItem={deleteItem} />} />
+                <Route path="/schedules" element={<CalendarPage role={role} uniqueTrainingClasses={uniqueTrainingClasses} selectedClassFilter={selectedClassFilter} setSelectedClassFilter={setSelectedClassFilter} calendarEvents={calendarEvents} setSelectedSchedule={setSelectedSchedule} handleCSVImportSchedules={handleCSVImportSchedules} />} />
+                <Route path="/competitions" element={<CompetitionsPage role={role} competitions={competitions} generateCompetitionRoster={generateCompetitionRoster} deleteItem={deleteItem} db={db} appId={appId} />} />
 
-          {!viewingStudent && activeTab === 'rankings' && (
-              <RankingPage 
-                  role={role} 
-                  rankedStudents={rankedStudents} 
-                  filteredStudents={filteredStudents} 
-                  searchTerm={searchTerm} 
-                  setSearchTerm={setSearchTerm} 
-                  setShowPlayerCard={setShowPlayerCard} 
-                  adjustPoints={adjustPoints} 
-                  deleteItem={deleteItem} 
-                  leagueMatches={leagueMatches} 
-              />
-          )}
-
-          {!viewingStudent && activeTab === 'students' && role === 'admin' && (
-            <RosterPage students={students} filteredStudents={filteredStudents} birthYearStats={birthYearStats} selectedYearFilter={selectedYearFilter} setSelectedYearFilter={setSelectedYearFilter} handleCSVImportStudents={handleCSVImportStudents} setViewingStudent={setViewingStudent} handleManualAward={handleManualAward} handleUpdateSquashClass={handleUpdateSquashClass} setEditingStudent={setEditingStudent} deleteItem={deleteItem} setShowAddPlayerModal={setShowAddPlayerModal} db={db} appId={appId} />
-          )}
-
-          {!viewingStudent && activeTab === 'monthlyStarsAdmin' && role === 'admin' && (
-              <div className="animate-in fade-in duration-500 font-bold">
-                  <div className="bg-white p-10 rounded-[3rem] border shadow-sm mb-8">
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                        <h3 className="text-3xl font-black">每月之星內容管理</h3>
-                        <input type="month" value={selectedMonthForAdmin} onChange={e => setSelectedMonthForAdmin(e.target.value)} className="bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg font-bold"/>
-                    </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                      <div className="bg-slate-50/70 p-8 rounded-3xl border space-y-4">
-                        <h4 className="text-xl font-black text-blue-600">每月之星 (男)</h4>
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 mb-2 block">選擇學員</label>
-                           <select value={monthlyStarEditData.maleWinner?.studentId || ''} onChange={e => handleMonthlyStarStudentSelect('maleWinner', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm outline-none">
-                             <option value="" disabled>請選擇一位男同學...</option>
-                             {students.sort((a,b) => a.class.localeCompare(b.class)).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
-                           </select>
-                        </div>
-                        <div><label className="text-xs font-bold text-slate-400 mb-2 block">獲選原因</label><textarea value={monthlyStarEditData.maleWinner?.reason || ''} onChange={e => handleMonthlyStarFieldChange('maleWinner', 'reason', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea></div>
-                        <div><label className="text-xs font-bold text-slate-400 mb-2 block">本年度目標</label><textarea value={monthlyStarEditData.maleWinner?.goals || ''} onChange={e => handleMonthlyStarFieldChange('maleWinner', 'goals', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea></div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 mb-2 block">上傳全身照</label>
-                          <div className="w-full aspect-[3/4] bg-white rounded-xl shadow-sm flex items-center justify-center overflow-hidden">
-                             {malePhotoPreview ? <img src={malePhotoPreview} alt="Preview" className="w-full h-full object-cover"/> : <span className="text-slate-300"><ImageIcon size={48}/></span>}
-                          </div>
-                          <input type="file" accept="image/*" onChange={e => handleMonthlyStarPhotoUpload('maleWinner', e.target.files[0])} className="mt-2 text-xs"/>
-                        </div>
+                <Route path="/dashboard" element={role === 'admin' ? <DashboardPage dashboardStats={dashboardStats} assessments={assessments} /> : <Navigate to="/" />} />
+                <Route path="/assessments" element={role === 'admin' ? <AssessmentsPage students={students} assessments={assessments} newAssessment={newAssessment} setNewAssessment={setNewAssessment} handleSaveAssessment={handleSaveAssessment} isUpdating={isUpdating} /> : <Navigate to="/" />} />
+                
+                {/* 管理員專屬的每月之星頁面，因為程式碼較多，這裡採用內嵌的方式渲染 */}
+                <Route path="/admin/monthly-stars" element={role === 'admin' ? (
+                  <div className="animate-in fade-in duration-500 font-bold">
+                    <div className="bg-white p-10 rounded-[3rem] border shadow-sm mb-8">
+                      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                          <h3 className="text-3xl font-black">每月之星內容管理</h3>
+                          <input type="month" value={selectedMonthForAdmin} onChange={e => setSelectedMonthForAdmin(e.target.value)} className="bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white transition-all rounded-2xl p-4 outline-none text-lg font-bold"/>
                       </div>
-                      <div className="bg-slate-50/70 p-8 rounded-3xl border space-y-4">
-                        <h4 className="text-xl font-black text-pink-500">每月之星 (女)</h4>
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 mb-2 block">選擇學員</label>
-                           <select value={monthlyStarEditData.femaleWinner?.studentId || ''} onChange={e => handleMonthlyStarStudentSelect('femaleWinner', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm outline-none">
-                             <option value="" disabled>請選擇一位女同學...</option>
-                             {students.sort((a,b) => a.class.localeCompare(b.class)).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
-                           </select>
-                        </div>
-                        <div><label className="text-xs font-bold text-slate-400 mb-2 block">獲選原因</label><textarea value={monthlyStarEditData.femaleWinner?.reason || ''} onChange={e => handleMonthlyStarFieldChange('femaleWinner', 'reason', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea></div>
-                        <div><label className="text-xs font-bold text-slate-400 mb-2 block">本年度目標</label><textarea value={monthlyStarEditData.femaleWinner?.goals || ''} onChange={e => handleMonthlyStarFieldChange('femaleWinner', 'goals', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea></div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 mb-2 block">上傳全身照</label>
-                          <div className="w-full aspect-[3/4] bg-white rounded-xl shadow-sm flex items-center justify-center overflow-hidden">
-                             {femalePhotoPreview ? <img src={femalePhotoPreview} alt="Preview" className="w-full h-full object-cover"/> : <span className="text-slate-300"><ImageIcon size={48}/></span>}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div className="bg-slate-50/70 p-8 rounded-3xl border space-y-4">
+                          <h4 className="text-xl font-black text-blue-600">每月之星 (男)</h4>
+                          <div>
+                            <label className="text-xs font-bold text-slate-400 mb-2 block">選擇學員</label>
+                             <select value={monthlyStarEditData.maleWinner?.studentId || ''} onChange={e => handleMonthlyStarStudentSelect('maleWinner', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm outline-none">
+                               <option value="" disabled>請選擇一位男同學...</option>
+                               {students.sort((a,b) => a.class.localeCompare(b.class)).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
+                             </select>
                           </div>
-                          <input type="file" accept="image/*" onChange={e => handleMonthlyStarPhotoUpload('femaleWinner', e.target.files[0])} className="mt-2 text-xs"/>
+                          <div><label className="text-xs font-bold text-slate-400 mb-2 block">獲選原因</label><textarea value={monthlyStarEditData.maleWinner?.reason || ''} onChange={e => handleMonthlyStarFieldChange('maleWinner', 'reason', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea></div>
+                          <div><label className="text-xs font-bold text-slate-400 mb-2 block">本年度目標</label><textarea value={monthlyStarEditData.maleWinner?.goals || ''} onChange={e => handleMonthlyStarFieldChange('maleWinner', 'goals', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea></div>
+                          <div>
+                            <label className="text-xs font-bold text-slate-400 mb-2 block">上傳全身照</label>
+                            <div className="w-full aspect-[3/4] bg-white rounded-xl shadow-sm flex items-center justify-center overflow-hidden">
+                               {malePhotoPreview ? <img src={malePhotoPreview} alt="Preview" className="w-full h-full object-cover"/> : <span className="text-slate-300"><ImageIcon size={48}/></span>}
+                            </div>
+                            <input type="file" accept="image/*" onChange={e => handleMonthlyStarPhotoUpload('maleWinner', e.target.files[0])} className="mt-2 text-xs"/>
+                          </div>
+                        </div>
+                        <div className="bg-slate-50/70 p-8 rounded-3xl border space-y-4">
+                          <h4 className="text-xl font-black text-pink-500">每月之星 (女)</h4>
+                          <div>
+                            <label className="text-xs font-bold text-slate-400 mb-2 block">選擇學員</label>
+                             <select value={monthlyStarEditData.femaleWinner?.studentId || ''} onChange={e => handleMonthlyStarStudentSelect('femaleWinner', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm outline-none">
+                               <option value="" disabled>請選擇一位女同學...</option>
+                               {students.sort((a,b) => a.class.localeCompare(b.class)).map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
+                             </select>
+                          </div>
+                          <div><label className="text-xs font-bold text-slate-400 mb-2 block">獲選原因</label><textarea value={monthlyStarEditData.femaleWinner?.reason || ''} onChange={e => handleMonthlyStarFieldChange('femaleWinner', 'reason', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea></div>
+                          <div><label className="text-xs font-bold text-slate-400 mb-2 block">本年度目標</label><textarea value={monthlyStarEditData.femaleWinner?.goals || ''} onChange={e => handleMonthlyStarFieldChange('femaleWinner', 'goals', e.target.value)} className="w-full bg-white p-4 rounded-xl shadow-sm h-24 outline-none"></textarea></div>
+                          <div>
+                            <label className="text-xs font-bold text-slate-400 mb-2 block">上傳全身照</label>
+                            <div className="w-full aspect-[3/4] bg-white rounded-xl shadow-sm flex items-center justify-center overflow-hidden">
+                               {femalePhotoPreview ? <img src={femalePhotoPreview} alt="Preview" className="w-full h-full object-cover"/> : <span className="text-slate-300"><ImageIcon size={48}/></span>}
+                            </div>
+                            <input type="file" accept="image/*" onChange={e => handleMonthlyStarPhotoUpload('femaleWinner', e.target.files[0])} className="mt-2 text-xs"/>
+                          </div>
                         </div>
                       </div>
                     </div>
+                    <div className="flex justify-end gap-4">
+                       <button onClick={handleGeneratePoster} disabled={isGeneratingPoster || !monthlyStarEditData.maleWinner.studentId || !monthlyStarEditData.femaleWinner.studentId} className="flex items-center gap-3 px-8 py-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all font-black disabled:opacity-50 disabled:cursor-not-allowed">
+                          {isGeneratingPoster ? <Loader2 className="animate-spin" /> : <Printer />} 下載本月海報
+                      </button>
+                      <button onClick={handleSaveMonthlyStar} disabled={isUpdating} className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all font-black disabled:opacity-50">
+                          {isUpdating ? <Loader2 className="animate-spin" /> : <Save />} 發佈 / 更新
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex justify-end gap-4">
-                     <button onClick={handleGeneratePoster} disabled={isGeneratingPoster || !monthlyStarEditData.maleWinner.studentId || !monthlyStarEditData.femaleWinner.studentId} className="flex items-center gap-3 px-8 py-4 bg-emerald-500 text-white rounded-2xl shadow-xl shadow-emerald-100 hover:bg-emerald-600 transition-all font-black disabled:opacity-50 disabled:cursor-not-allowed">
-                        {isGeneratingPoster ? <Loader2 className="animate-spin" /> : <Printer />} 下載本月海報
-                    </button>
-                    <button onClick={handleSaveMonthlyStar} disabled={isUpdating} className="flex items-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all font-black disabled:opacity-50">
-                        {isUpdating ? <Loader2 className="animate-spin" /> : <Save />} 發佈 / 更新
-                    </button>
-                  </div>
-              </div>
+                ) : <Navigate to="/" />} />
+                
+                <Route path="/admin/students" element={role === 'admin' ? <RosterPage students={students} filteredStudents={filteredStudents} birthYearStats={birthYearStats} selectedYearFilter={selectedYearFilter} setSelectedYearFilter={setSelectedYearFilter} handleCSVImportStudents={handleCSVImportStudents} setViewingStudent={setViewingStudent} handleManualAward={handleManualAward} handleUpdateSquashClass={handleUpdateSquashClass} setEditingStudent={setEditingStudent} deleteItem={deleteItem} setShowAddPlayerModal={setShowAddPlayerModal} db={db} appId={appId} /> : <Navigate to="/" />} />
+                <Route path="/admin/attendance" element={role === 'admin' ? <AttendancePage todaySchedule={todaySchedule} pendingAttendance={pendingAttendance} savePendingAttendance={savePendingAttendance} isUpdating={isUpdating} attendanceClassFilter={attendanceClassFilter} setAttendanceClassFilter={setAttendanceClassFilter} exportMatrixAttendanceCSV={exportMatrixAttendanceCSV} uniqueTrainingClasses={uniqueTrainingClasses} studentsInSelectedAttendanceClass={studentsInSelectedAttendanceClass} attendanceLogs={attendanceLogs} togglePendingAttendance={togglePendingAttendance} /> : <Navigate to="/" />} />
+                <Route path="/admin/financial" element={role === 'admin' ? <FinancialPage financeConfig={financeConfig} setFinanceConfig={setFinanceConfig} financialSummary={financialSummary} saveFinanceConfig={saveFinanceConfig} /> : <Navigate to="/" />} />
+                <Route path="/admin/settings" element={role === 'admin' ? <SettingsPage systemConfig={systemConfig} setSystemConfig={setSystemConfig} importEncoding={importEncoding} setImportEncoding={setImportEncoding} externalTournaments={externalTournaments} deleteItem={deleteItem} handleSeasonReset={handleSeasonReset} setIsUpdating={setIsUpdating} db={db} appId={appId} /> : <Navigate to="/" />} />
+            </Routes>
           )}
 
-          {!viewingStudent && activeTab === 'schedules' && (<CalendarPage role={role} uniqueTrainingClasses={uniqueTrainingClasses} selectedClassFilter={selectedClassFilter} setSelectedClassFilter={setSelectedClassFilter} calendarEvents={calendarEvents} setSelectedSchedule={setSelectedSchedule} handleCSVImportSchedules={handleCSVImportSchedules} />)}
-          {!viewingStudent && activeTab === 'attendance' && role === 'admin' && (<AttendancePage todaySchedule={todaySchedule} pendingAttendance={pendingAttendance} savePendingAttendance={savePendingAttendance} isUpdating={isUpdating} attendanceClassFilter={attendanceClassFilter} setAttendanceClassFilter={setAttendanceClassFilter} exportMatrixAttendanceCSV={exportMatrixAttendanceCSV} uniqueTrainingClasses={uniqueTrainingClasses} studentsInSelectedAttendanceClass={studentsInSelectedAttendanceClass} attendanceLogs={attendanceLogs} togglePendingAttendance={togglePendingAttendance} />)}
-          {!viewingStudent && activeTab === 'financial' && role === 'admin' && (<FinancialPage financeConfig={financeConfig} setFinanceConfig={setFinanceConfig} financialSummary={financialSummary} saveFinanceConfig={saveFinanceConfig} />)}
-          {!viewingStudent && activeTab === 'competitions' && (<CompetitionsPage role={role} competitions={competitions} generateCompetitionRoster={generateCompetitionRoster} deleteItem={deleteItem} db={db} appId={appId} />)}
-          {!viewingStudent && activeTab === 'gallery' && (<GalleryPage role={role} currentAlbum={currentAlbum} setCurrentAlbum={setCurrentAlbum} isUploading={isUploading} isSyncingDrive={isSyncingDrive} syncGoogleDriveGallery={syncGoogleDriveGallery} handleAddMedia={handleAddMedia} galleryAlbums={galleryAlbums} setViewingImage={setViewingImage} getYouTubeEmbedUrl={getYouTubeEmbedUrl} deleteItem={deleteItem} />)}
-          
-          {!viewingStudent && activeTab === 'awards' && (
-            <AwardsPage 
-                role={role} awards={awards} students={students} awardsViewMode={awardsViewMode} setAwardsViewMode={setAwardsViewMode} 
-                setShowAddAwardModal={setShowAddAwardModal} deleteItem={deleteItem} setShowPlayerCard={setShowPlayerCard}
-            />
-          )}
-
-          {!viewingStudent && activeTab === 'seasonArchives' && (
-            <SeasonArchivesPage archives={seasonArchives} handleArchiveSeason={handleArchiveSeason} role={role} deleteItem={deleteItem} />
-          )}
-          
-          {!viewingStudent && activeTab === 'league' && (role === 'admin' || role === 'student') && (
-              <LeaguePage 
-                  role={role} currentUserInfo={currentUserInfo} setShowTacticalBoard={setShowTacticalBoard} setShowUmpirePanel={setShowUmpirePanel}
-                  setActiveLeagueMatch={setActiveLeagueMatch} setShowTournamentModal={setShowTournamentModal} selectedTournament={selectedTournament}
-                  setSelectedTournament={setSelectedTournament} tournamentList={tournamentList} leagueMatches={leagueMatches}
-                  myTournamentStats={myTournamentStats} myUpcomingMatches={myUpcomingMatches} groupedMatches={groupedMatches}
-                  tournamentStandings={tournamentStandings} handleCheerMatch={handleCheerMatch} handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore}
-                  handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} schoolLogo={systemConfig.schoolLogo} students={students}
-                  db={db} appId={appId} 
-              />
-          )}
-            
-          {!viewingStudent && activeTab === 'settings' && role === 'admin' && (<SettingsPage systemConfig={systemConfig} setSystemConfig={setSystemConfig} importEncoding={importEncoding} setImportEncoding={setImportEncoding} externalTournaments={externalTournaments} deleteItem={deleteItem} handleSeasonReset={handleSeasonReset} setIsUpdating={setIsUpdating} db={db} appId={appId} />)}
-          
           {showAddPlayerModal && (<AddPlayerModal onClose={() => setShowAddPlayerModal(false)} db={db} appId={appId} compressImage={compressImage} />)}
           {editingStudent && (<EditPlayerModal student={editingStudent} onClose={() => setEditingStudent(null)} db={db} appId={appId} compressImage={compressImage} handleSetupStudentAuth={handleSetupStudentAuth} />)}        
         </div>
       </main>
     </div>
+  );
+}
+
+// 👉 1.18 核心：外層包裹 Router 啟動路由功能
+export default function AppWrapper() {
+  return (
+    <Router>
+      <MainApp />
+    </Router>
   );
 }
