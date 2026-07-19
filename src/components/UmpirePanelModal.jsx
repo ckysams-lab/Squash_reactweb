@@ -1,4 +1,5 @@
-// src/components/UmpirePanelModal.jsx (Version 4.5 - Fix Empty View & Full Pro Analytics Integration)
+// src/components/UmpirePanelModal.jsx (Version 4.6 - Bracket Progression Integration)
+// 升級內容：讓轉播台支援淘汰盃賽，完賽後自動將贏家推進至下一輪樹狀圖。
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Activity, Timer, AlertTriangle, ListChecks, RotateCcw, Swords, Play, Flag, Crosshair, TrendingDown } from 'lucide-react';
@@ -138,17 +139,47 @@ const UmpirePanelModal = ({
                         const lMatch = leagueMatches.find(m => m.id === match.leagueMatchId);
                         if (lMatch) {
                             const winnerId = matchWinnerNum === 1 ? lMatch.player1Id : lMatch.player2Id;
-                            const winnerStudent = students.find(s => s.id === winnerId);
-                            const loserStudent = students.find(s => s.id === (matchWinnerNum === 1 ? lMatch.player2Id : lMatch.player1Id));
-                            if (winnerStudent && loserStudent) {
-                                const winnerRank = rankedStudents.findIndex(s => s.id === winnerStudent.id) + 1;
-                                const loserRank = rankedStudents.findIndex(s => s.id === loserStudent.id) + 1;
-                                const pointsToAdd = ((winnerRank - loserRank) >= 5 || (BADGE_DATA[winnerStudent.badge]?.level < BADGE_DATA[loserStudent.badge]?.level)) ? 20 : 10;
-                                const batch = writeBatch(db);
-                                batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', lMatch.id), { score1: newGames1, score2: newGames2, winnerId: winnerId, status: 'completed', updatedAt: serverTimestamp() });
-                                batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'students', winnerStudent.id), { points: increment(pointsToAdd), lastUpdated: serverTimestamp() });
-                                batch.commit();
+                            const winnerName = matchWinnerNum === 1 ? lMatch.player1Name : lMatch.player2Name; // 取得贏家姓名
+                            
+                            const batch = writeBatch(db);
+                            
+                            // 更新該場比賽結果
+                            batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', lMatch.id), { 
+                                score1: newGames1, 
+                                score2: newGames2, 
+                                winnerId: winnerId, 
+                                status: 'completed', 
+                                updatedAt: serverTimestamp() 
+                            });
+
+                            // 🏆 4.6 核心修復：盃賽引擎晉級判定
+                            if (lMatch.matchType === 'tournament_bracket') {
+                                if (lMatch.nextMatchId) {
+                                    const nextMatchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', lMatch.nextMatchId);
+                                    const updateObj = {};
+                                    if (lMatch.nextMatchSlot === 'player1') { 
+                                        updateObj.player1Id = winnerId; 
+                                        updateObj.player1Name = winnerName; 
+                                    } else { 
+                                        updateObj.player2Id = winnerId; 
+                                        updateObj.player2Name = winnerName; 
+                                    }
+                                    batch.update(nextMatchRef, updateObj);
+                                }
+                            } else {
+                                // 聯賽引擎：結算日常 Elo 積分
+                                const winnerStudent = students.find(s => s.id === winnerId);
+                                const loserStudent = students.find(s => s.id === (matchWinnerNum === 1 ? lMatch.player2Id : lMatch.player1Id));
+                                if (winnerStudent && loserStudent) {
+                                    const winnerRank = rankedStudents.findIndex(s => s.id === winnerStudent.id) + 1;
+                                    const loserRank = rankedStudents.findIndex(s => s.id === loserStudent.id) + 1;
+                                    const pointsToAdd = ((winnerRank - loserRank) >= 5 || (BADGE_DATA[winnerStudent.badge]?.level < BADGE_DATA[loserStudent.badge]?.level)) ? 20 : 10;
+                                    
+                                    batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'students', winnerStudent.id), { points: increment(pointsToAdd), lastUpdated: serverTimestamp() });
+                                }
                             }
+                            
+                            batch.commit();
                         }
                     }
                 }
@@ -195,14 +226,13 @@ const UmpirePanelModal = ({
                 
                 <div className="bg-slate-900 p-6 flex justify-between items-center shrink-0">
                     <h3 className="text-xl font-black text-white flex items-center gap-3">
-                        <Activity className="text-red-500 animate-pulse"/> Pro Umpire Console <span className="text-xs bg-slate-700 px-2 py-1 rounded text-slate-300">v4.5 Full Analytics</span>
+                        <Activity className="text-red-500 animate-pulse"/> Pro Umpire Console <span className="text-xs bg-slate-700 px-2 py-1 rounded text-slate-300">v4.6 Bracket Sync</span>
                     </h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={24}/></button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6">
                     
-                    {/* 完整修復：重回賽事設定區 */}
                     <div className="mb-8 p-8 bg-white rounded-[2.5rem] border-2 border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
                         <div className="flex items-center gap-3 border-b pb-4">
                             <Play className="text-red-600 fill-red-600" size={24}/>
@@ -257,7 +287,6 @@ const UmpirePanelModal = ({
                         </button>
                     </div>
                     
-                    {/* 進行中的比賽面板 */}
                     {liveMatches.filter(m => m.status === 'live').map(match => {
                         const p1Status = checkGameMatchBall(match.score1, match.score2, match.format, match.games1, match.bestOf);
                         const p2Status = checkGameMatchBall(match.score2, match.score1, match.format, match.games2, match.bestOf);
@@ -293,7 +322,6 @@ const UmpirePanelModal = ({
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                                         
-                                        {/* Player 1 控制區 */}
                                         <div className={`p-6 rounded-[2rem] border-4 transition-all flex flex-col justify-between items-center relative ${match.server === 1 ? 'border-blue-500 bg-blue-50 shadow-lg' : 'border-slate-100 bg-white'}`}>
                                             {p1Status && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-400 text-yellow-900 px-3 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1 shadow-sm"><Flag size={12}/> {p1Status}</div>}
                                             <h3 className={`text-2xl font-black w-full text-center mb-2 ${match.server === 1 ? 'text-blue-700' : 'text-slate-700'}`}>{match.player1}</h3>
@@ -327,7 +355,6 @@ const UmpirePanelModal = ({
                                             </div>
                                         </div>
 
-                                        {/* Player 2 控制區 */}
                                         <div className={`p-6 rounded-[2rem] border-4 transition-all flex flex-col justify-between items-center relative ${match.server === 2 ? 'border-rose-500 bg-rose-50 shadow-lg' : 'border-slate-100 bg-white'}`}>
                                             {p2Status && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-400 text-yellow-900 px-3 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1 shadow-sm"><Flag size={12}/> {p2Status}</div>}
                                             <h3 className={`text-2xl font-black w-full text-center mb-2 ${match.server === 2 ? 'text-rose-700' : 'text-slate-700'}`}>{match.player2}</h3>
@@ -369,7 +396,6 @@ const UmpirePanelModal = ({
                                     </div>
                                 </div>
 
-                                {/* 高階逐分紀錄表 */}
                                 <div className="w-full lg:w-80 bg-slate-900 rounded-3xl border-4 border-slate-800 shadow-2xl flex flex-col overflow-hidden">
                                     <div className="bg-black/50 p-4 border-b border-slate-800 flex justify-between items-center">
                                         <h4 className="text-white font-black flex items-center gap-2"><ListChecks size={18}/> 專業賽事分析流</h4>
