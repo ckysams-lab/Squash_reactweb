@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.18: 🚀 路由架構升級：引入 React Router，實現專屬網址與瀏覽器歷史紀錄支援。
+// Version 1.19: ⚡ 效能優化：全面導入 useCallback，消除因函數重建導致的無效重繪 (Unnecessary Re-renders)。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -32,9 +32,8 @@ import SeasonArchivesPage from './pages/SeasonArchivesPage';
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
 import { useFirebaseData } from './hooks/useFirebaseData';
 import LiveScoreboardDisplay from './components/LiveScoreboardDisplay';
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'; // 👉 新增 useCallback
 
-// 👉 1.18 新增：引入 React Router 核心套件
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 
 import {
@@ -64,7 +63,7 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.18";
+const CURRENT_VERSION = "1.19";
 
 momentLocalizer(moment);
 const appId = 'bcklas-squash-core-v1';
@@ -86,7 +85,6 @@ const SchoolLogo = ({ size = 48, className = "", systemConfig }) => {
   );
 };
 
-// 👉 1.18 修改：使用 useNavigate 進行路由跳轉
 const NavButton = ({ to, setSidebarOpen, icon, children }) => {
     const [isHovered, setIsHovered] = useState(false);
     const navigate = useNavigate();
@@ -113,7 +111,6 @@ const NavButton = ({ to, setSidebarOpen, icon, children }) => {
     );
 };
 
-// 👉 1.18: 核心應用程式包裝
 function MainApp() {
   const [user, setUser] = useState(null);
 
@@ -130,12 +127,13 @@ function MainApp() {
   const [activeLeagueMatch, setActiveLeagueMatch] = useState(null);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   const [seasonArchives, setSeasonArchives] = useState([]);
+  const [isUpdating, setIsUpdating] = useState(false);
   
-  // 👉 1.18 新增：路由資訊
   const location = useLocation();
   const navigate = useNavigate();
 
-  const syncGoogleDriveGallery = async () => {
+  // 👉 1.19 優化：將跨元件傳遞的函數加上 useCallback，並指定其依賴陣列
+  const syncGoogleDriveGallery = useCallback(async () => {
     setIsSyncingDrive(true);
     try {
         const gasUrl = "https://script.google.com/macros/s/AKfycby_ynudWf8U11QIpm5SdVJgFvFoOM4yVZzw_b-VrT5f6t2BnVavzYjdDBUMP3JIg91zfw/exec"; 
@@ -165,19 +163,7 @@ function MainApp() {
         } else { alert("同步失敗：" + (result.message || '無法解析來自 Google Drive 的資料。')); }
     } catch (error) { console.error("Drive sync error:", error); alert("網路錯誤，無法連接 Google Drive。"); }
     setIsSyncingDrive(false);
-  };
-
-  const parseCsvRow = (row) => {
-    const result = []; let current = ''; let inQuotes = false;
-    for (let i = 0; i < row.length; i++) {
-        const char = row[i];
-        if (char === '"') { inQuotes = !inQuotes; } 
-        else if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; } 
-        else { current += char; }
-    }
-    result.push(current.trim());
-    return result;
-  };
+  }, [galleryItems]);
 
   const [newAssessment, setNewAssessment] = useState({
     studentId: '', date: new Date().toISOString().split('T')[0], situps: '', shuttleRun: '', enduranceRun: '', 
@@ -197,7 +183,8 @@ function MainApp() {
   const [showAwardModal, setShowAwardModal] = useState(false);
   const [studentToAward, setStudentToAward] = useState(null);
 
-  const handleSaveFeaturedBadges = async () => {
+  // 👉 1.19 優化
+  const handleSaveFeaturedBadges = useCallback(async () => {
     if (!currentUserInfo) return;
     const studentData = students.find(s => s.authEmail === currentUserInfo.authEmail || s.id === currentUserInfo.id);
     if (!studentData || !studentData.id) { alert("找不到你的帳號資料，請嘗試重新登入再試一次！"); return; }
@@ -214,7 +201,7 @@ function MainApp() {
         alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網絡。`);
     }
     setIsUpdating(false);
-  };
+  }, [currentUserInfo, students, selectedFeaturedBadges]);
 
   const [showTacticalBoard, setShowTacticalBoard] = useState(false);
   const [systemConfig, setSystemConfig] = useState({ announcements: [], theme: 'default', schoolLogo: null });
@@ -229,7 +216,6 @@ function MainApp() {
   const [attendanceClassFilter, setAttendanceClassFilter] = useState('ALL');
   const [selectedYearFilter, setSelectedYearFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
-  const [isUpdating, setIsUpdating] = useState(false);
   const galleryInputRef = useRef(null);
   
   const [financeConfig, setFinanceConfig] = useState({
@@ -301,7 +287,8 @@ function MainApp() {
     } catch (e) { console.error("Firestore Init Error:", e); }
   }, [user]);
 
-  const awardAchievement = async (badgeId, studentId, level = 1) => {
+  // 👉 1.19 優化
+  const awardAchievement = useCallback(async (badgeId, studentId, level = 1) => {
     if (!badgeId || !studentId) return;
     const existingBadge = achievements.find(ach => ach.studentId === studentId && ach.badgeId === badgeId);
     try {
@@ -318,20 +305,24 @@ function MainApp() {
         const badgeName = ACHIEVEMENT_DATA[badgeId].levels[level].name;
         alert(`✅ 成功授予學員「${badgeName}」徽章！`);
     } catch (e) { console.error("Failed to award achievement:", e); alert("授予失敗，請檢查網絡連線。"); }
-  };
+  }, [achievements]);
 
-  const handleManualAward = (student) => { setStudentToAward(student); setShowAwardModal(true); };
+  const handleManualAward = useCallback((student) => { 
+      setStudentToAward(student); 
+      setShowAwardModal(true); 
+  }, []);
 
-  const togglePendingAttendance = (studentId) => { 
+  const togglePendingAttendance = useCallback((studentId) => { 
       setPendingAttendance(prev => prev.includes(studentId) ? prev.filter(id => id !== studentId) : [...prev, studentId] );
-  };
+  }, []);
 
   const todaySchedule = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return schedules.find(s => s.date === today);
   }, [schedules]);
 
-  const savePendingAttendance = async () => {
+  // 👉 1.19 優化
+  const savePendingAttendance = useCallback(async () => {
     if (pendingAttendance.length === 0) { alert('沒有需要儲存的點名紀錄。'); return; }
     let scheduleToUse = todaySchedule;
     if (!scheduleToUse) { scheduleToUse = { trainingClass: '一般練習', date: new Date().toISOString().split('T')[0], location: '學校壁球場' }; }
@@ -356,7 +347,7 @@ function MainApp() {
       setPendingAttendance([]);
     } catch (e) { console.error("Batch attendance save failed:", e); alert("儲存失敗，請檢查網絡或聯絡管理員。"); }
     setIsUpdating(false);
-  };
+  }, [pendingAttendance, todaySchedule, students]);
 
   const financialSummary = useMemo(() => {
     if (!financeConfig) return { revenue: 0, expense: 0, profit: 0 };
@@ -403,7 +394,8 @@ function MainApp() {
     } catch(e) { console.error("Favicon error", e); }
   }, [systemConfig?.schoolLogo]);
 
-  const handleSaveAssessment = async () => {
+  // 👉 1.19 優化
+  const handleSaveAssessment = useCallback(async () => {
     const { studentId, date, notes = '', situps = 0, shuttleRun = 0, enduranceRun = 0, gripStrength = 0, flexibility = 0, fhDrive = 0, bhDrive = 0, fhVolley = 0, bhVolley = 0, rankT1 = '', rankT2 = '', rankT3 = '', hoursT1 = '', hoursT2 = '', hoursT3 = '' } = newAssessment;
     if (!studentId || !date) { alert("請選擇學員並填寫評估日期！"); return; }
     setIsUpdating(true);
@@ -417,28 +409,28 @@ function MainApp() {
       setNewAssessment({ studentId: '', date: new Date().toISOString().split('T')[0], situps: '', shuttleRun: '', enduranceRun: '', gripStrength: '', flexibility: '', fhDrive: '', bhDrive: '', fhVolley: '', bhVolley: '', notes: '', rankT1: '', rankT2: '', rankT3: '', hoursT1: '', hoursT2: '', hoursT3: '' });
     } catch (e) { console.error("Failed to save assessment:", e); alert(`儲存失敗：${e.message}`); }
     setIsUpdating(false);
-  };
+  }, [newAssessment]);
 
-  const handleAddJournalEntry = async (studentId, content) => {
+  const handleAddJournalEntry = useCallback(async (studentId, content) => {
       if (!content.trim()) return; setIsUpdating(true);
       try { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'player_journals'), { studentId, coachContent: content, coachId: currentUserInfo?.id || 'admin', coachName: currentUserInfo?.name || '教練', studentReply: null, createdAt: serverTimestamp() }); } 
       catch (e) { console.error("Failed to add journal entry:", e); alert("新增日誌失敗，請檢查網路。"); }
       setIsUpdating(false);
-  };
+  }, [currentUserInfo]);
 
-  const handleReplyJournalEntry = async (journalId, replyContent) => {
+  const handleReplyJournalEntry = useCallback(async (journalId, replyContent) => {
       if (!replyContent.trim()) return; setIsUpdating(true);
       try { const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'player_journals', journalId); await updateDoc(docRef, { studentReply: replyContent, repliedAt: serverTimestamp() }); } 
       catch (e) { console.error("Failed to reply journal entry:", e); alert("回覆失敗，請檢查網路。"); }
       setIsUpdating(false);
-  };
+  }, []);
 
-  const deleteItem = async (col, id) => {
+  const deleteItem = useCallback(async (col, id) => {
     if (role !== 'admin') return;
     if (window.confirm('確定要永久刪除這個項目嗎？')) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id)); }
-  };
+  }, [role]);
 
-  const handleSetupStudentAuth = async (student) => {
+  const handleSetupStudentAuth = useCallback(async (student) => {
     const password = prompt(`請為 ${student.name} 設定登入密碼 (最少 6 位數):`);
     if (!password || password.length < 6) { alert("密碼無效或太短 (Firebase 規定最少 6 位數)！已取消操作。"); return; }
     const studentAuthEmail = `${student.class.toLowerCase().trim()}${student.classNo.trim()}@bcklas.squash`;
@@ -456,9 +448,8 @@ function MainApp() {
         else { alert(`建立帳號發生錯誤: ${error.message}`); }
     }
     setIsUpdating(false);
-  };
+  }, []);
 
-  // 👉 1.18 修改：登入成功後，使用 navigate 進行跳轉
   const handleLogin = async (type, credentials) => {
     if (type === 'admin') {
       const { email, password } = credentials;
@@ -481,7 +472,6 @@ function MainApp() {
     }
   };
 
-  // 👉 1.18 修改：登出後導向首頁
   const handleLogout = async () => { 
     try { await signOut(auth); setRole(null); setCurrentUserInfo(null); setShowLoginModal(true); setSidebarOpen(false); navigate('/'); } 
     catch (e) { console.error("Logout error", e); }
@@ -491,7 +481,7 @@ function MainApp() {
     if (!Array.isArray(students)) return [];
     const uniqueMap = new Map();
     students.forEach(s => {
-      const key = s.id; // ✅ 沿用修正過的以 s.id 判斷
+      const key = s.id; 
       const currentPoints = Number(s.points) || 0; 
       if (!uniqueMap.has(key)) { uniqueMap.set(key, { ...s, totalPoints: currentPoints }); } 
       else {
@@ -511,7 +501,7 @@ function MainApp() {
     });
   }, [students]);
 
-  const handleArchiveSeason = async () => {
+  const handleArchiveSeason = useCallback(async () => {
       if (role !== 'admin') return;
       const seasonName = prompt("請輸入要封存的賽季名稱 (例如: 2023/24 學年度):");
       if (!seasonName) return;
@@ -539,7 +529,7 @@ function MainApp() {
           }
       } catch (error) { console.error(error); alert("封存失敗，請檢查網絡連線。"); }
       setIsUpdating(false);
-  };
+  }, [role, rankedStudents, leagueMatches, students]);
 
   const birthYearStats = useMemo(() => {
     const stats = {};
@@ -566,21 +556,21 @@ function MainApp() {
       });
   }, [rankedStudents, searchTerm, selectedYearFilter]);
 
-  const saveFinanceConfig = async () => {
+  const saveFinanceConfig = useCallback(async () => {
     setIsUpdating(true);
     try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'finance'), financeConfig); alert('財務設定已儲存！'); } 
     catch (e) { console.error(e); alert('儲存失敗'); }
     setIsUpdating(false);
-  };
+  }, [financeConfig]);
 
-  const adjustPoints = async (id, amount, reason = "教練調整") => { 
+  const adjustPoints = useCallback(async (id, amount, reason = "教練調整") => { 
     if (role !== 'admin' || !user) return; setIsUpdating(true);
     try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'students', id), { points: increment(amount), lastUpdated: serverTimestamp() }); } 
     catch (e) { console.error(e); }
     setIsUpdating(false);
-  };
+  }, [role, user]);
 
-  const handleUpdateSquashClass = async (student) => {
+  const handleUpdateSquashClass = useCallback(async (student) => {
     const currentClass = student.squashClass || "";
     const newClass = prompt(`請輸入 ${student.name} 的壁球班別 (例如: A班、B班、進階班):\n(若要清除請直接清空並按確定)`, currentClass);
     if (newClass !== null) { 
@@ -591,9 +581,9 @@ function MainApp() {
         } catch (e) { console.error("Update Squash Class failed", e); alert("更新失敗，請檢查網絡連線。"); }
         setIsUpdating(false);
     }
-  };
+  }, []);
 
-  const handleSeasonReset = async () => {
+  const handleSeasonReset = useCallback(async () => {
     const confirmText = prompt("⚠️ 警告：這將重置所有學員的積分！\n\n系統將根據學員的「章別」重新賦予底分：\n金章: 200, 銀章: 100, 銅章: 30, 無章: 0\n\n請輸入 'RESET' 確認執行：");
     if (confirmText !== 'RESET') return;
     setIsUpdating(true);
@@ -607,9 +597,9 @@ function MainApp() {
         await batch.commit(); alert("✅ 新賽季已開啟！所有積分已重置。");
     } catch(e) { console.error(e); alert("重置失敗"); }
     setIsUpdating(false);
-  };
+  }, [students]);
 
-  const generateCompetitionRoster = () => {
+  const generateCompetitionRoster = useCallback(() => {
     const topStudents = rankedStudents.slice(0, 5);
     if (topStudents.length === 0) { alert('目前沒有學員資料可生成名單。'); return; }
     let rosterText = "🏆 BCKLAS 壁球校隊 - 推薦出賽名單 🏆\n\n";
@@ -617,9 +607,9 @@ function MainApp() {
     rosterText += "\n(由系統自動依據積分生成)";
     navigator.clipboard.writeText(rosterText).then(() => { alert('✅ 推薦名單已生成並複製到剪貼簿！\n\n你可以直接貼上到 Word 或 WhatsApp。'); })
     .catch(err => { console.error('複製失敗', err); alert('複製失敗，請手動選取：\n\n' + rosterText); });
-  };
+  }, [rankedStudents]);
 
-  const exportMatrixAttendanceCSV = (targetClass) => {
+  const exportMatrixAttendanceCSV = useCallback((targetClass) => {
       if (!targetClass || targetClass === 'ALL') { alert('請先從篩選器選擇一個特定的班別以匯出報表。'); return; }
       const classStudents = students.filter(s => s.squashClass && s.squashClass.includes(targetClass));
       if (classStudents.length === 0) { alert(`「${targetClass}」沒有找到任何學員。`); return; }
@@ -640,9 +630,9 @@ function MainApp() {
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob);
       const link = document.createElement("a"); link.href = url; link.download = `${targetClass}_點名總表_${new Date().toISOString().split('T')[0]}.csv`; link.click();
-  };
+  }, [students, attendanceLogs, schedules]);
 
-  const handleAddMedia = async () => {
+  const handleAddMedia = useCallback(async () => {
       const type = prompt("請選擇類型 (輸入 1 或 2):\n1. 上傳照片 (自動建立相簿)\n2. YouTube 影片連結");
       if (type === '1') {
         if (galleryInputRef.current) { galleryInputRef.current.value = ""; galleryInputRef.current.click(); }
@@ -652,9 +642,9 @@ function MainApp() {
         try { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), { type: 'video', url, title: title || '未命名影片', description: desc, timestamp: serverTimestamp() }); alert('影片新增成功！'); } 
         catch (e) { console.error(e); alert('新增失敗'); }
       }
-  };
+  }, []);
 
-  const handleGalleryImageUpload = async (e) => {
+  const handleGalleryImageUpload = useCallback(async (e) => {
     const files = e.target.files; if (!files || files.length === 0) return;
     const title = prompt(`您選擇了 ${files.length} 張照片。\n請輸入這些照片的「相簿名稱」(例如：校際比賽花絮):`); if (!title) return;
     const desc = prompt("輸入統一描述 (可選):") || "";
@@ -668,9 +658,9 @@ function MainApp() {
         } catch (err) { console.error("Upload failed for one image", err); }
     }
     setIsUploading(false); alert(`成功上傳 ${successCount} 張照片至「${title}」相簿！`); setCurrentAlbum(null);
-  };
+  }, []);
 
-  const handleCSVImportSchedules = async (e) => {
+  const handleCSVImportSchedules = useCallback(async (e) => {
     const file = e.target.files[0]; if (!file) return; setIsUpdating(true);
     try {
       const text = await readCSVFile(file, importEncoding);
@@ -683,9 +673,9 @@ function MainApp() {
       await batch.commit(); alert('訓練班日程匯入成功！');
     } catch (err) { alert('匯入失敗，請確認 CSV 格式'); }
     setIsUpdating(false); e.target.value = null;
-  };
+  }, [importEncoding]);
 
-  const handleCSVImportStudents = async (e) => {
+  const handleCSVImportStudents = useCallback(async (e) => {
     const file = e.target.files[0]; if (!file) return; setIsUpdating(true);
     try {
       const text = await readCSVFile(file, importEncoding);
@@ -699,7 +689,7 @@ function MainApp() {
       await batch.commit(); alert('隊員名單更新成功！');
     } catch (err) { alert('匯入失敗'); }
     setIsUpdating(false); e.target.value = null;
-  };
+  }, [importEncoding]);
 
   const uniqueTrainingClasses = useMemo(() => {
     const classes = schedules.map(s => s.trainingClass).filter(Boolean);
@@ -755,7 +745,7 @@ function MainApp() {
     return result;
   }, [filteredMatches]);
 
-  const handleCheerMatch = async (matchId, e) => {
+  const handleCheerMatch = useCallback(async (matchId, e) => {
       e.stopPropagation();
       if (!currentUserInfo && role !== 'admin') { alert("請先登入才能為隊友打氣喔！"); return; }
       const userId = currentUserInfo?.id || 'admin';
@@ -769,9 +759,9 @@ function MainApp() {
           if (currentCheers.includes(userId)) { await updateDoc(matchRef, { cheers: arrayRemove(userId) }); } 
           else { await updateDoc(matchRef, { cheers: arrayUnion(userId) }); }
       } catch (error) { console.error("Cheer failed:", error); }
-  };
+  }, [currentUserInfo, role, leagueMatches]);
 
-  const handleUpdateLeagueMatchScore = async (match) => {
+  const handleUpdateLeagueMatchScore = useCallback(async (match) => {
       const p1Raw = prompt(`請輸入 ${match.player1Name} 該場「總得分」\n(例如：直落三贏11-5, 11-5, 11-5，則輸入 33)`);
       if (p1Raw === null) return;
       const p2Raw = prompt(`請輸入 ${match.player2Name || '對手'} 該場「總得分」\n(例如：輸了5分, 5分, 5分，則輸入 15)`);
@@ -909,9 +899,9 @@ function MainApp() {
           } catch (e) { console.error("Update match score failed", e); alert("儲存失敗，請檢查網絡連線。"); }
           setIsUpdating(false);
       }
-  };
+  }, [students, achievements]);
 
-  const handleEditLeagueMatch = async (match) => {
+  const handleEditLeagueMatch = useCallback(async (match) => {
       const newDate = prompt(`請輸入新的比賽日期 (YYYY-MM-DD):`, match.date); if (newDate === null) return;
       const dateRegex = /^\d{4}-\d{2}-\d{2}$/; if (!dateRegex.test(newDate)) { alert("日期格式錯誤！請使用 YYYY-MM-DD 格式。"); return; }
 
@@ -924,7 +914,7 @@ function MainApp() {
           await updateDoc(matchRef, { date: newDate, time: newTime }); alert('比賽時間已更新！');
       } catch (e) { console.error("Failed to update match time:", e); alert("更新失敗，請稍後再試。"); }
       setIsUpdating(false);
-  };
+  }, []);
 
   const trulyFilteredMatches = useMemo(() => {
     if (!selectedTournament) return [];
@@ -1061,20 +1051,20 @@ function MainApp() {
     };
   }, [viewingStudent, currentUserInfo, role, rankedStudents, leagueMatches, attendanceLogs, schedules, achievements, assessments]);
 
-  const handleMonthlyStarFieldChange = (gender, field, value) => {
+  const handleMonthlyStarFieldChange = useCallback((gender, field, value) => {
     setMonthlyStarEditData(prev => ({ ...prev, [gender]: { ...prev[gender], [field]: value } }));
-  };
+  }, []);
 
-  const handleMonthlyStarStudentSelect = (gender, studentId) => {
+  const handleMonthlyStarStudentSelect = useCallback((gender, studentId) => {
     const student = students.find(s => s.id === studentId);
     if (student) {
         setMonthlyStarEditData(prev => ({
             ...prev, [gender]: { ...prev[gender], studentId: student.id, studentName: student.name, studentClass: student.class }
         }));
     }
-  };
+  }, [students]);
   
-  const handleMonthlyStarPhotoUpload = async (gender, file) => {
+  const handleMonthlyStarPhotoUpload = useCallback(async (gender, file) => {
     if (!file) return;
     setIsUpdating(true);
     try {
@@ -1084,9 +1074,9 @@ function MainApp() {
         if (gender === 'femaleWinner') setFemalePhotoPreview(compressedUrl);
     } catch (e) { console.error("Photo upload failed:", e); alert("照片上傳失敗。"); }
     setIsUpdating(false);
-  };
+  }, [handleMonthlyStarFieldChange]);
 
-  const handleSaveMonthlyStar = async () => {
+  const handleSaveMonthlyStar = useCallback(async () => {
       if (!monthlyStarEditData.maleWinner.studentId || !monthlyStarEditData.femaleWinner.studentId) { alert("請同時選擇一位男生和一位女生作為每月之星。"); return; }
       setIsUpdating(true);
       try {
@@ -1095,7 +1085,7 @@ function MainApp() {
           alert(`✅ 成功發佈/更新 ${selectedMonthForAdmin} 的每月之星！`);
       } catch (e) { console.error("Failed to save monthly star:", e); alert("儲存失敗，請檢查網絡連線。"); }
       setIsUpdating(false);
-  };
+  }, [monthlyStarEditData, selectedMonthForAdmin]);
 
   useEffect(() => {
     if(location.pathname === '/admin/monthly-stars') {
@@ -1111,7 +1101,7 @@ function MainApp() {
     }
   }, [selectedMonthForAdmin, monthlyStars, location.pathname]);
 
-  const handleGeneratePoster = async () => {
+  const handleGeneratePoster = useCallback(async () => {
     setIsGeneratingPoster(true);
     const dataToRender = JSON.parse(JSON.stringify(monthlyStarEditData));
 
@@ -1144,16 +1134,7 @@ function MainApp() {
             } finally { setIsGeneratingPoster(false); setPosterData(null); }
         }, 500);
     } catch (preloadError) { console.error('海報圖片預加載或轉換失敗:', preloadError); alert('海報圖片處理失敗，請檢查網絡連線。'); setIsGeneratingPoster(false); }
-  };
-
-  if (loading) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
-      <div className="mb-8 animate-pulse"><SchoolLogo size={96} systemConfig={systemConfig} /></div>
-      <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
-      <p className="text-slate-400 font-bold animate-pulse">正在連接 BCKLAS 資料庫...</p>
-      <p className="text-xs text-slate-300 mt-2 font-mono">v{CURRENT_VERSION}</p>
-    </div>
-  );
+  }, [monthlyStarEditData, systemConfig.schoolLogo, selectedMonthForAdmin]);
 
   return (
     <div className="min-h-screen flex font-sans overflow-hidden" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-text-primary)' }}>
@@ -1384,7 +1365,6 @@ function MainApp() {
               <PlayerDashboard student={viewingStudent} data={playerDashboardData} onClose={() => setViewingStudent(null)} onBadgeClick={setViewingBadge} tacticalShots={tacticalShots} currentUserInfo={currentUserInfo} role={role} handleCheerMatch={handleCheerMatch} playerJournals={playerJournals} handleAddJournalEntry={handleAddJournalEntry} handleReplyJournalEntry={handleReplyJournalEntry} />
           )}
 
-          {/* 👉 1.18 核心：以 React Router 處理所有頁面導航 */}
           {!viewingStudent && role && (
             <Routes>
                 <Route path="/" element={<Navigate to="/competitions" replace />} />
@@ -1402,7 +1382,6 @@ function MainApp() {
                 <Route path="/dashboard" element={role === 'admin' ? <DashboardPage dashboardStats={dashboardStats} assessments={assessments} /> : <Navigate to="/" />} />
                 <Route path="/assessments" element={role === 'admin' ? <AssessmentsPage students={students} assessments={assessments} newAssessment={newAssessment} setNewAssessment={setNewAssessment} handleSaveAssessment={handleSaveAssessment} isUpdating={isUpdating} /> : <Navigate to="/" />} />
                 
-                {/* 管理員專屬的每月之星頁面，因為程式碼較多，這裡採用內嵌的方式渲染 */}
                 <Route path="/admin/monthly-stars" element={role === 'admin' ? (
                   <div className="animate-in fade-in duration-500 font-bold">
                     <div className="bg-white p-10 rounded-[3rem] border shadow-sm mb-8">
@@ -1477,7 +1456,6 @@ function MainApp() {
   );
 }
 
-// 👉 1.18 核心：外層包裹 Router 啟動路由功能
 export default function AppWrapper() {
   return (
     <Router>
