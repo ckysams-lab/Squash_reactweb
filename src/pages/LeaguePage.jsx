@@ -5,7 +5,7 @@ import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react'
 import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
-import { collection, addDoc, doc, updateDoc, writeBatch, increment, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, writeBatch, increment, serverTimestamp, onSnapshot } from 'firebase/firestore';
 
 import TournamentBracket from '../components/TournamentBracket';
 
@@ -334,6 +334,18 @@ export default function LeaguePage({
   const [newMatch, setNewMatch] = useState({ groupName: 'Group A', date: new Date().toISOString().split('T')[0], time: '16:00', player1Id: '', isExternal: false, player2Id: '', extName: '', extElo: '1000' });
 
   const [overrideModalOpen, setOverrideModalOpen] = useState(false);
+  const [liveBracketMatches, setLiveBracketMatches] = useState([]);
+
+  useEffect(() => {
+      if (!db || !appId) return;
+      const q = collection(db, 'artifacts', appId, 'public', 'data', 'live_matches');
+      const unsub = onSnapshot(q, (snap) => {
+          const liveData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setLiveBracketMatches(liveData);
+      });
+      return () => unsub();
+  }, [db, appId]);
+  
   const [matchToOverride, setMatchToOverride] = useState(null);
   const [overrideScores, setOverrideScores] = useState({ s1: 0, s2: 0 });
 
@@ -704,6 +716,7 @@ export default function LeaguePage({
                   students={students} 
                   role={role} 
                   onMatchClick={role === 'admin' ? handleScoreUpdateIntercept : null} 
+                  liveMatches={liveBracketMatches} /* 👉 6.2 新增：注入即時轉播資料流 */
               />
           </div>
       ) : (
