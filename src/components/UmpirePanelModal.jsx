@@ -1,8 +1,7 @@
-// src/components/UmpirePanelModal.jsx (Version 4.6 - Bracket Progression Integration)
-// 升級內容：讓轉播台支援淘汰盃賽，完賽後自動將贏家推進至下一輪樹狀圖。
+// src/components/UmpirePanelModal.jsx (Version 4.7 - Full Bracket Progression & Detailed Game Scores)
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Activity, Timer, AlertTriangle, ListChecks, RotateCcw, Swords, Play, Flag, Crosshair, TrendingDown } from 'lucide-react';
+import { X, Activity, Timer, RotateCcw, Swords, Play, Flag, Crosshair, TrendingDown, ListChecks } from 'lucide-react';
 import { collection, doc, serverTimestamp, addDoc, updateDoc, writeBatch, increment } from 'firebase/firestore';
 
 const UmpirePanelModal = ({ 
@@ -49,7 +48,9 @@ const UmpirePanelModal = ({
                 format: parseInt(matchFormat), bestOf: parseInt(bestOf),      
                 matchWinner: null,
                 leagueMatchId: activeLeagueMatch ? activeLeagueMatch.id : null,
-                pointLog: [], updatedAt: serverTimestamp()
+                pointLog: [], 
+                gameScores: [], // 🌟 核心升級：記錄每一局的比分，供外層即時顯示
+                updatedAt: serverTimestamp()
             });
             if(!activeLeagueMatch) { setP1Name(''); setP2Name(''); }
         } catch(e) { console.error(e); }
@@ -124,6 +125,11 @@ const UmpirePanelModal = ({
             const winningPlayerName = (newScore1 > newScore2) ? match.player1 : match.player2;
             const gameWinnerNum = (newScore1 > newScore2) ? 1 : 2;
             
+            // 🌟 核心升級：記錄這局打完的比分
+            const currentGameScore = { p1: newScore1, p2: newScore2 };
+            const newGameScores = [...(match.gameScores || []), currentGameScore];
+            updateData.gameScores = newGameScores; // 即時寫入，讓外面的 LIVE 方塊看到詳細比分
+            
             if (window.confirm(`【第 ${match.games1 + match.games2 + 1} 局結束】\n${winningPlayerName} 贏得此局！`)) {
                 const newGames1 = gameWinnerNum === 1 ? match.games1 + 1 : match.games1;
                 const newGames2 = gameWinnerNum === 2 ? match.games2 + 1 : match.games2;
@@ -139,20 +145,24 @@ const UmpirePanelModal = ({
                         const lMatch = leagueMatches.find(m => m.id === match.leagueMatchId);
                         if (lMatch) {
                             const winnerId = matchWinnerNum === 1 ? lMatch.player1Id : lMatch.player2Id;
-                            const winnerName = matchWinnerNum === 1 ? lMatch.player1Name : lMatch.player2Name; // 取得贏家姓名
+                            const winnerName = matchWinnerNum === 1 ? lMatch.player1Name : lMatch.player2Name; 
+                            
+                            // 🌟 核心升級：將陣列轉換成字串 "11-5, 11-8" 供最終儲存
+                            const gameScoresStr = newGameScores.map(g => `${g.p1}-${g.p2}`).join(', ');
                             
                             const batch = writeBatch(db);
                             
-                            // 更新該場比賽結果
+                            // 更新該場比賽結果與詳細比分字串
                             batch.update(doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', lMatch.id), { 
                                 score1: newGames1, 
                                 score2: newGames2, 
                                 winnerId: winnerId, 
                                 status: 'completed', 
+                                gameScoresStr: gameScoresStr, // 寫入總庫
                                 updatedAt: serverTimestamp() 
                             });
 
-                            // 🏆 4.6 核心修復：盃賽引擎晉級判定
+                            // 🏆 盃賽引擎：晉級判定
                             if (lMatch.matchType === 'tournament_bracket') {
                                 if (lMatch.nextMatchId) {
                                     const nextMatchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', lMatch.nextMatchId);
@@ -167,7 +177,7 @@ const UmpirePanelModal = ({
                                     batch.update(nextMatchRef, updateObj);
                                 }
                             } else {
-                                // 聯賽引擎：結算日常 Elo 積分
+                                // 一般聯賽引擎：結算日常 Elo 積分
                                 const winnerStudent = students.find(s => s.id === winnerId);
                                 const loserStudent = students.find(s => s.id === (matchWinnerNum === 1 ? lMatch.player2Id : lMatch.player1Id));
                                 if (winnerStudent && loserStudent) {
@@ -226,7 +236,7 @@ const UmpirePanelModal = ({
                 
                 <div className="bg-slate-900 p-6 flex justify-between items-center shrink-0">
                     <h3 className="text-xl font-black text-white flex items-center gap-3">
-                        <Activity className="text-red-500 animate-pulse"/> Pro Umpire Console <span className="text-xs bg-slate-700 px-2 py-1 rounded text-slate-300">v4.6 Bracket Sync</span>
+                        <Activity className="text-red-500 animate-pulse"/> Pro Umpire Console <span className="text-xs bg-slate-700 px-2 py-1 rounded text-slate-300">v4.7 Sync & Details</span>
                     </h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={24}/></button>
                 </div>
