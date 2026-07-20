@@ -557,7 +557,7 @@ export default function LeaguePage({
       setIsUpdatingMatch(false);
   };
 
-  const handleScoreUpdateIntercept = async (match) => {
+    const handleScoreUpdateIntercept = async (match) => {
       if (match.matchType === 'tournament_bracket') {
           const p1Raw = prompt(`請輸入 ${match.player1Name} 總局數得分 (例如: 3)`); if (p1Raw === null) return;
           const p2Raw = prompt(`請輸入 ${match.player2Name} 總局數得分 (例如: 1)`); if (p2Raw === null) return;
@@ -565,16 +565,21 @@ export default function LeaguePage({
           const score1 = parseInt(p1Raw, 10); const score2 = parseInt(p2Raw, 10);
           if (isNaN(score1) || isNaN(score2) || score1 === score2) return alert("比分無效或平手，淘汰賽必須分出勝負。");
 
+          // 🌟 核心升級：詢問詳細各局比分
+          const gameScoresRaw = prompt(`請輸入詳細各局比分 (例如: 11-5, 9-11, 11-8, 11-4)\n若不想記錄可直接留空：`);
+          if (gameScoresRaw === null) return;
+
           const isP1Winner = score1 > score2;
           const winnerId = isP1Winner ? match.player1Id : match.player2Id;
           const winnerName = isP1Winner ? match.player1Name : match.player2Name;
 
-          if(!confirm(`確認賽果？\n${match.player1Name} ${score1} : ${score2} ${match.player2Name}\n晉級者：${winnerName}`)) return;
+          if(!confirm(`確認賽果？\n${match.player1Name} ${score1} : ${score2} ${match.player2Name}\n詳細比分: ${gameScoresRaw}\n晉級者：${winnerName}`)) return;
 
           try {
               const batch = writeBatch(db);
               const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
-              batch.update(matchRef, { score1, score2, winnerId, status: 'completed', updatedAt: serverTimestamp() });
+              // 寫入 gameScoresStr
+              batch.update(matchRef, { score1, score2, winnerId, status: 'completed', gameScoresStr: gameScoresRaw.trim(), updatedAt: serverTimestamp() });
               
               if (match.nextMatchId) {
                    const nextMatchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.nextMatchId);
@@ -592,9 +597,10 @@ export default function LeaguePage({
       }
   };
 
-  const openScoreOverrideModal = (match) => {
+    const openScoreOverrideModal = (match) => {
       setMatchToOverride(match);
-      setOverrideScores({ s1: match.score1 || 0, s2: match.score2 || 0 });
+      // 🌟 加入 details
+      setOverrideScores({ s1: match.score1 || 0, s2: match.score2 || 0, details: match.gameScoresStr || '' });
       setOverrideModalOpen(true);
   };
 
@@ -605,8 +611,6 @@ export default function LeaguePage({
       const newS1 = parseInt(overrideScores.s1) || 0;
       const newS2 = parseInt(overrideScores.s2) || 0;
 
-      if (oldS1 === newS1 && oldS2 === newS2) { setOverrideModalOpen(false); return; }
-
       const oldWinnerId = oldS1 > oldS2 ? matchToOverride.player1Id : (oldS2 > oldS1 ? matchToOverride.player2Id : null);
       const newWinnerId = newS1 > newS2 ? matchToOverride.player1Id : (newS2 > newS1 ? matchToOverride.player2Id : null);
 
@@ -614,7 +618,8 @@ export default function LeaguePage({
       try {
           const batch = writeBatch(db);
           const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', matchToOverride.id);
-          batch.update(matchRef, { score1: newS1, score2: newS2, winnerId: newWinnerId, updatedAt: serverTimestamp() });
+          // 🌟 儲存 details
+          batch.update(matchRef, { score1: newS1, score2: newS2, winnerId: newWinnerId, gameScoresStr: overrideScores.details || '', updatedAt: serverTimestamp() });
 
           if (oldWinnerId !== newWinnerId && matchToOverride.matchType !== 'external') {
               const STANDARD_POINTS = 10; 
@@ -743,10 +748,15 @@ export default function LeaguePage({
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[500] flex items-center justify-center p-4">
              <div className="bg-white rounded-2xl p-8 max-w-md w-full">
                 <h3 className="text-xl font-black mb-4">覆寫賽果</h3>
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex justify-between items-center mb-4">
                     <input type="number" value={overrideScores.s1} onChange={e=>setOverrideScores({...overrideScores, s1: e.target.value})} className="w-20 p-2 border rounded text-center text-xl font-black" />
                     <span>VS</span>
                     <input type="number" value={overrideScores.s2} onChange={e=>setOverrideScores({...overrideScores, s2: e.target.value})} className="w-20 p-2 border rounded text-center text-xl font-black" />
+                </div>
+                {/* 🌟 加入詳細比分輸入框 */}
+                <div className="mb-6">
+                    <label className="text-xs font-bold text-slate-400">詳細比分 (例如: 11-5, 11-8)</label>
+                    <input type="text" value={overrideScores.details || ''} onChange={e=>setOverrideScores({...overrideScores, details: e.target.value})} className="w-full mt-1 p-2 border rounded text-center text-sm font-bold text-slate-600" />
                 </div>
                 <div className="flex justify-end gap-2">
                     <button onClick={()=>setOverrideModalOpen(false)} className="px-4 py-2 bg-slate-100 rounded">取消</button>
