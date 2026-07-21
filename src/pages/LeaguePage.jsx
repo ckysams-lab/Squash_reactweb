@@ -429,8 +429,7 @@ export default function LeaguePage({
       setIsUpdatingMatch(false);
   };
 
-  // 👉 6.1 更新：盃賽生成器使用獨立的 bracketEventName
-  const handleGenerateBracket = async () => {
+    const handleGenerateBracket = async () => {
       if(bracketPlayers.length < 3) return alert("舉辦淘汰賽至少需要 3 名選手！");
       if(bracketPlayers.length > 32) return alert("本引擎最高支援 32 人籤表，請減少人數。");
       if(!bracketEventName.trim()) return alert("請輸入盃賽大會名稱！");
@@ -440,10 +439,9 @@ export default function LeaguePage({
       if (bracketPlayers.length > 8) size = 16;
       if (bracketPlayers.length > 16) size = 32;
 
-      // 👇 6.4 核心：將校內學生與外卡學生合併為一個「大抽籤池」
       const allAvailablePlayers = [...students, ...externalBracketPlayers];
 
-      // 依據現有總積分 (Elo) 排序以排定種子 (混和排序)
+      // 依據積分排序，決定種子序號
       const sortedPlayers = [...bracketPlayers].sort((a, b) => {
           const pA = allAvailablePlayers.find(s=>s.id===a)?.points || 0;
           const pB = allAvailablePlayers.find(s=>s.id===b)?.points || 0;
@@ -459,14 +457,14 @@ export default function LeaguePage({
           pl = next_pl;
       }
 
-      // 將學生套入種子順位
+      // 🌟 核心升級：記錄種子序號 (Seed)
       const seededPlayers = pl.map(seedNum => {
           if (seedNum <= sortedPlayers.length) {
               const sId = sortedPlayers[seedNum - 1];
-              const sData = allAvailablePlayers.find(s=>s.id===sId); // 從大抽籤池找人
-              return { id: sId, name: sData ? sData.name : 'Unknown' };
+              const sData = allAvailablePlayers.find(s=>s.id===sId);
+              return { id: sId, name: sData ? sData.name : 'Unknown', seed: seedNum };
           } else {
-              return { id: 'BYE', name: '[輪空 BYE]' };
+              return { id: 'BYE', name: '[輪空 BYE]', seed: null };
           }
       });
 
@@ -486,17 +484,18 @@ export default function LeaguePage({
               const isBye = p2.id === 'BYE' || p1.id === 'BYE';
               const winnerId = isBye ? (p1.id !== 'BYE' ? p1.id : p2.id) : null;
               const winnerName = isBye ? (p1.id !== 'BYE' ? p1.name : p2.name) : null;
+              const winnerSeed = isBye ? (p1.id !== 'BYE' ? p1.seed : p2.seed) : null;
 
               const matchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
               const matchObj = {
                   id: matchRef.id,
-                  tournamentName: bracketEventName.trim(), // 獨立的大會名稱
+                  tournamentName: bracketEventName.trim(),
                   groupName: bracketName,
                   matchType: 'tournament_bracket',
                   bracketRound: r, 
                   bracketMatchNumber: matchCounter++,
-                  player1Id: p1.id, player1Name: p1.name,
-                  player2Id: p2.id, player2Name: p2.name,
+                  player1Id: p1.id, player1Name: p1.name, player1Seed: p1.seed, // 存入種子
+                  player2Id: p2.id, player2Name: p2.name, player2Seed: p2.seed, // 存入種子
                   status: isBye ? 'completed' : 'scheduled',
                   score1: isBye ? (p1.id !== 'BYE' ? 3 : 0) : 0,
                   score2: isBye ? (p2.id !== 'BYE' ? 3 : 0) : 0,
@@ -518,19 +517,24 @@ export default function LeaguePage({
                   const matchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
                   
                   const p1Id = m1.winnerId || null;
-                  const p1Name = p1Id ? students.find(s=>s.id===p1Id)?.name : null;
+                  const p1Name = p1Id ? allAvailablePlayers.find(s=>s.id===p1Id)?.name : null;
+                  // 若因 BYE 而提早晉級，將種子序號帶上來
+                  const p1Seed = p1Id ? (m1.winnerId === m1.player1Id ? m1.player1Seed : m1.player2Seed) : null;
+                  
                   const p2Id = m2.winnerId || null;
-                  const p2Name = p2Id ? students.find(s=>s.id===p2Id)?.name : null;
+                  const p2Name = p2Id ? allAvailablePlayers.find(s=>s.id===p2Id)?.name : null;
+                  const p2Seed = p2Id ? (m2.winnerId === m2.player1Id ? m2.player1Seed : m2.player2Seed) : null;
 
                   const matchObj = {
                       id: matchRef.id,
-                      tournamentName: bracketEventName.trim(), // 獨立的大會名稱
+                      tournamentName: bracketEventName.trim(),
                       groupName: bracketName,
                       matchType: 'tournament_bracket',
                       bracketRound: r,
+                      isFinal: r === 1,
                       bracketMatchNumber: matchCounter++,
-                      player1Id: p1Id, player1Name: p1Name,
-                      player2Id: p2Id, player2Name: p2Name,
+                      player1Id: p1Id, player1Name: p1Name, player1Seed: p1Seed,
+                      player2Id: p2Id, player2Name: p2Name, player2Seed: p2Seed,
                       status: 'scheduled',
                       score1: 0, score2: 0,
                       winnerId: null,
@@ -546,6 +550,31 @@ export default function LeaguePage({
 
                   nextRoundNodes.push(matchObj);
                   matchesToCreate.push({ ref: matchRef, data: matchObj });
+
+                  // 🌟 核心升級：在生成決賽 (r===1) 時，同時生成季軍戰
+                  if (r === 1) {
+                      const bronzeMatchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
+                      const bronzeMatchObj = {
+                          id: bronzeMatchRef.id,
+                          tournamentName: bracketEventName.trim(),
+                          groupName: bracketName,
+                          matchType: 'tournament_bracket',
+                          bracketRound: 1, // 與決賽同列
+                          isBronzeFinal: true, // 季軍戰標籤
+                          bracketMatchNumber: matchCounter++,
+                          player1Id: null, player1Name: null, player1Seed: null,
+                          player2Id: null, player2Name: null, player2Seed: null,
+                          status: 'scheduled',
+                          score1: 0, score2: 0, winnerId: null,
+                          date: new Date().toISOString().split('T')[0],
+                          time: 'TBD',
+                          timestamp: serverTimestamp()
+                      };
+                      // 告訴四強賽的輸家，要去這場比賽報到
+                      m1.nextLoserMatchId = bronzeMatchRef.id; m1.nextLoserMatchSlot = 'player1';
+                      m2.nextLoserMatchId = bronzeMatchRef.id; m2.nextLoserMatchSlot = 'player2';
+                      matchesToCreate.push({ ref: bronzeMatchRef, data: bronzeMatchObj });
+                  }
               }
               previousRoundNodes = nextRoundNodes;
           }
@@ -553,9 +582,9 @@ export default function LeaguePage({
           matchesToCreate.forEach(m => { batch.set(m.ref, m.data); });
 
           await batch.commit();
-          alert("✅ 盃賽樹狀圖與賽程生成成功！");
+          alert("✅ 盃賽與季軍戰生成成功！");
           setShowBracketGenerator(false);
-          setSelectedBracket(bracketEventName.trim()); // 自動跳轉到剛建立的盃賽
+          setSelectedBracket(bracketEventName.trim());
           setViewMode('bracket'); 
       } catch (e) {
           console.error(e);
@@ -563,6 +592,7 @@ export default function LeaguePage({
       }
       setIsUpdatingMatch(false);
   };
+
 
     const handleScoreUpdateIntercept = async (match) => {
       if (match.matchType === 'tournament_bracket') {
@@ -572,28 +602,41 @@ export default function LeaguePage({
           const score1 = parseInt(p1Raw, 10); const score2 = parseInt(p2Raw, 10);
           if (isNaN(score1) || isNaN(score2) || score1 === score2) return alert("比分無效或平手，淘汰賽必須分出勝負。");
 
-          // 🌟 核心升級：詢問詳細各局比分
           const gameScoresRaw = prompt(`請輸入詳細各局比分 (例如: 11-5, 9-11, 11-8, 11-4)\n若不想記錄可直接留空：`);
           if (gameScoresRaw === null) return;
 
           const isP1Winner = score1 > score2;
           const winnerId = isP1Winner ? match.player1Id : match.player2Id;
           const winnerName = isP1Winner ? match.player1Name : match.player2Name;
+          const winnerSeed = isP1Winner ? match.player1Seed : match.player2Seed; // 抓贏家種子
+          
+          const loserId = isP1Winner ? match.player2Id : match.player1Id;
+          const loserName = isP1Winner ? match.player2Name : match.player1Name;
+          const loserSeed = isP1Winner ? match.player2Seed : match.player1Seed; // 抓輸家種子
 
-          if(!confirm(`確認賽果？\n${match.player1Name} ${score1} : ${score2} ${match.player2Name}\n詳細比分: ${gameScoresRaw}\n晉級者：${winnerName}`)) return;
+          if(!confirm(`確認賽果？\n${match.player1Name} ${score1} : ${score2} ${match.player2Name}\n晉級者：${winnerName}`)) return;
 
           try {
               const batch = writeBatch(db);
               const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
-              // 寫入 gameScoresStr
               batch.update(matchRef, { score1, score2, winnerId, status: 'completed', gameScoresStr: gameScoresRaw.trim(), updatedAt: serverTimestamp() });
               
+              // 將贏家送入下一輪
               if (match.nextMatchId) {
                    const nextMatchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.nextMatchId);
                    const updateObj = {};
-                   if (match.nextMatchSlot === 'player1') { updateObj.player1Id = winnerId; updateObj.player1Name = winnerName; } 
-                   else { updateObj.player2Id = winnerId; updateObj.player2Name = winnerName; }
+                   if (match.nextMatchSlot === 'player1') { updateObj.player1Id = winnerId; updateObj.player1Name = winnerName; updateObj.player1Seed = winnerSeed; } 
+                   else { updateObj.player2Id = winnerId; updateObj.player2Name = winnerName; updateObj.player2Seed = winnerSeed; }
                    batch.update(nextMatchRef, updateObj);
+              }
+
+              // 🌟 核心升級：將四強輸家送入季軍戰
+              if (match.nextLoserMatchId) {
+                   const nextLoserMatchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.nextLoserMatchId);
+                   const updateLoserObj = {};
+                   if (match.nextLoserMatchSlot === 'player1') { updateLoserObj.player1Id = loserId; updateLoserObj.player1Name = loserName; updateLoserObj.player1Seed = loserSeed; } 
+                   else { updateLoserObj.player2Id = loserId; updateLoserObj.player2Name = loserName; updateLoserObj.player2Seed = loserSeed; }
+                   batch.update(nextLoserMatchRef, updateLoserObj);
               }
 
               await batch.commit();
