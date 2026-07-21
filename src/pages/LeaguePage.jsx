@@ -356,7 +356,9 @@ export default function LeaguePage({
   const [bracketEventName, setBracketEventName] = useState('2026 校慶盃'); // 獨立的盃賽名稱
   const [bracketName, setBracketName] = useState('男子公開組');
   const [selectedBracket, setSelectedBracket] = useState('');
-
+  const [externalBracketPlayers, setExternalBracketPlayers] = useState([]);
+  const [extPlayerName, setExtPlayerName] = useState('');
+  const [extPlayerElo, setExtPlayerElo] = useState('1000');
   // 1. 將所有比賽拆分成「聯賽」與「盃賽」兩疊資料
   const leagueNames = useMemo(() => {
     return [...new Set(leagueMatches.filter(m => m.matchType !== 'tournament_bracket').map(m => m.tournamentName).filter(Boolean))].sort();
@@ -438,9 +440,13 @@ export default function LeaguePage({
       if (bracketPlayers.length > 8) size = 16;
       if (bracketPlayers.length > 16) size = 32;
 
+      // 👇 6.4 核心：將校內學生與外卡學生合併為一個「大抽籤池」
+      const allAvailablePlayers = [...students, ...externalBracketPlayers];
+
+      // 依據現有總積分 (Elo) 排序以排定種子 (混和排序)
       const sortedPlayers = [...bracketPlayers].sort((a, b) => {
-          const pA = students.find(s=>s.id===a)?.points || 0;
-          const pB = students.find(s=>s.id===b)?.points || 0;
+          const pA = allAvailablePlayers.find(s=>s.id===a)?.points || 0;
+          const pB = allAvailablePlayers.find(s=>s.id===b)?.points || 0;
           return pB - pA;
       });
 
@@ -453,10 +459,11 @@ export default function LeaguePage({
           pl = next_pl;
       }
 
+      // 將學生套入種子順位
       const seededPlayers = pl.map(seedNum => {
           if (seedNum <= sortedPlayers.length) {
               const sId = sortedPlayers[seedNum - 1];
-              const sData = students.find(s=>s.id===sId);
+              const sData = allAvailablePlayers.find(s=>s.id===sId); // 從大抽籤池找人
               return { id: sId, name: sData ? sData.name : 'Unknown' };
           } else {
               return { id: 'BYE', name: '[輪空 BYE]' };
@@ -807,6 +814,50 @@ export default function LeaguePage({
                       </div>
                   </div>
 
+                <div className="mb-6 p-4 bg-purple-50 border border-purple-100 rounded-xl flex flex-col md:flex-row gap-3 items-center">
+                      <span className="text-sm font-black text-purple-700 whitespace-nowrap">➕ 邀請外校選手</span>
+                      <input type="text" placeholder="選手名稱 (例: 男拔-李明)" value={extPlayerName} onChange={e=>setExtPlayerName(e.target.value)} className="flex-1 p-2 rounded-lg border border-purple-200 text-sm font-bold outline-none focus:border-purple-500" />
+                      <select value={extPlayerElo} onChange={e=>setExtPlayerElo(e.target.value)} className="p-2 rounded-lg border border-purple-200 text-sm font-bold text-slate-600 outline-none">
+                          <option value="800">新手 (~800分)</option>
+                          <option value="1000">一般 (~1000分)</option>
+                          <option value="1300">種子 (~1300分)</option>
+                          <option value="1600">菁英 (~1600分)</option>
+                      </select>
+                      <button 
+                          onClick={() => {
+                              if(!extPlayerName.trim()) return;
+                              const newExt = { id: `ext_${Date.now()}`, name: extPlayerName.trim(), points: parseInt(extPlayerElo, 10), isExternal: true };
+                              setExternalBracketPlayers([...externalBracketPlayers, newExt]);
+                              setBracketPlayers([...bracketPlayers, newExt.id]); // 自動勾選
+                              setExtPlayerName('');
+                          }} 
+                          className="px-4 py-2 bg-purple-600 text-white font-bold text-sm rounded-lg hover:bg-purple-700 transition-all shadow-sm"
+                      >
+                          加入籤表
+                      </button>
+                  </div>
+
+                  {/* 將外校學生也渲染在選擇清單中 */}
+                  <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl p-4 bg-slate-50 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {[...students, ...externalBracketPlayers].map(s => {
+                          const isSelected = bracketPlayers.includes(s.id);
+                          const isExt = s.isExternal;
+                          return (
+                              <div 
+                                  key={s.id} 
+                                  onClick={() => setBracketPlayers(prev => isSelected ? prev.filter(id => id !== s.id) : [...prev, s.id])}
+                                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all flex items-center gap-2 font-bold text-sm ${isSelected ? (isExt ? 'border-purple-500 bg-purple-50 text-purple-800' : 'border-amber-500 bg-amber-50 text-amber-800') : 'border-slate-200 bg-white text-slate-600'} shadow-sm`}
+                              >
+                                  <div className={`w-4 h-4 rounded-sm flex items-center justify-center border ${isSelected ? (isExt ? 'bg-purple-500 border-purple-500 text-white' : 'bg-amber-500 border-amber-500 text-white') : 'border-slate-300'}`}>
+                                      {isSelected && <CheckCircle2 size={12}/>}
+                                  </div>
+                                  <span className="truncate">{s.name}</span>
+                                  {isExt && <span className="text-[9px] bg-purple-200 text-purple-700 px-1 py-0.5 rounded ml-auto">外卡</span>}
+                              </div>
+                          );
+                      })}
+                  </div>
+                
                   <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl p-4 bg-slate-50 grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {students.map(s => {
                           const isSelected = bracketPlayers.includes(s.id);
