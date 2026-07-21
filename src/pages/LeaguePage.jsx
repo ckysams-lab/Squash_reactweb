@@ -858,24 +858,6 @@ export default function LeaguePage({
                       })}
                   </div>
                 
-                  <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl p-4 bg-slate-50 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {students.map(s => {
-                          const isSelected = bracketPlayers.includes(s.id);
-                          return (
-                              <div 
-                                  key={s.id} 
-                                  onClick={() => setBracketPlayers(prev => isSelected ? prev.filter(id => id !== s.id) : [...prev, s.id])}
-                                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all flex items-center gap-2 font-bold text-sm ${isSelected ? 'border-amber-500 bg-amber-50 text-amber-800 shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-amber-300'}`}
-                              >
-                                  <div className={`w-4 h-4 rounded-sm flex items-center justify-center border ${isSelected ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-300'}`}>
-                                      {isSelected && <CheckCircle2 size={12}/>}
-                                  </div>
-                                  <span className="truncate">{s.name}</span>
-                              </div>
-                          );
-                      })}
-                  </div>
-
                   <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
                       <button onClick={() => setBracketPlayers([])} className="px-6 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl">清空選擇</button>
                       <button onClick={handleGenerateBracket} disabled={isUpdatingMatch} className="px-8 py-3 bg-amber-500 text-white font-black rounded-xl hover:bg-amber-600 shadow-lg flex items-center gap-2">
