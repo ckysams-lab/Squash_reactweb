@@ -1,8 +1,8 @@
 // File: src/components/TournamentBracket.jsx
-// Version: 1.3 (Pro Seeding & Bronze Final UI)
+// Version: 1.4 (Show Time & Venue + Pro Seeding)
 
 import React, { useMemo } from 'react';
-import { PlayCircle } from 'lucide-react';
+import { PlayCircle, Clock } from 'lucide-react'; // 🌟 引入 Clock 圖示
 
 export default function TournamentBracket({ bracketMatches, students, role, onMatchClick, liveMatches = [], onStartLiveBroadcast }) {
     const bracketRounds = useMemo(() => {
@@ -15,7 +15,6 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
 
         const rounds = [];
         for (let r = maxRound; r >= 1; r--) {
-            // 排序：先排一般的比賽，如果是季軍戰 (isBronzeFinal) 則排在該輪的最下面
             const matchesInRound = bracketMatches
                 .filter(m => m.bracketRound === r)
                 .sort((a, b) => {
@@ -25,7 +24,7 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
                 }); 
 
             let roundName = `Round ${r}`;
-            if (r === 1) roundName = "🏆 決賽圈"; // 包含總決賽與季軍戰
+            if (r === 1) roundName = "🏆 決賽圈"; 
             if (r === 2) roundName = "🏅 四強賽";
             if (r === 3) roundName = "八強賽";
             if (r === 4) roundName = "十六強";
@@ -55,12 +54,10 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
             detailedScores = liveData.gameScores.map(g => `${g.p1}-${g.p2}`).join(', ');
         }
 
-        // 輔助渲染名字與種子的函數
         const renderPlayerName = (name, seed, isWinner) => {
             if (!name) return <span className="text-slate-300">TBD (待定)</span>;
             return (
                 <div className="flex items-center gap-1 overflow-hidden">
-                    {/* 🌟 核心升級：顯示種子序號 */}
                     {seed && <span className="text-[9px] font-mono text-slate-400 shrink-0">[{seed}]</span>}
                     <span className={`text-xs font-black truncate 
                         ${isLive ? 'text-white' : (isWinner ? 'text-emerald-700' : 'text-slate-700')}
@@ -78,18 +75,25 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
                 ${isLive ? 'border-red-500 bg-slate-900 shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-105 z-20' : 
                   (isDone ? 'border-emerald-200 bg-white shadow-sm hover:border-emerald-400' : 'border-slate-200 bg-white hover:border-blue-400 hover:shadow-md')}
                 ${!match.player1Id && !match.player2Id ? 'border-dashed border-slate-300 bg-slate-50' : ''}
-                ${match.isBronzeFinal ? 'mt-8 border-orange-200' : ''}`} // 季軍戰稍微往下隔開
+                ${match.isBronzeFinal ? 'mt-8 border-orange-200' : ''}`}
                 onClick={() => {
                     if (!isBye && onMatchClick) onMatchClick(match);
                 }}
             >
-                {/* 🌟 核心升級：賽事特殊標籤 */}
                 {match.isFinal && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-100 text-amber-700 border border-amber-200 text-[9px] font-black px-2 py-0.5 rounded shadow-sm z-10 whitespace-nowrap">總決賽 (Final)</div>}
                 {match.isBronzeFinal && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-100 text-orange-700 border border-orange-200 text-[9px] font-black px-2 py-0.5 rounded shadow-sm z-10 whitespace-nowrap">季軍戰 (3rd Place)</div>}
 
                 {isLive && (
                     <div className="absolute -top-3 right-0 bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-t-lg animate-pulse flex items-center gap-1 z-30 shadow-md">
                         <span className="w-1.5 h-1.5 bg-white rounded-full"></span> LIVE
+                    </div>
+                )}
+
+                {/* 🌟 核心修復：顯示場地與時間資訊 */}
+                {!isBye && (
+                    <div className={`text-[9px] font-bold px-2 py-1 flex justify-between items-center border-b ${isLive ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
+                        <span>{match.venue || 'TBD'}</span>
+                        <span className="flex items-center gap-0.5"><Clock size={9}/> {match.time || 'TBD'}</span>
                     </div>
                 )}
 
