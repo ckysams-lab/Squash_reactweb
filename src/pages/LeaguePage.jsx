@@ -1,8 +1,8 @@
 // File: src/pages/LeaguePage.jsx
-// Version 6.6: 🧹 釋放空間優化：加入大會與分組的 Firebase 批次刪除引擎，一鍵清空資料。
+// Version 6.7: ⏱️ 智能賽程排程引擎：自動分配場地 (Courts) 與精準的開賽時間。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
-import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2 } from 'lucide-react';
+import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2, Clock } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
 import { collection, addDoc, doc, updateDoc, writeBatch, increment, serverTimestamp, onSnapshot } from 'firebase/firestore';
@@ -264,7 +264,6 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
           <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-widest border border-slate-200">{players.length} Players</span>
           <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-widest border border-slate-200">{completedCount}/{totalCount} Completed</span>
           
-          {/* 👉 6.6 分組刪除按鈕 */}
           {role === 'admin' && (
               <button 
                   onClick={() => onDeleteGroup(groupName)}
@@ -367,6 +366,12 @@ export default function LeaguePage({
   const [bracketName, setBracketName] = useState('男子公開組');
   const [selectedBracket, setSelectedBracket] = useState('');
 
+  // 👉 6.7 新增：智能賽程設定狀態
+  const [bracketStartDate, setBracketStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [bracketStartTime, setBracketStartTime] = useState('09:00');
+  const [bracketCourts, setBracketCourts] = useState(2);
+  const [bracketMatchDuration, setBracketMatchDuration] = useState(20);
+
   const [externalBracketPlayers, setExternalBracketPlayers] = useState([]);
   const [extPlayerName, setExtPlayerName] = useState('');
   const [extPlayerElo, setExtPlayerElo] = useState('1000');
@@ -417,7 +422,6 @@ export default function LeaguePage({
     return groups;
   }, [currentLeagueMatches]);
 
-  // 👉 6.6 核心引擎：Firebase 分塊刪除機制 (釋放雲端空間)
   const handleDeleteCollection = async (level, name, matchType) => {
       let confirmMsg = "";
       let matchesToDelete = [];
@@ -435,7 +439,6 @@ export default function LeaguePage({
 
       setIsUpdatingMatch(true);
       try {
-          // Firebase Batch 每批次最多 500 筆，做分塊處理以防萬一
           const chunks = [];
           for (let i = 0; i < matchesToDelete.length; i += 500) {
               chunks.push(matchesToDelete.slice(i, i + 500));
@@ -494,6 +497,36 @@ export default function LeaguePage({
       setIsUpdatingMatch(false);
   };
 
+  // 👉 6.7 輔助函數：時間相加演算法
+  const addMins = (timeStr, mins) => {
+      if(!timeStr) return "00:00";
+      const [h, m] = timeStr.split(':').map(Number);
+      const total = h * 60 + m + mins;
+      const nh = Math.floor(total / 60) % 24;
+      const nm = total % 60;
+      return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
+  };
+
+  const getEarliestCourt = (courts) => {
+      let minIdx = 0; let minMins = 24 * 60;
+      courts.forEach((timeStr, idx) => {
+          const [h, m] = timeStr.split(':').map(Number);
+          const mins = h * 60 + m;
+          if(mins < minMins) { minMins = mins; minIdx = idx; }
+      });
+      return minIdx;
+  };
+
+  const getMaxTime = (courts) => {
+      let maxMins = 0; let maxStr = "00:00";
+      courts.forEach((timeStr) => {
+          const [h, m] = timeStr.split(':').map(Number);
+          const mins = h * 60 + m;
+          if(mins > maxMins) { maxMins = mins; maxStr = timeStr; }
+      });
+      return maxStr;
+  };
+
   const handleGenerateBracket = async () => {
       if(bracketPlayers.length < 3) return alert("舉辦淘汰賽至少需要 3 名選手！");
       if(bracketPlayers.length > 32) return alert("本引擎最高支援 32 人籤表，請減少人數。");
@@ -540,7 +573,13 @@ export default function LeaguePage({
           let currentRoundPlayers = seededPlayers;
           let currentRoundNodes = [];
 
+          // 👉 6.7 核心：初始化時間排程器
+          let currentRoundStartTime = bracketStartTime || "09:00";
           let r = rounds;
+
+          // 建立第一輪
+          let courtsAvailable = Array(Number(bracketCourts)).fill(currentRoundStartTime);
+
           for(let i=0; i<size/2; i++){
               const p1 = currentRoundPlayers[i*2];
               const p2 = currentRoundPlayers[i*2 + 1];
@@ -548,6 +587,17 @@ export default function LeaguePage({
               const winnerId = isBye ? (p1.id !== 'BYE' ? p1.id : p2.id) : null;
               const winnerName = isBye ? (p1.id !== 'BYE' ? p1.name : p2.name) : null;
               const winnerSeed = isBye ? (p1.id !== 'BYE' ? p1.seed : p2.seed) : null;
+
+              // 👉 6.7 分配場地與時間
+              let matchTime = 'N/A';
+              let matchVenue = '';
+              if (!isBye) {
+                  const cIdx = getEarliestCourt(courtsAvailable);
+                  matchTime = courtsAvailable[cIdx];
+                  matchVenue = `Court ${cIdx + 1}`;
+                  // 安排好後，該球場的時間加上預估時長
+                  courtsAvailable[cIdx] = addMins(courtsAvailable[cIdx], Number(bracketMatchDuration));
+              }
 
               const matchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
               const matchObj = {
@@ -563,17 +613,24 @@ export default function LeaguePage({
                   score1: isBye ? (p1.id !== 'BYE' ? 3 : 0) : 0,
                   score2: isBye ? (p2.id !== 'BYE' ? 3 : 0) : 0,
                   winnerId,
-                  date: new Date().toISOString().split('T')[0],
-                  time: '16:00',
+                  date: bracketStartDate, // 自動填入日期
+                  time: matchTime,        // 自動填入計算好的時間
+                  venue: matchVenue,      // 自動填入場地
                   timestamp: serverTimestamp()
               };
               currentRoundNodes.push(matchObj);
               matchesToCreate.push({ ref: matchRef, data: matchObj });
           }
 
+          // 這一輪打完後的最晚時間，作為下一輪的開始時間
+          currentRoundStartTime = getMaxTime(courtsAvailable);
+
           let previousRoundNodes = currentRoundNodes;
           for(r = rounds - 1; r >= 1; r--) {
               let nextRoundNodes = [];
+              // 進入新的一輪，所有場地從 currentRoundStartTime 開始空出來
+              courtsAvailable = Array(Number(bracketCourts)).fill(currentRoundStartTime);
+
               for(let i=0; i<previousRoundNodes.length; i+=2) {
                   const m1 = previousRoundNodes[i];
                   const m2 = previousRoundNodes[i+1];
@@ -586,6 +643,12 @@ export default function LeaguePage({
                   const p2Id = m2.winnerId || null;
                   const p2Name = p2Id ? allAvailablePlayers.find(s=>s.id===p2Id)?.name : null;
                   const p2Seed = p2Id ? (m2.winnerId === m2.player1Id ? m2.player1Seed : m2.player2Seed) : null;
+
+                  // 👉 6.7 分配場地與時間
+                  const cIdx = getEarliestCourt(courtsAvailable);
+                  const matchTime = courtsAvailable[cIdx];
+                  const matchVenue = `Court ${cIdx + 1}`;
+                  courtsAvailable[cIdx] = addMins(courtsAvailable[cIdx], Number(bracketMatchDuration));
 
                   const matchObj = {
                       id: matchRef.id,
@@ -600,8 +663,9 @@ export default function LeaguePage({
                       status: 'scheduled',
                       score1: 0, score2: 0,
                       winnerId: null,
-                      date: new Date().toISOString().split('T')[0],
-                      time: 'TBD',
+                      date: bracketStartDate,
+                      time: matchTime,
+                      venue: matchVenue,
                       timestamp: serverTimestamp()
                   };
                   
@@ -613,7 +677,13 @@ export default function LeaguePage({
                   nextRoundNodes.push(matchObj);
                   matchesToCreate.push({ ref: matchRef, data: matchObj });
 
+                  // 如果是決賽，安排季軍戰
                   if (r === 1) {
+                      const bIdx = getEarliestCourt(courtsAvailable);
+                      const bronzeTime = courtsAvailable[bIdx];
+                      const bronzeVenue = `Court ${bIdx + 1}`;
+                      courtsAvailable[bIdx] = addMins(courtsAvailable[bIdx], Number(bracketMatchDuration));
+
                       const bronzeMatchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
                       const bronzeMatchObj = {
                           id: bronzeMatchRef.id,
@@ -627,8 +697,9 @@ export default function LeaguePage({
                           player2Id: null, player2Name: null, player2Seed: null,
                           status: 'scheduled',
                           score1: 0, score2: 0, winnerId: null,
-                          date: new Date().toISOString().split('T')[0],
-                          time: 'TBD',
+                          date: bracketStartDate,
+                          time: bronzeTime,
+                          venue: bronzeVenue,
                           timestamp: serverTimestamp()
                       };
                       m1.nextLoserMatchId = bronzeMatchRef.id; m1.nextLoserMatchSlot = 'player1';
@@ -636,13 +707,13 @@ export default function LeaguePage({
                       matchesToCreate.push({ ref: bronzeMatchRef, data: bronzeMatchObj });
                   }
               }
-              previousRoundNodes = nextRoundNodes;
+              currentRoundStartTime = getMaxTime(courtsAvailable);
           }
 
           matchesToCreate.forEach(m => { batch.set(m.ref, m.data); });
 
           await batch.commit();
-          alert("✅ 盃賽與季軍戰生成成功！");
+          alert("✅ 盃賽與季軍戰生成成功，且已自動完成場地與時間排程！");
           setShowBracketGenerator(false);
           setSelectedBracket(bracketEventName.trim()); 
           setViewMode('bracket'); 
@@ -759,7 +830,7 @@ export default function LeaguePage({
              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Medal size={28}/></div>
              <div>
                <h3 className="text-3xl font-black text-slate-800 tracking-tight">聯賽專區</h3>
-               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v6.6</span></p>
+               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v6.7</span></p>
              </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -794,7 +865,6 @@ export default function LeaguePage({
 
             {role === 'admin' && (
               <>
-                {/* 👉 6.6 刪除大會按鈕 */}
                 {(viewMode === 'league' ? selectedTournament : selectedBracket) && (
                     <button 
                         onClick={() => handleDeleteCollection('tournament', viewMode === 'league' ? selectedTournament : selectedBracket, viewMode)}
@@ -847,7 +917,6 @@ export default function LeaguePage({
                                   <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
                                       淘汰賽樹狀圖
                                   </span>
-                                  {/* 👉 6.6 分組刪除按鈕 (樹狀圖用) */}
                                   {role === 'admin' && (
                                       <button 
                                           onClick={() => handleDeleteCollection('group', groupName, 'bracket')}
@@ -895,7 +964,7 @@ export default function LeaguePage({
                     deleteItem={deleteItem} 
                     students={students} 
                     openScoreOverrideModal={openScoreOverrideModal} 
-                    onDeleteGroup={(name) => handleDeleteCollection('group', name, 'league')} /* 👉 6.6 傳入分組刪除函數 */
+                    onDeleteGroup={(name) => handleDeleteCollection('group', name, 'league')}
                 />
               ))
           )
@@ -955,6 +1024,29 @@ export default function LeaguePage({
                       <button onClick={() => setShowBracketGenerator(false)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200"><X size={20}/></button>
                   </div>
                   
+                  {/* 👉 6.7 新增：智能賽程排程設定區 */}
+                  <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                      <h4 className="text-sm font-black text-blue-800 mb-3 flex items-center gap-2"><Clock size={16}/> 智能賽程排程 (Smart Scheduling)</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                              <label className="text-[10px] font-black text-slate-500 uppercase">比賽日期</label>
+                              <input type="date" value={bracketStartDate} onChange={e=>setBracketStartDate(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
+                          </div>
+                          <div>
+                              <label className="text-[10px] font-black text-slate-500 uppercase">首場開始時間</label>
+                              <input type="time" value={bracketStartTime} onChange={e=>setBracketStartTime(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
+                          </div>
+                          <div>
+                              <label className="text-[10px] font-black text-slate-500 uppercase">可用場地數</label>
+                              <input type="number" min="1" max="10" value={bracketCourts} onChange={e=>setBracketCourts(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
+                          </div>
+                          <div>
+                              <label className="text-[10px] font-black text-slate-500 uppercase">預估耗時 (分)</label>
+                              <input type="number" min="5" step="5" value={bracketMatchDuration} onChange={e=>setBracketMatchDuration(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
+                          </div>
+                      </div>
+                  </div>
+
                   <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                           <label className="text-xs font-black text-slate-400 mb-2 block">盃賽大會名稱 (獨立分類)</label>
@@ -1014,7 +1106,7 @@ export default function LeaguePage({
                   <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
                       <button onClick={() => setBracketPlayers([])} className="px-6 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl">清空選擇</button>
                       <button onClick={handleGenerateBracket} disabled={isUpdatingMatch} className="px-8 py-3 bg-amber-500 text-white font-black rounded-xl hover:bg-amber-600 shadow-lg flex items-center gap-2">
-                          {isUpdatingMatch ? <Loader2 size={18} className="animate-spin"/> : <Zap size={18}/>} 自動排種與生成樹狀圖
+                          {isUpdatingMatch ? <Loader2 size={18} className="animate-spin"/> : <Zap size={18}/>} 自動排程與生成樹狀圖
                       </button>
                   </div>
               </div>
