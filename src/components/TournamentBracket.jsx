@@ -1,30 +1,30 @@
 // File: src/components/TournamentBracket.jsx
-// Version: 1.4 (Show Time & Venue + Pro Seeding)
+// Version: 1.4 (Visual Layout Fix & Time/Venue Display)
 
 import React, { useMemo } from 'react';
-import { PlayCircle, Clock } from 'lucide-react'; // 🌟 引入 Clock 圖示
+import { PlayCircle, Clock, MapPin } from 'lucide-react';
 
 export default function TournamentBracket({ bracketMatches, students, role, onMatchClick, liveMatches = [], onStartLiveBroadcast }) {
-    const bracketRounds = useMemo(() => {
-        if (!bracketMatches || bracketMatches.length === 0) return [];
+    // 🌟 核心修復：將季軍戰 (bronzeMatch) 與主賽程 (mainRounds) 徹底分離，避免破壞 flexbox 排版
+    const { mainRounds, bronzeMatch } = useMemo(() => {
+        if (!bracketMatches || bracketMatches.length === 0) return { mainRounds: [], bronzeMatch: null };
         
+        const bMatch = bracketMatches.find(m => m.isBronzeFinal);
+        const mainM = bracketMatches.filter(m => !m.isBronzeFinal);
+
         let maxRound = 1;
-        bracketMatches.forEach(m => {
+        mainM.forEach(m => {
             if (m.bracketRound && m.bracketRound > maxRound) maxRound = m.bracketRound;
         });
 
         const rounds = [];
         for (let r = maxRound; r >= 1; r--) {
-            const matchesInRound = bracketMatches
+            const matchesInRound = mainM
                 .filter(m => m.bracketRound === r)
-                .sort((a, b) => {
-                    if (a.isBronzeFinal) return 1;
-                    if (b.isBronzeFinal) return -1;
-                    return a.bracketMatchNumber - b.bracketMatchNumber;
-                }); 
+                .sort((a, b) => a.bracketMatchNumber - b.bracketMatchNumber); 
 
             let roundName = `Round ${r}`;
-            if (r === 1) roundName = "🏆 決賽圈"; 
+            if (r === 1) roundName = "🏆 總決賽";
             if (r === 2) roundName = "🏅 四強賽";
             if (r === 3) roundName = "八強賽";
             if (r === 4) roundName = "十六強";
@@ -32,14 +32,14 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
 
             rounds.push({ roundNum: r, name: roundName, matches: matchesInRound });
         }
-        return rounds;
+        return { mainRounds: rounds, bronzeMatch: bMatch };
     }, [bracketMatches]);
 
-    if (bracketRounds.length === 0) {
+    if (mainRounds.length === 0) {
         return <div className="text-center p-10 text-slate-400 font-bold">目前無盃賽資料</div>;
     }
 
-    const MatchBox = ({ match }) => {
+    const MatchBox = ({ match, isBronze = false }) => {
         const isDone = match.status === 'completed';
         const isBye = match.player2Id === 'BYE';
         
@@ -70,18 +70,18 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
 
         return (
             <div 
-                className={`relative w-48 border-2 rounded-xl overflow-visible transition-all duration-300 group
+                className={`relative w-48 border-2 rounded-xl overflow-visible transition-all duration-300 group flex flex-col
                 ${isBye ? 'opacity-60 grayscale bg-white border-slate-200 cursor-not-allowed' : 'cursor-pointer'} 
                 ${isLive ? 'border-red-500 bg-slate-900 shadow-[0_0_20px_rgba(239,68,68,0.4)] scale-105 z-20' : 
                   (isDone ? 'border-emerald-200 bg-white shadow-sm hover:border-emerald-400' : 'border-slate-200 bg-white hover:border-blue-400 hover:shadow-md')}
                 ${!match.player1Id && !match.player2Id ? 'border-dashed border-slate-300 bg-slate-50' : ''}
-                ${match.isBronzeFinal ? 'mt-8 border-orange-200' : ''}`}
+                ${isBronze ? 'border-orange-300 bg-orange-50' : ''}`}
                 onClick={() => {
                     if (!isBye && onMatchClick) onMatchClick(match);
                 }}
             >
-                {match.isFinal && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-100 text-amber-700 border border-amber-200 text-[9px] font-black px-2 py-0.5 rounded shadow-sm z-10 whitespace-nowrap">總決賽 (Final)</div>}
-                {match.isBronzeFinal && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-100 text-orange-700 border border-orange-200 text-[9px] font-black px-2 py-0.5 rounded shadow-sm z-10 whitespace-nowrap">季軍戰 (3rd Place)</div>}
+                {!isBronze && match.isFinal && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-100 text-amber-700 border border-amber-200 text-[9px] font-black px-2 py-0.5 rounded shadow-sm z-10 whitespace-nowrap">總決賽 (Final)</div>}
+                {isBronze && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-100 text-orange-700 border border-orange-200 text-[9px] font-black px-2 py-0.5 rounded shadow-sm z-10 whitespace-nowrap">季軍戰 (3rd Place)</div>}
 
                 {isLive && (
                     <div className="absolute -top-3 right-0 bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-t-lg animate-pulse flex items-center gap-1 z-30 shadow-md">
@@ -91,9 +91,9 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
 
                 {/* 🌟 核心修復：顯示場地與時間資訊 */}
                 {!isBye && (
-                    <div className={`text-[9px] font-bold px-2 py-1 flex justify-between items-center border-b ${isLive ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
-                        <span>{match.venue || 'TBD'}</span>
-                        <span className="flex items-center gap-0.5"><Clock size={9}/> {match.time || 'TBD'}</span>
+                    <div className={`text-[9px] font-bold px-2 py-1.5 flex justify-between items-center border-b ${isLive ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100/50 text-slate-500 border-slate-100'}`}>
+                        <span className="flex items-center gap-1"><MapPin size={10} className="text-blue-400"/> {match.venue || 'TBD'}</span>
+                        <span className="flex items-center gap-1"><Clock size={10} className="text-amber-500"/> {match.time || 'TBD'}</span>
                     </div>
                 )}
 
@@ -131,12 +131,6 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
                         </button>
                     </div>
                 )}
-
-                {!isLive && !match.isFinal && !match.isBronzeFinal && (
-                    <div className="absolute top-1/2 -right-3 -translate-y-1/2 w-6 h-6 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center text-[8px] font-black text-slate-400 shadow-sm z-30">
-                       #{match.bracketMatchNumber}
-                    </div>
-                )}
             </div>
         );
     };
@@ -144,21 +138,28 @@ export default function TournamentBracket({ bracketMatches, students, role, onMa
     return (
         <div className="w-full overflow-x-auto custom-scrollbar pb-16 pt-8">
             <div className="flex gap-16 min-w-max px-8">
-                {bracketRounds.map((round, rIndex) => (
-                    <div key={round.roundNum} className="flex flex-col gap-8 relative">
-                        <div className="text-center font-black text-sm uppercase tracking-widest text-blue-600 bg-blue-50 py-2 rounded-xl border border-blue-100 mb-4 sticky top-0 z-10 shadow-sm">
+                {mainRounds.map((round, rIndex) => (
+                    <div key={round.roundNum} className="flex flex-col relative" style={{ justifyContent: 'space-around' }}>
+                        <div className="text-center font-black text-sm uppercase tracking-widest text-blue-600 bg-blue-50 py-2 rounded-xl border border-blue-100 mb-8 sticky top-0 z-10 shadow-sm shrink-0">
                             {round.name}
                         </div>
-                        <div className="flex flex-col justify-around h-full gap-4">
+                        <div className="flex flex-col justify-around flex-1 gap-4">
                             {round.matches.map((match) => (
                                 <div key={match.id} className="relative flex items-center">
                                     <MatchBox match={match} />
-                                    {rIndex < bracketRounds.length - 1 && !match.isBronzeFinal && (
+                                    {rIndex < mainRounds.length - 1 && (
                                         <div className="absolute -right-8 w-8 border-t-2 border-slate-300"></div>
                                     )}
                                 </div>
                             ))}
                         </div>
+                        
+                        {/* 🌟 核心修復：將季軍戰獨立渲染在決賽列的最下方，絕不干擾主樹狀圖的連線排版 */}
+                        {round.roundNum === 1 && bronzeMatch && (
+                            <div className="mt-12 pt-8 border-t-2 border-dashed border-slate-200 flex justify-center shrink-0">
+                                <MatchBox match={bronzeMatch} isBronze={true} />
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
