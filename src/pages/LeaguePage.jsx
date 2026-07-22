@@ -380,22 +380,22 @@ export default function LeaguePage({
     return leagueMatches.filter(m => m.tournamentName === selectedTournament && m.matchType !== 'tournament_bracket');
   }, [leagueMatches, selectedTournament]);
 
-  const currentBracketMatches = useMemo(() => {
+    const currentBracketMatches = useMemo(() => {
     return leagueMatches.filter(m => m.tournamentName === selectedBracket && m.matchType === 'tournament_bracket');
   }, [leagueMatches, selectedBracket]);
 
-  // 3. 只針對「聯賽」進行分組 (Group Section 使用)
-  const localGroupedLeagueMatches = useMemo(() => {
+  // 👇 6.5 核心修復：將同一個盃賽大會裡的比賽，依照「分組名稱 (男子組、女子組)」拆開
+  const groupedBracketMatches = useMemo(() => {
     const groups = {};
-    if (currentLeagueMatches.length > 0) {
-        currentLeagueMatches.forEach(match => {
-            const groupKey = match.groupName || '所有比賽';
+    if (currentBracketMatches.length > 0) {
+        currentBracketMatches.forEach(match => {
+            const groupKey = match.groupName || '預設組別';
             if (!groups[groupKey]) groups[groupKey] = [];
             groups[groupKey].push(match);
         });
     }
     return groups;
-  }, [currentLeagueMatches]);
+  }, [currentBracketMatches]);
 
   const handleSaveSingleMatch = async () => {
       if (!newMatch.player1Id) return alert("必須選擇一位本校出賽球員！");
@@ -764,24 +764,42 @@ export default function LeaguePage({
         </div>
       </div>
 
+            {/* 依據模式切換顯示 */}
       {viewMode === 'bracket' ? (
-          <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden animate-in zoom-in-95 duration-300">
-              <TournamentBracket 
-                  bracketMatches={currentBracketMatches} 
-                  students={students} 
-                  role={role} 
-                  onMatchClick={role === 'admin' ? handleScoreUpdateIntercept : null} 
-                  liveMatches={liveBracketMatches} /* 👉 6.2 新增：注入即時轉播資料流 */
-                  onStartLiveBroadcast={(match) => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }}
-              />
-          </div>
-      ) : (
-          Object.keys(localGroupedLeagueMatches).length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-slate-300">
+          Object.keys(groupedBracketMatches).length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-slate-300 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm mt-8">
                 <div className="p-6 bg-slate-50 rounded-full mb-4"><Trophy size={48} strokeWidth={1.5} className="text-slate-300" /></div>
-                <p className="font-black text-slate-400 text-lg">{currentLeagueMatches.length > 0 ? '目前賽事無聯賽紀錄' : '暫無聯賽，教練可建立新聯賽'}</p>
+                <p className="font-black text-slate-400 text-lg">目前賽事無淘汰盃賽紀錄</p>
               </div>
           ) : (
+              <div className="space-y-12 mt-8">
+                  {Object.keys(groupedBracketMatches).map(groupName => (
+                      <div key={groupName} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden animate-in zoom-in-95 duration-300">
+                          {/* 分組標題列 */}
+                          <div className="bg-slate-50 px-8 py-5 border-b border-slate-100 flex items-center justify-between">
+                              <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                                  <Trophy size={20} className="text-amber-500" /> {groupName}
+                              </h3>
+                              <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
+                                  淘汰賽樹狀圖
+                              </span>
+                          </div>
+                          
+                          {/* 獨立渲染該組別的樹狀圖 */}
+                          <TournamentBracket 
+                              bracketMatches={groupedBracketMatches[groupName]} 
+                              students={students} 
+                              role={role} 
+                              onMatchClick={role === 'admin' ? handleScoreUpdateIntercept : null} 
+                              liveMatches={liveBracketMatches} 
+                              onStartLiveBroadcast={(match) => { setActiveLeagueMatch(match); setShowUmpirePanel(true); }}
+                          />
+                      </div>
+                  ))}
+              </div>
+          )
+      ) : (
+
               Object.keys(localGroupedLeagueMatches).map(groupName => (
                 <GroupSection key={groupName} groupName={groupName} matches={localGroupedLeagueMatches[groupName]} enrichedStandings={tournamentStandings} tournamentStandings={tournamentStandings} role={role} currentUserInfo={currentUserInfo} handleCheerMatch={handleCheerMatch} setActiveLeagueMatch={setActiveLeagueMatch} setShowUmpirePanel={setShowUmpirePanel} handleUpdateLeagueMatchScore={handleScoreUpdateIntercept} handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} students={students} openScoreOverrideModal={openScoreOverrideModal} />
               ))
