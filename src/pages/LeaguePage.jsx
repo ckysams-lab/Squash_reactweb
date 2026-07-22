@@ -1,5 +1,5 @@
 // File: src/pages/LeaguePage.jsx
-// Version 7.5: 🏆 終極賽制引擎：修復小組賽積分榜，加入「一鍵小組晉級淘汰賽 (Advance to Knockout)」殺手級功能。
+// Version 7.6: 🏆 修復淘汰賽樹狀圖重複生成決賽的邏輯錯誤，並重新加入「組別名稱（如男子組、女子組）」的設定功能。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2, Clock, Grid, FastForward } from 'lucide-react';
@@ -277,7 +277,7 @@ export default function LeaguePage({
   role, currentUserInfo, setShowTacticalBoard, setShowUmpirePanel,
   setActiveLeagueMatch, setShowTournamentModal, selectedTournament, 
   setSelectedTournament, tournamentList, leagueMatches, myTournamentStats,
-  myUpcomingMatches, handleCheerMatch, // 🌟 7.5 移除舊的 tournamentStandings prop，我們要在內部重新計算
+  myUpcomingMatches, handleCheerMatch, 
   handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, schoolLogo,
   students, db, appId 
 }) {
@@ -342,12 +342,10 @@ export default function LeaguePage({
     return leagueMatches.filter(m => m.tournamentName === selectedBracket && (m.matchType === 'tournament_bracket' || m.matchType === 'tournament_round_robin'));
   }, [leagueMatches, selectedBracket]);
 
-  // 🌟 7.5 終極修復：統一資料源供積分榜計算使用
   const activeMatchesForStandings = useMemo(() => {
     return viewMode === 'league' ? currentLeagueMatches : currentTournamentMatches;
   }, [viewMode, currentLeagueMatches, currentTournamentMatches]);
 
-  // 🌟 7.5 終極修復：重新計算本頁面當前模式的積分榜
   const tournamentStandings = useMemo(() => {
     if (!activeMatchesForStandings || activeMatchesForStandings.length === 0) return {};
     const standingsData = {};
@@ -503,6 +501,7 @@ export default function LeaguePage({
   const handleGenerateTournament = async () => {
       if(bracketPlayers.length < 3) return alert("舉辦賽事至少需要 3 名選手！");
       if(!bracketEventName.trim()) return alert("請輸入大會名稱！");
+      if(!bracketName.trim()) return alert("請輸入組別名稱！"); // Version 7.6 Added Validation
 
       const allAvailablePlayers = [...students, ...externalBracketPlayers];
       const sortedPlayers = [...bracketPlayers].sort((a, b) => {
@@ -515,11 +514,10 @@ export default function LeaguePage({
       try {
           const batch = writeBatch(db);
           
-          // 🌟 7.5 終極防呆修復：只刪除目前準備生成之「同一個大會」與「同一個組別/賽制」的舊資料，確保不會刪到其他比賽
           const existingMatches = leagueMatches.filter(m => 
               m.tournamentName === bracketEventName.trim() && 
               m.matchType === (tournFormat === 'round_robin' ? 'tournament_round_robin' : 'tournament_bracket') &&
-              (tournFormat === 'round_robin' ? true : m.groupName === bracketName) // 淘汰賽只刪同組別，小組賽刪全部小組
+              (tournFormat === 'round_robin' ? true : m.groupName === bracketName.trim())
           );
           existingMatches.forEach(m => { batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', m.id)); });
 
@@ -607,7 +605,7 @@ export default function LeaguePage({
 
                   const matchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
                   const matchObj = {
-                      id: matchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName, matchType: 'tournament_bracket',
+                      id: matchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName.trim(), matchType: 'tournament_bracket',
                       bracketRound: r, bracketMatchNumber: matchCounter++,
                       player1Id: p1.id, player1Name: p1.name, player1Seed: p1.seed,
                       player2Id: p2.id, player2Name: p2.name, player2Seed: p2.seed,
@@ -635,7 +633,7 @@ export default function LeaguePage({
                       courtsAvailable[cIdx] = addMins(courtsAvailable[cIdx], Number(bracketMatchDuration));
 
                       const matchObj = {
-                          id: matchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName, matchType: 'tournament_bracket',
+                          id: matchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName.trim(), matchType: 'tournament_bracket',
                           bracketRound: r, isFinal: r === 1, bracketMatchNumber: matchCounter++,
                           player1Id: p1Id, player1Name: p1Name, player1Seed: p1Seed,
                           player2Id: p2Id, player2Name: p2Name, player2Seed: p2Seed,
@@ -651,7 +649,7 @@ export default function LeaguePage({
                           courtsAvailable[bIdx] = addMins(courtsAvailable[bIdx], Number(bracketMatchDuration));
                           const bronzeMatchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
                           const bronzeMatchObj = {
-                              id: bronzeMatchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName, matchType: 'tournament_bracket',
+                              id: bronzeMatchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName.trim(), matchType: 'tournament_bracket',
                               bracketRound: 1, isBronzeFinal: true, bracketMatchNumber: matchCounter++,
                               player1Id: null, player1Name: null, player1Seed: null, player2Id: null, player2Name: null, player2Seed: null,
                               status: 'scheduled', score1: 0, score2: 0, winnerId: null,
@@ -662,6 +660,7 @@ export default function LeaguePage({
                       }
                   }
                   currentRoundStartTime = getMaxTime(courtsAvailable);
+                  previousRoundNodes = nextRoundNodes; // Version 7.6 FIX: 更新前一輪節點，避免迴圈無限複製第一輪資料
               }
           }
 
@@ -675,14 +674,12 @@ export default function LeaguePage({
       setIsUpdatingMatch(false);
   };
 
-  // 🌟 7.5 殺手級功能：一鍵小組晉級 (Advance to Knockout from Pools)
   const handleAdvanceToKnockout = async () => {
       if (!window.confirm(`確定要結束小組賽階段，並將各組【前 2 名】晉級至淘汰賽嗎？\n(這將自動為 ${selectedBracket} 產生淘汰賽籤表)`)) return;
 
       let advancingPlayers = [];
       const poolNames = Object.keys(groupedRRMatches).sort();
       
-      // 取各組前2名
       poolNames.forEach(pool => {
           const standings = tournamentStandings[pool] || [];
           if (standings[0]) advancingPlayers.push({ ...standings[0], pool, seed: 1 });
@@ -696,12 +693,10 @@ export default function LeaguePage({
       if (advancingPlayers.length > 8) size = 16;
       if (advancingPlayers.length > 16) size = 32;
 
-      // 補齊 BYE
       while(advancingPlayers.length < size) {
           advancingPlayers.push({ id: 'BYE', name: '[輪空 BYE]', seed: null });
       }
 
-      // 交叉對陣邏輯 (A1 vs D2, B1 vs C2...)
       const rank1s = advancingPlayers.filter(p => p.seed === 1);
       const rank2s = advancingPlayers.filter(p => p.seed === 2);
       const byes = advancingPlayers.filter(p => p.id === 'BYE');
@@ -716,7 +711,6 @@ export default function LeaguePage({
       try {
           const batch = writeBatch(db);
           
-          // 刪除該大會舊的「淘汰賽」階段，避免重疊
           const oldKOs = leagueMatches.filter(m => m.tournamentName === selectedBracket && m.groupName === '淘汰賽 (Knockout Stage)' && m.matchType === 'tournament_bracket');
           oldKOs.forEach(m => batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', m.id)));
 
@@ -726,7 +720,7 @@ export default function LeaguePage({
           let currentRoundNodes = [];
           let rounds = Math.log2(size);
           let r = rounds;
-          let courtsAvailable = Array(2).fill("14:00"); // 淘汰賽預設下午兩點開打
+          let courtsAvailable = Array(2).fill("14:00"); 
 
           for(let i=0; i<size/2; i++){
               const p1 = currentRoundPlayers[i*2];
@@ -748,7 +742,7 @@ export default function LeaguePage({
                   matchType: 'tournament_bracket',
                   bracketRound: r, 
                   bracketMatchNumber: matchCounter++,
-                  player1Id: p1?.id, player1Name: p1?.name, player1Seed: p1?.pool ? `${p1.pool.slice(-1)}1` : null, // 顯示如 A1, B2
+                  player1Id: p1?.id, player1Name: p1?.name, player1Seed: p1?.pool ? `${p1.pool.slice(-1)}1` : null, 
                   player2Id: p2?.id, player2Name: p2?.name, player2Seed: p2?.pool ? `${p2.pool.slice(-1)}2` : null,
                   status: isBye ? 'completed' : 'scheduled',
                   score1: isBye ? 3 : 0, score2: 0,
@@ -806,6 +800,7 @@ export default function LeaguePage({
                   }
               }
               currentRoundStartTime = getMaxTime(courtsAvailable);
+              previousRoundNodes = nextRoundNodes; // Version 7.6 FIX: 更新前一輪節點，避免迴圈無限複製第一輪資料
           }
 
           matchesToCreate.forEach(m => { batch.set(m.ref, m.data); });
@@ -889,7 +884,7 @@ export default function LeaguePage({
              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Medal size={28}/></div>
              <div>
                <h3 className="text-3xl font-black text-slate-800 tracking-tight">聯賽專區</h3>
-               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與大賽賽程 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v7.5</span></p>
+               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與大賽賽程 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v7.6</span></p>
              </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -952,7 +947,6 @@ export default function LeaguePage({
                           <div className="flex items-center justify-between mb-6">
                               <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2"><Grid className="text-blue-500"/> 小組積分榜 (Group Stage)</h3>
                               
-                              {/* 🌟 7.5 殺手級功能：一鍵結算晉級 */}
                               {role === 'admin' && (
                                   <button onClick={handleAdvanceToKnockout} disabled={isUpdatingMatch} className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-400 to-amber-500 text-white rounded-xl text-sm font-black shadow-lg hover:shadow-xl hover:scale-105 transition-all">
                                       {isUpdatingMatch ? <Loader2 className="animate-spin" size={18}/> : <FastForward size={18}/>} 結算小組賽並生成晉級淘汰賽
@@ -969,7 +963,6 @@ export default function LeaguePage({
                                               <button onClick={() => handleDeleteCollection('group', groupName, 'bracket')} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full"><Trash2 size={16}/></button>
                                           )}
                                       </div>
-                                      {/* 🌟 7.5 修復：現在這裡有積分資料了！ */}
                                       <StandingsTable players={tournamentStandings?.[groupName] || []} />
                                       <div className="mt-4 space-y-2 max-h-60 overflow-y-auto custom-scrollbar border-t border-slate-100 pt-4">
                                           {groupedRRMatches[groupName].map(match => (
@@ -1097,8 +1090,16 @@ export default function LeaguePage({
                       </div>
 
                       <div>
-                          <label className="text-xs font-black text-slate-400 mb-2 block">3. 大會名稱 (例: 2026 總決賽)</label>
-                          <input type="text" value={bracketEventName} onChange={e=>setBracketEventName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-lg outline-none focus:border-amber-500" />
+                          {/* Version 7.6 FIX: 重新加回組別名稱的輸入介面 */}
+                          <label className="text-xs font-black text-slate-400 mb-2 block">3. 大會名稱與組別</label>
+                          <div className="flex gap-4 flex-col md:flex-row">
+                              <div className="flex-1">
+                                  <input type="text" placeholder="大會名稱 (例: 2026 校慶盃)" value={bracketEventName} onChange={e=>setBracketEventName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-lg outline-none focus:border-amber-500" />
+                              </div>
+                              <div className="flex-1">
+                                  <input type="text" placeholder="組別名稱 (例: 男子組/女子組)" value={bracketName} onChange={e=>setBracketName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-lg outline-none focus:border-amber-500" />
+                              </div>
+                          </div>
                       </div>
 
                       <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl flex flex-col md:flex-row gap-3 items-center">
