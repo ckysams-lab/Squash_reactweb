@@ -525,7 +525,7 @@ export default function LeaguePage({
       return maxStr;
   };
 
-  const handleGenerateBracket = async () => {
+    const handleGenerateBracket = async () => {
       if(bracketPlayers.length < 3) return alert("舉辦淘汰賽至少需要 3 名選手！");
       if(bracketPlayers.length > 32) return alert("本引擎最高支援 32 人籤表，請減少人數。");
       if(!bracketEventName.trim()) return alert("請輸入盃賽大會名稱！");
@@ -565,6 +565,17 @@ export default function LeaguePage({
       setIsUpdatingMatch(true);
       try {
           const batch = writeBatch(db);
+
+          // 🌟 核心防呆修復：在生成新的籤表前，先刪除這個大會、這個組別底下所有的舊比賽！
+          const existingMatches = leagueMatches.filter(m => 
+              m.tournamentName === bracketEventName.trim() && 
+              m.groupName === bracketName && 
+              m.matchType === 'tournament_bracket'
+          );
+          existingMatches.forEach(m => {
+              batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', m.id));
+          });
+
           const matchesToCreate = [];
           let matchCounter = 1;
 
