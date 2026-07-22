@@ -1,5 +1,5 @@
 // File: src/pages/LeaguePage.jsx
-// Version 6.5: 🚀 盃賽引擎終極版 (包含外卡選手、分組獨立渲染、即時轉播連動、語法完美修復)
+// Version 6.6: 🧹 釋放空間優化：加入大會與分組的 Firebase 批次刪除引擎，一鍵清空資料。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2 } from 'lucide-react';
@@ -245,7 +245,7 @@ const CompletedMatchRow = ({ match, tournamentStandings, groupName, students, ro
   );
 };
 
-const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandings, role, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students, openScoreOverrideModal }) => {
+const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandings, role, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students, openScoreOverrideModal, onDeleteGroup }) => {
   const isTeamTie = groupName.includes(' vs ');
   const players = enrichedStandings?.[groupName] || [];
   const sortedMatches = [...matches].sort((a, b) => a.date.localeCompare(b.date) || (a.matchOrder || '').localeCompare(b.matchOrder || ''));
@@ -263,6 +263,17 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
           <h4 className="text-xl font-black text-slate-800">{groupName}</h4>
           <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-widest border border-slate-200">{players.length} Players</span>
           <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-widest border border-slate-200">{completedCount}/{totalCount} Completed</span>
+          
+          {/* 👉 6.6 分組刪除按鈕 */}
+          {role === 'admin' && (
+              <button 
+                  onClick={() => onDeleteGroup(groupName)}
+                  className="ml-auto p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  title="刪除此組別的所有賽事"
+              >
+                  <Trash2 size={16}/>
+              </button>
+          )}
         </div>
       )}
 
@@ -405,6 +416,51 @@ export default function LeaguePage({
     }
     return groups;
   }, [currentLeagueMatches]);
+
+  // 👉 6.6 核心引擎：Firebase 分塊刪除機制 (釋放雲端空間)
+  const handleDeleteCollection = async (level, name, matchType) => {
+      let confirmMsg = "";
+      let matchesToDelete = [];
+      
+      if (level === 'tournament') {
+          confirmMsg = `🚨 警告：確定要永久刪除大會「${name}」的【所有賽程與紀錄】嗎？\n資料庫空間將會被徹底釋放，此操作無法復原！`;
+          matchesToDelete = leagueMatches.filter(m => m.tournamentName === name && (matchType === 'bracket' ? m.matchType === 'tournament_bracket' : m.matchType !== 'tournament_bracket'));
+      } else if (level === 'group') {
+          confirmMsg = `⚠️ 確定要永久刪除組別「${name}」的所有賽程與紀錄嗎？此操作無法復原！`;
+          const currentTName = matchType === 'bracket' ? selectedBracket : selectedTournament;
+          matchesToDelete = leagueMatches.filter(m => m.tournamentName === currentTName && m.groupName === name && (matchType === 'bracket' ? m.matchType === 'tournament_bracket' : m.matchType !== 'tournament_bracket'));
+      }
+
+      if (!window.confirm(confirmMsg)) return;
+
+      setIsUpdatingMatch(true);
+      try {
+          // Firebase Batch 每批次最多 500 筆，做分塊處理以防萬一
+          const chunks = [];
+          for (let i = 0; i < matchesToDelete.length; i += 500) {
+              chunks.push(matchesToDelete.slice(i, i + 500));
+          }
+          
+          for (const chunk of chunks) {
+              const chunkBatch = writeBatch(db);
+              chunk.forEach(m => {
+                  chunkBatch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', m.id));
+              });
+              await chunkBatch.commit();
+          }
+
+          alert(`✅ 已成功刪除！釋放了 ${matchesToDelete.length} 筆賽程空間。`);
+          
+          if (level === 'tournament') {
+              if (matchType === 'bracket') setSelectedBracket('');
+              else setSelectedTournament('');
+          }
+      } catch (error) {
+          console.error(error);
+          alert("❌ 刪除失敗，請檢查網路連線。");
+      }
+      setIsUpdatingMatch(false);
+  };
 
   const handleSaveSingleMatch = async () => {
       if (!newMatch.player1Id) return alert("必須選擇一位本校出賽球員！");
@@ -703,7 +759,7 @@ export default function LeaguePage({
              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Medal size={28}/></div>
              <div>
                <h3 className="text-3xl font-black text-slate-800 tracking-tight">聯賽專區</h3>
-               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v6.5</span></p>
+               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v6.6</span></p>
              </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -738,6 +794,17 @@ export default function LeaguePage({
 
             {role === 'admin' && (
               <>
+                {/* 👉 6.6 刪除大會按鈕 */}
+                {(viewMode === 'league' ? selectedTournament : selectedBracket) && (
+                    <button 
+                        onClick={() => handleDeleteCollection('tournament', viewMode === 'league' ? selectedTournament : selectedBracket, viewMode)}
+                        className="p-3 bg-white border border-red-200 text-red-500 rounded-xl hover:bg-red-50 hover:border-red-300 transition-all shadow-sm"
+                        title="刪除整個大會與所有紀錄"
+                    >
+                        <Trash2 size={18} />
+                    </button>
+                )}
+
                 {viewMode === 'league' && selectedTournament && (
                     <button onClick={() => setShowAddSingleMatch(true)} className="p-3 bg-white border border-slate-200 text-emerald-600 rounded-xl hover:bg-emerald-50 hover:border-emerald-300 transition-all shadow-sm" title={`新增單場賽程`}>
                       <UserPlus size={18} />
@@ -776,9 +843,21 @@ export default function LeaguePage({
                               <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                                   <Trophy size={20} className="text-amber-500" /> {groupName}
                               </h3>
-                              <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
-                                  淘汰賽樹狀圖
-                              </span>
+                              <div className="flex items-center gap-3">
+                                  <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
+                                      淘汰賽樹狀圖
+                                  </span>
+                                  {/* 👉 6.6 分組刪除按鈕 (樹狀圖用) */}
+                                  {role === 'admin' && (
+                                      <button 
+                                          onClick={() => handleDeleteCollection('group', groupName, 'bracket')}
+                                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                                          title="刪除此組別所有賽程"
+                                      >
+                                          <Trash2 size={18}/>
+                                      </button>
+                                  )}
+                              </div>
                           </div>
                           <TournamentBracket 
                               bracketMatches={groupedBracketMatches[groupName]} 
@@ -800,7 +879,24 @@ export default function LeaguePage({
               </div>
           ) : (
               Object.keys(localGroupedLeagueMatches).map(groupName => (
-                <GroupSection key={groupName} groupName={groupName} matches={localGroupedLeagueMatches[groupName]} enrichedStandings={tournamentStandings} tournamentStandings={tournamentStandings} role={role} currentUserInfo={currentUserInfo} handleCheerMatch={handleCheerMatch} setActiveLeagueMatch={setActiveLeagueMatch} setShowUmpirePanel={setShowUmpirePanel} handleUpdateLeagueMatchScore={handleScoreUpdateIntercept} handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} students={students} openScoreOverrideModal={openScoreOverrideModal} />
+                <GroupSection 
+                    key={groupName} 
+                    groupName={groupName} 
+                    matches={localGroupedLeagueMatches[groupName]} 
+                    enrichedStandings={tournamentStandings} 
+                    tournamentStandings={tournamentStandings} 
+                    role={role} 
+                    currentUserInfo={currentUserInfo} 
+                    handleCheerMatch={handleCheerMatch} 
+                    setActiveLeagueMatch={setActiveLeagueMatch} 
+                    setShowUmpirePanel={setShowUmpirePanel} 
+                    handleUpdateLeagueMatchScore={handleScoreUpdateIntercept} 
+                    handleEditLeagueMatch={handleEditLeagueMatch} 
+                    deleteItem={deleteItem} 
+                    students={students} 
+                    openScoreOverrideModal={openScoreOverrideModal} 
+                    onDeleteGroup={(name) => handleDeleteCollection('group', name, 'league')} /* 👉 6.6 傳入分組刪除函數 */
+                />
               ))
           )
       )}
