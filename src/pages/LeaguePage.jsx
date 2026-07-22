@@ -1,5 +1,5 @@
 // File: src/pages/LeaguePage.jsx
-// Version 7.7 (Complete Version): 🏟️ 專業跨校聯賽升級！新增「自訂人數團體賽」機制、外校混合組隊、排陣計分面板與死局積分結算系統。（已補回所有被省略的完整代碼）
+// Version 7.8: 🛠️ 修復團體賽標籤分類錯誤、新增 3 隊單循環防呆機制，並升級「一鍵小組晉級淘汰賽」完美支援團體賽。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2, Clock, Grid, FastForward, ClipboardList } from 'lucide-react';
@@ -22,28 +22,6 @@ const StatusPill = ({ status }) =>
 const RankBadge = ({ rank }) => {
   const styles = { 1: 'bg-amber-100 text-amber-800', 2: 'bg-slate-100 text-slate-600', 3: 'bg-orange-100 text-orange-700' };
   return (<span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black ${styles[rank] ?? 'bg-slate-50 text-slate-400'}`}>{rank}</span>);
-};
-
-const PodiumStrip = ({ players }) => {
-  const medals = [
-    { icon: '🥇', accent: 'border-l-amber-400', bg: 'bg-gradient-to-r from-amber-50 to-white' },
-    { icon: '🥈', accent: 'border-l-slate-400', bg: 'bg-gradient-to-r from-slate-100 to-white' },
-    { icon: '🥉', accent: 'border-l-orange-400', bg: 'bg-gradient-to-r from-orange-50 to-white' },
-  ];
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-      {players.slice(0, 3).map((p, i) => (
-        <div key={p.id} className={`flex items-center gap-3 rounded-xl px-4 py-3 border-l-[4px] shadow-sm ${medals[i].accent} ${medals[i].bg}`}>
-          <span className="text-2xl leading-none drop-shadow-sm">{medals[i].icon}</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-black text-slate-800 truncate">{p.name}</p>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">積分: {p.leaguePoints}</p>
-          </div>
-          {p.hotStreak >= 3 && (<span title={`${p.hotStreak} 連勝`} className="text-orange-500 text-lg animate-pulse">🔥</span>)}
-        </div>
-      ))}
-    </div>
-  );
 };
 
 const StandingsTable = ({ players }) => (
@@ -374,6 +352,11 @@ const TeamLineupModal = ({ match, onClose, onSave }) => {
     );
 };
 
+// Helper function
+const createEmptyRubbers = (size) => Array.from({ length: size }).map((_, i) => ({
+    id: `rubber_${i}`, p1Id: '', p1Name: '', p2Id: '', p2Name: '', score1: 0, score2: 0, status: 'pending'
+}));
+
 export default function LeaguePage({
   role, currentUserInfo, setShowTacticalBoard, setShowUmpirePanel,
   setActiveLeagueMatch, setShowTournamentModal, selectedTournament, 
@@ -452,7 +435,7 @@ export default function LeaguePage({
               updatedAt: serverTimestamp()
           });
           
-          if (updatedMatch.status === 'completed' && updatedMatch.matchType?.includes('tournament_bracket')) {
+          if (updatedMatch.status === 'completed' && updatedMatch.matchType?.includes('bracket')) {
              const batch = writeBatch(db);
              if (updatedMatch.nextMatchId) {
                  const nextMatchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', updatedMatch.nextMatchId);
@@ -675,6 +658,13 @@ export default function LeaguePage({
       if(!bracketEventName.trim()) return alert("請輸入大會名稱！");
       if(!bracketName.trim()) return alert("請輸入組別名稱！");
 
+      // Version 7.8: 防呆機制 (Auto Fail-Safe) - 不足 4 隊強制跑 1 組單循環
+      let finalPools = tournPools;
+      if (tournFormat === 'round_robin' && validParticipants.length < 4 && tournPools > 1) {
+          finalPools = 1;
+          alert("⚠️ 系統偵測到參賽名單少於 4 隊！已自動為您調整為「單循環 (1 組)」，以確保所有隊伍都能互相對戰。");
+      }
+
       const allAvailablePlayers = [...students, ...externalBracketPlayers];
       
       const participants = isTeam  
@@ -694,7 +684,7 @@ export default function LeaguePage({
           
           const existingMatches = leagueMatches.filter(m => 
               m.tournamentName === bracketEventName.trim() && 
-              m.matchType === (tournFormat === 'round_robin' ? (isTeam ? 'team_round_robin' : 'tournament_round_robin') : (isTeam ? 'team_bracket' : 'tournament_bracket')) &&
+              m.matchType === (tournFormat === 'round_robin' ? (isTeam ? 'tournament_team_round_robin' : 'tournament_round_robin') : (isTeam ? 'tournament_team_bracket' : 'tournament_bracket')) &&
               (tournFormat === 'round_robin' ? true : m.groupName === bracketName.trim())
           );
           existingMatches.forEach(m => { batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', m.id)); });
@@ -702,16 +692,12 @@ export default function LeaguePage({
           const matchesToCreate = [];
           let matchCounter = 1;
           let courtsAvailable = Array(Number(bracketCourts)).fill(bracketStartTime || "09:00");
-          
-          const createEmptyRubbers = () => Array.from({ length: teamSize }).map((_, i) => ({
-              id: `rubber_${i}`, p1Id: '', p1Name: '', p2Id: '', p2Name: '', score1: 0, score2: 0, status: 'pending'
-          }));
 
           if (tournFormat === 'round_robin') {
-              const pools = Array.from({ length: tournPools }, () => []);
+              const pools = Array.from({ length: finalPools }, () => []);
               participants.forEach((p, index) => {
-                  const isEvenRound = Math.floor(index / tournPools) % 2 === 0;
-                  const poolIdx = isEvenRound ? index % tournPools : tournPools - 1 - (index % tournPools);
+                  const isEvenRound = Math.floor(index / finalPools) % 2 === 0;
+                  const poolIdx = isEvenRound ? index % finalPools : finalPools - 1 - (index % finalPools);
                   pools[poolIdx].push(p);
               });
 
@@ -730,12 +716,12 @@ export default function LeaguePage({
                               ref: matchRef,
                               data: {
                                   id: matchRef.id, tournamentName: bracketEventName.trim(), groupName: groupName,
-                                  matchType: isTeam ? 'team_round_robin' : 'tournament_round_robin', 
+                                  matchType: isTeam ? 'tournament_team_round_robin' : 'tournament_round_robin', 
                                   isTeamMatch: isTeam, teamSize: isTeam ? teamSize : null,
                                   player1Id: p1.id, player1Name: p1.name, player1Seed: p1.seed, team1Roster: p1.roster,
                                   player2Id: p2.id, player2Name: p2.name, player2Seed: p2.seed, team2Roster: p2.roster,
                                   status: 'scheduled', score1: 0, score2: 0, winnerId: null,
-                                  rubbers: isTeam ? createEmptyRubbers() : null,
+                                  rubbers: isTeam ? createEmptyRubbers(teamSize) : null,
                                   date: bracketStartDate, time: matchTime, venue: matchVenue, timestamp: serverTimestamp()
                               }
                           });
@@ -778,12 +764,12 @@ export default function LeaguePage({
                   const matchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
                   const matchObj = {
                       id: matchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName.trim(), 
-                      matchType: isTeam ? 'team_bracket' : 'tournament_bracket', isTeamMatch: isTeam, teamSize: isTeam ? teamSize : null,
+                      matchType: isTeam ? 'tournament_team_bracket' : 'tournament_bracket', isTeamMatch: isTeam, teamSize: isTeam ? teamSize : null,
                       bracketRound: r, bracketMatchNumber: matchCounter++,
                       player1Id: p1.id, player1Name: p1.name, player1Seed: p1.seed, team1Roster: p1.roster,
                       player2Id: p2.id, player2Name: p2.name, player2Seed: p2.seed, team2Roster: p2.roster,
                       status: isBye ? 'completed' : 'scheduled', score1: isBye ? 3 : 0, score2: 0, winnerId,
-                      rubbers: isTeam && !isBye ? createEmptyRubbers() : null,
+                      rubbers: isTeam && !isBye ? createEmptyRubbers(teamSize) : null,
                       date: bracketStartDate, time: matchTime, venue: matchVenue, timestamp: serverTimestamp()
                   };
                   currentRoundNodes.push(matchObj); matchesToCreate.push({ ref: matchRef, data: matchObj });
@@ -805,12 +791,12 @@ export default function LeaguePage({
 
                       const matchObj = {
                           id: matchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName.trim(), 
-                          matchType: isTeam ? 'team_bracket' : 'tournament_bracket', isTeamMatch: isTeam, teamSize: isTeam ? teamSize : null,
+                          matchType: isTeam ? 'tournament_team_bracket' : 'tournament_bracket', isTeamMatch: isTeam, teamSize: isTeam ? teamSize : null,
                           bracketRound: r, isFinal: r === 1, bracketMatchNumber: matchCounter++,
                           player1Id: m1.winnerId, player1Name: m1.winnerId ? (m1.winnerId===m1.player1Id ? m1.player1Name : m1.player2Name) : null, team1Roster: m1.winnerId ? (m1.winnerId===m1.player1Id ? m1.team1Roster : m1.team2Roster) : null,
                           player2Id: m2.winnerId, player2Name: m2.winnerId ? (m2.winnerId===m2.player1Id ? m2.player1Name : m2.player2Name) : null, team2Roster: m2.winnerId ? (m2.winnerId===m2.player1Id ? m2.team1Roster : m2.team2Roster) : null,
                           status: 'scheduled', score1: 0, score2: 0, winnerId: null,
-                          rubbers: isTeam ? createEmptyRubbers() : null,
+                          rubbers: isTeam ? createEmptyRubbers(teamSize) : null,
                           date: bracketStartDate, time: matchTime, venue: matchVenue, timestamp: serverTimestamp()
                       };
                       m1.nextMatchId = matchObj.id; m1.nextMatchSlot = 'player1'; m2.nextMatchId = matchObj.id; m2.nextMatchSlot = 'player2';
@@ -821,10 +807,10 @@ export default function LeaguePage({
                           courtsAvailable[bIdx] = addMins(courtsAvailable[bIdx], Number(bracketMatchDuration));
                           const bronzeMatchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
                           const bronzeMatchObj = {
-                              id: bronzeMatchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName.trim(), matchType: isTeam ? 'team_bracket' : 'tournament_bracket',
+                              id: bronzeMatchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName.trim(), matchType: isTeam ? 'tournament_team_bracket' : 'tournament_bracket',
                               bracketRound: 1, isBronzeFinal: true, bracketMatchNumber: matchCounter++, isTeamMatch: isTeam, teamSize: isTeam ? teamSize : null,
                               player1Id: null, player1Name: null, player1Seed: null, player2Id: null, player2Name: null, player2Seed: null,
-                              status: 'scheduled', score1: 0, score2: 0, winnerId: null, rubbers: isTeam ? createEmptyRubbers() : null,
+                              status: 'scheduled', score1: 0, score2: 0, winnerId: null, rubbers: isTeam ? createEmptyRubbers(teamSize) : null,
                               date: bracketStartDate, time: bronzeTime, venue: bronzeVenue, timestamp: serverTimestamp()
                           };
                           m1.nextLoserMatchId = bronzeMatchRef.id; m1.nextLoserMatchSlot = 'player1'; m2.nextLoserMatchId = bronzeMatchRef.id; m2.nextLoserMatchSlot = 'player2';
@@ -848,6 +834,11 @@ export default function LeaguePage({
 
   const handleAdvanceToKnockout = async () => {
       if (!window.confirm(`確定要結束小組賽階段，並將各組【前 2 名】晉級至淘汰賽嗎？\n(這將自動為 ${selectedBracket} 產生淘汰賽籤表)`)) return;
+
+      // Version 7.8: 解析這是不是團體賽，繼承給晉級賽程
+      const sampleMatch = Object.values(groupedRRMatches)[0]?.[0];
+      const isTeam = sampleMatch?.isTeamMatch || false;
+      const currentTeamSize = sampleMatch?.teamSize || null;
 
       let advancingPlayers = [];
       const poolNames = Object.keys(groupedRRMatches).sort();
@@ -883,7 +874,7 @@ export default function LeaguePage({
       try {
           const batch = writeBatch(db);
           
-          const oldKOs = leagueMatches.filter(m => m.tournamentName === selectedBracket && m.groupName === '淘汰賽 (Knockout Stage)' && m.matchType?.includes('tournament_bracket'));
+          const oldKOs = leagueMatches.filter(m => m.tournamentName === selectedBracket && m.groupName === '淘汰賽 (Knockout Stage)' && m.matchType?.includes('bracket'));
           oldKOs.forEach(m => batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', m.id)));
 
           const matchesToCreate = [];
@@ -893,6 +884,18 @@ export default function LeaguePage({
           let rounds = Math.log2(size);
           let r = rounds;
           let courtsAvailable = Array(2).fill("14:00"); 
+
+          // 抓取原本的隊伍名單(Roster)以供淘汰賽使用
+          const getRoster = (pid) => {
+              if (pid === 'BYE') return null;
+              for (const pool of Object.values(groupedRRMatches)) {
+                  for (const match of pool) {
+                      if (match.player1Id === pid) return match.team1Roster;
+                      if (match.player2Id === pid) return match.team2Roster;
+                  }
+              }
+              return null;
+          };
 
           for(let i=0; i<size/2; i++){
               const p1 = currentRoundPlayers[i*2];
@@ -910,14 +913,16 @@ export default function LeaguePage({
                   id: matchRef.id,
                   tournamentName: selectedBracket,
                   groupName: '淘汰賽 (Knockout Stage)',
-                  matchType: 'tournament_bracket',
+                  matchType: isTeam ? 'tournament_team_bracket' : 'tournament_bracket',
+                  isTeamMatch: isTeam, teamSize: currentTeamSize,
                   bracketRound: r, 
                   bracketMatchNumber: matchCounter++,
-                  player1Id: p1?.id, player1Name: p1?.name, player1Seed: p1?.pool ? `${p1.pool.slice(-1)}1` : null, 
-                  player2Id: p2?.id, player2Name: p2?.name, player2Seed: p2?.pool ? `${p2.pool.slice(-1)}2` : null,
+                  player1Id: p1?.id, player1Name: p1?.name, player1Seed: p1?.pool ? `${p1.pool.slice(-1)}1` : null, team1Roster: getRoster(p1?.id),
+                  player2Id: p2?.id, player2Name: p2?.name, player2Seed: p2?.pool ? `${p2.pool.slice(-1)}2` : null, team2Roster: getRoster(p2?.id),
                   status: isBye ? 'completed' : 'scheduled',
                   score1: isBye ? 3 : 0, score2: 0,
                   winnerId,
+                  rubbers: isTeam && !isBye ? createEmptyRubbers(currentTeamSize) : null,
                   date: new Date().toISOString().split('T')[0],
                   time: matchTime, venue: matchVenue, timestamp: serverTimestamp()
               };
@@ -936,18 +941,20 @@ export default function LeaguePage({
                   const m1 = previousRoundNodes[i]; const m2 = previousRoundNodes[i+1];
                   const matchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
                   
-                  const p1Id = m1.winnerId || null; const p1Name = p1Id ? (m1.winnerId === m1.player1Id ? m1.player1Name : m1.player2Name) : null;
-                  const p2Id = m2.winnerId || null; const p2Name = p2Id ? (m2.winnerId === m1.player1Id ? m1.player1Name : m2.player2Name) : null;
+                  const p1Id = m1.winnerId || null; const p1Name = p1Id ? (m1.winnerId === m1.player1Id ? m1.player1Name : m1.player2Name) : null; const p1Roster = p1Id ? (m1.winnerId === m1.player1Id ? m1.team1Roster : m1.team2Roster) : null;
+                  const p2Id = m2.winnerId || null; const p2Name = p2Id ? (m2.winnerId === m1.player1Id ? m1.player1Name : m2.player2Name) : null; const p2Roster = p2Id ? (m2.winnerId === m1.player1Id ? m1.team1Roster : m2.team2Roster) : null;
 
                   const cIdx = getEarliestCourt(courtsAvailable); const matchTime = courtsAvailable[cIdx]; const matchVenue = `Court ${cIdx + 1}`;
                   courtsAvailable[cIdx] = addMins(courtsAvailable[cIdx], 20);
 
                   const matchObj = {
-                      id: matchRef.id, tournamentName: selectedBracket, groupName: '淘汰賽 (Knockout Stage)', matchType: 'tournament_bracket',
+                      id: matchRef.id, tournamentName: selectedBracket, groupName: '淘汰賽 (Knockout Stage)', 
+                      matchType: isTeam ? 'tournament_team_bracket' : 'tournament_bracket', isTeamMatch: isTeam, teamSize: currentTeamSize,
                       bracketRound: r, isFinal: r === 1, bracketMatchNumber: matchCounter++,
-                      player1Id: p1Id, player1Name: p1Name, player1Seed: null,
-                      player2Id: p2Id, player2Name: p2Name, player2Seed: null,
+                      player1Id: p1Id, player1Name: p1Name, player1Seed: null, team1Roster: p1Roster,
+                      player2Id: p2Id, player2Name: p2Name, player2Seed: null, team2Roster: p2Roster,
                       status: 'scheduled', score1: 0, score2: 0, winnerId: null,
+                      rubbers: isTeam ? createEmptyRubbers(currentTeamSize) : null,
                       date: new Date().toISOString().split('T')[0], time: matchTime, venue: matchVenue, timestamp: serverTimestamp()
                   };
                   
@@ -960,10 +967,12 @@ export default function LeaguePage({
                       const bIdx = getEarliestCourt(courtsAvailable); const bronzeTime = courtsAvailable[bIdx]; const bronzeVenue = `Court ${bIdx + 1}`;
                       const bronzeMatchRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'league_matches'));
                       const bronzeMatchObj = {
-                          id: bronzeMatchRef.id, tournamentName: selectedBracket, groupName: '淘汰賽 (Knockout Stage)', matchType: 'tournament_bracket',
+                          id: bronzeMatchRef.id, tournamentName: selectedBracket, groupName: '淘汰賽 (Knockout Stage)', 
+                          matchType: isTeam ? 'tournament_team_bracket' : 'tournament_bracket', isTeamMatch: isTeam, teamSize: currentTeamSize,
                           bracketRound: 1, isBronzeFinal: true, bracketMatchNumber: matchCounter++,
                           player1Id: null, player1Name: null, player2Id: null, player2Name: null,
                           status: 'scheduled', score1: 0, score2: 0, winnerId: null,
+                          rubbers: isTeam ? createEmptyRubbers(currentTeamSize) : null,
                           date: new Date().toISOString().split('T')[0], time: bronzeTime, venue: bronzeVenue, timestamp: serverTimestamp()
                       };
                       m1.nextLoserMatchId = bronzeMatchRef.id; m1.nextLoserMatchSlot = 'player1'; m2.nextLoserMatchId = bronzeMatchRef.id; m2.nextLoserMatchSlot = 'player2';
@@ -1008,7 +1017,7 @@ export default function LeaguePage({
               const matchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.id);
               batch.update(matchRef, { score1, score2, winnerId, status: 'completed', gameScoresStr: gameScoresRaw.trim(), updatedAt: serverTimestamp() });
               
-              if (match.matchType?.includes('tournament_bracket')) {
+              if (match.matchType?.includes('bracket')) {
                   if (match.nextMatchId) {
                        const nextMatchRef = doc(db, 'artifacts', appId, 'public', 'data', 'league_matches', match.nextMatchId);
                        const updateObj = {};
@@ -1025,7 +1034,7 @@ export default function LeaguePage({
                   }
               }
 
-              if (match.matchType === 'tournament_round_robin') {
+              if (match.matchType?.includes('round_robin')) {
                   const winnerStudent = students.find(s => s.id === winnerId);
                   const loserStudent = students.find(s => s.id === loserId);
                   if (winnerStudent && loserStudent) {
@@ -1054,7 +1063,7 @@ export default function LeaguePage({
              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Medal size={28}/></div>
              <div>
                <h3 className="text-3xl font-black text-slate-800 tracking-tight">聯賽專區</h3>
-               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與大賽賽程 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs text-amber-600">v7.7 完整版</span></p>
+               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與大賽賽程 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs text-amber-600">v7.8 完整版</span></p>
              </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
