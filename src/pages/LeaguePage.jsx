@@ -1,5 +1,5 @@
 // File: src/pages/LeaguePage.jsx
-// Version 6.7: ⏱️ 智能賽程排程引擎：自動分配場地 (Courts) 與精準的開賽時間。
+// Version 6.8: 🔧 介面修復：優化「舉辦盃賽」彈窗的滾動條 (Scroll) 體驗，適應所有筆電與平板螢幕高度。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2, Clock } from 'lucide-react';
@@ -366,7 +366,6 @@ export default function LeaguePage({
   const [bracketName, setBracketName] = useState('男子公開組');
   const [selectedBracket, setSelectedBracket] = useState('');
 
-  // 👉 6.7 新增：智能賽程設定狀態
   const [bracketStartDate, setBracketStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [bracketStartTime, setBracketStartTime] = useState('09:00');
   const [bracketCourts, setBracketCourts] = useState(2);
@@ -497,7 +496,6 @@ export default function LeaguePage({
       setIsUpdatingMatch(false);
   };
 
-  // 👉 6.7 輔助函數：時間相加演算法
   const addMins = (timeStr, mins) => {
       if(!timeStr) return "00:00";
       const [h, m] = timeStr.split(':').map(Number);
@@ -573,11 +571,9 @@ export default function LeaguePage({
           let currentRoundPlayers = seededPlayers;
           let currentRoundNodes = [];
 
-          // 👉 6.7 核心：初始化時間排程器
           let currentRoundStartTime = bracketStartTime || "09:00";
           let r = rounds;
 
-          // 建立第一輪
           let courtsAvailable = Array(Number(bracketCourts)).fill(currentRoundStartTime);
 
           for(let i=0; i<size/2; i++){
@@ -588,14 +584,12 @@ export default function LeaguePage({
               const winnerName = isBye ? (p1.id !== 'BYE' ? p1.name : p2.name) : null;
               const winnerSeed = isBye ? (p1.id !== 'BYE' ? p1.seed : p2.seed) : null;
 
-              // 👉 6.7 分配場地與時間
               let matchTime = 'N/A';
               let matchVenue = '';
               if (!isBye) {
                   const cIdx = getEarliestCourt(courtsAvailable);
                   matchTime = courtsAvailable[cIdx];
                   matchVenue = `Court ${cIdx + 1}`;
-                  // 安排好後，該球場的時間加上預估時長
                   courtsAvailable[cIdx] = addMins(courtsAvailable[cIdx], Number(bracketMatchDuration));
               }
 
@@ -613,22 +607,20 @@ export default function LeaguePage({
                   score1: isBye ? (p1.id !== 'BYE' ? 3 : 0) : 0,
                   score2: isBye ? (p2.id !== 'BYE' ? 3 : 0) : 0,
                   winnerId,
-                  date: bracketStartDate, // 自動填入日期
-                  time: matchTime,        // 自動填入計算好的時間
-                  venue: matchVenue,      // 自動填入場地
+                  date: bracketStartDate, 
+                  time: matchTime,        
+                  venue: matchVenue,      
                   timestamp: serverTimestamp()
               };
               currentRoundNodes.push(matchObj);
               matchesToCreate.push({ ref: matchRef, data: matchObj });
           }
 
-          // 這一輪打完後的最晚時間，作為下一輪的開始時間
           currentRoundStartTime = getMaxTime(courtsAvailable);
 
           let previousRoundNodes = currentRoundNodes;
           for(r = rounds - 1; r >= 1; r--) {
               let nextRoundNodes = [];
-              // 進入新的一輪，所有場地從 currentRoundStartTime 開始空出來
               courtsAvailable = Array(Number(bracketCourts)).fill(currentRoundStartTime);
 
               for(let i=0; i<previousRoundNodes.length; i+=2) {
@@ -644,7 +636,6 @@ export default function LeaguePage({
                   const p2Name = p2Id ? allAvailablePlayers.find(s=>s.id===p2Id)?.name : null;
                   const p2Seed = p2Id ? (m2.winnerId === m2.player1Id ? m2.player1Seed : m2.player2Seed) : null;
 
-                  // 👉 6.7 分配場地與時間
                   const cIdx = getEarliestCourt(courtsAvailable);
                   const matchTime = courtsAvailable[cIdx];
                   const matchVenue = `Court ${cIdx + 1}`;
@@ -677,7 +668,6 @@ export default function LeaguePage({
                   nextRoundNodes.push(matchObj);
                   matchesToCreate.push({ ref: matchRef, data: matchObj });
 
-                  // 如果是決賽，安排季軍戰
                   if (r === 1) {
                       const bIdx = getEarliestCourt(courtsAvailable);
                       const bronzeTime = courtsAvailable[bIdx];
@@ -830,7 +820,7 @@ export default function LeaguePage({
              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Medal size={28}/></div>
              <div>
                <h3 className="text-3xl font-black text-slate-800 tracking-tight">聯賽專區</h3>
-               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v6.7</span></p>
+               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與賽前勝率分析 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs">v6.8</span></p>
              </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -1014,9 +1004,9 @@ export default function LeaguePage({
       )}
 
       {showBracketGenerator && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[500] flex items-center justify-center p-4 animate-in fade-in">
-              <div className="bg-white rounded-[2rem] p-8 max-w-2xl w-full shadow-2xl flex flex-col max-h-[90vh]">
-                  <div className="flex justify-between items-center mb-6">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[500] flex items-center justify-center p-2 sm:p-4 animate-in fade-in">
+              <div className="bg-white rounded-[2rem] p-6 sm:p-8 max-w-2xl w-full shadow-2xl flex flex-col max-h-[95vh] min-h-0">
+                  <div className="flex justify-between items-center mb-4 shrink-0">
                       <div>
                           <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2"><Trophy className="text-amber-500"/> 舉辦淘汰盃賽</h3>
                           <p className="text-sm font-bold text-slate-400">目前選擇：{bracketPlayers.length} 人 (最高支援 32 人，自動補位輪空)</p>
@@ -1024,86 +1014,88 @@ export default function LeaguePage({
                       <button onClick={() => setShowBracketGenerator(false)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200"><X size={20}/></button>
                   </div>
                   
-                  {/* 👉 6.7 新增：智能賽程排程設定區 */}
-                  <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                      <h4 className="text-sm font-black text-blue-800 mb-3 flex items-center gap-2"><Clock size={16}/> 智能賽程排程 (Smart Scheduling)</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div>
-                              <label className="text-[10px] font-black text-slate-500 uppercase">比賽日期</label>
-                              <input type="date" value={bracketStartDate} onChange={e=>setBracketStartDate(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
-                          </div>
-                          <div>
-                              <label className="text-[10px] font-black text-slate-500 uppercase">首場開始時間</label>
-                              <input type="time" value={bracketStartTime} onChange={e=>setBracketStartTime(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
-                          </div>
-                          <div>
-                              <label className="text-[10px] font-black text-slate-500 uppercase">可用場地數</label>
-                              <input type="number" min="1" max="10" value={bracketCourts} onChange={e=>setBracketCourts(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
-                          </div>
-                          <div>
-                              <label className="text-[10px] font-black text-slate-500 uppercase">預估耗時 (分)</label>
-                              <input type="number" min="5" step="5" value={bracketMatchDuration} onChange={e=>setBracketMatchDuration(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                          <label className="text-xs font-black text-slate-400 mb-2 block">盃賽大會名稱 (獨立分類)</label>
-                          <input type="text" value={bracketEventName} onChange={e=>setBracketEventName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-lg outline-none focus:border-amber-500" placeholder="例如: 2026 校慶盃" />
-                      </div>
-                      <div>
-                          <label className="text-xs font-black text-slate-400 mb-2 block">分組名稱</label>
-                          <input type="text" value={bracketName} onChange={e=>setBracketName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-lg outline-none focus:border-amber-500" placeholder="例如: 男子公開組" />
-                      </div>
-                  </div>
-
-                  <div className="mb-6 p-4 bg-purple-50 border border-purple-100 rounded-xl flex flex-col md:flex-row gap-3 items-center">
-                      <span className="text-sm font-black text-purple-700 whitespace-nowrap">➕ 邀請外校選手</span>
-                      <input type="text" placeholder="選手名稱 (例: 男拔-李明)" value={extPlayerName} onChange={e=>setExtPlayerName(e.target.value)} className="flex-1 p-2 rounded-lg border border-purple-200 text-sm font-bold outline-none focus:border-purple-500" />
-                      <select value={extPlayerElo} onChange={e=>setExtPlayerElo(e.target.value)} className="p-2 rounded-lg border border-purple-200 text-sm font-bold text-slate-600 outline-none">
-                          <option value="800">新手 (~800分)</option>
-                          <option value="1000">一般 (~1000分)</option>
-                          <option value="1300">種子 (~1300分)</option>
-                          <option value="1600">菁英 (~1600分)</option>
-                      </select>
-                      <button 
-                          onClick={() => {
-                              if(!extPlayerName.trim()) return;
-                              const newExt = { id: `ext_${Date.now()}`, name: extPlayerName.trim(), points: parseInt(extPlayerElo, 10), isExternal: true };
-                              setExternalBracketPlayers([...externalBracketPlayers, newExt]);
-                              setBracketPlayers([...bracketPlayers, newExt.id]);
-                              setExtPlayerName('');
-                          }} 
-                          className="px-4 py-2 bg-purple-600 text-white font-bold text-sm rounded-lg hover:bg-purple-700 transition-all shadow-sm"
-                      >
-                          加入籤表
-                      </button>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl p-4 bg-slate-50 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {[...students, ...externalBracketPlayers].map(s => {
-                          const isSelected = bracketPlayers.includes(s.id);
-                          const isExt = s.isExternal;
-                          return (
-                              <div 
-                                  key={s.id} 
-                                  onClick={() => setBracketPlayers(prev => isSelected ? prev.filter(id => id !== s.id) : [...prev, s.id])}
-                                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all flex items-center gap-2 font-bold text-sm ${isSelected ? (isExt ? 'border-purple-500 bg-purple-50 text-purple-800' : 'border-amber-500 bg-amber-50 text-amber-800') : 'border-slate-200 bg-white text-slate-600 hover:border-amber-300'} shadow-sm`}
-                              >
-                                  {isSelected ? (
-                                      <CheckCircle2 size={18} className={isExt ? 'text-purple-600' : 'text-amber-500'} />
-                                  ) : (
-                                      <div className="w-[18px] h-[18px] rounded-full border-2 border-slate-300"></div>
-                                  )}
-                                  <span className="truncate">{s.name}</span>
-                                  {isExt && <span className="text-[9px] bg-purple-200 text-purple-700 px-1 py-0.5 rounded ml-auto">外卡</span>}
+                  {/* 🌟 核心修復：將所有設定與名單包在一個統一的滾動區塊中 */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6 min-h-0">
+                      <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                          <h4 className="text-sm font-black text-blue-800 mb-3 flex items-center gap-2"><Clock size={16}/> 智能賽程排程 (Smart Scheduling)</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <div>
+                                  <label className="text-[10px] font-black text-slate-500 uppercase">比賽日期</label>
+                                  <input type="date" value={bracketStartDate} onChange={e=>setBracketStartDate(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
                               </div>
-                          );
-                      })}
+                              <div>
+                                  <label className="text-[10px] font-black text-slate-500 uppercase">首場開始時間</label>
+                                  <input type="time" value={bracketStartTime} onChange={e=>setBracketStartTime(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
+                              </div>
+                              <div>
+                                  <label className="text-[10px] font-black text-slate-500 uppercase">可用場地數</label>
+                                  <input type="number" min="1" max="10" value={bracketCourts} onChange={e=>setBracketCourts(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
+                              </div>
+                              <div>
+                                  <label className="text-[10px] font-black text-slate-500 uppercase">預估耗時 (分)</label>
+                                  <input type="number" min="5" step="5" value={bracketMatchDuration} onChange={e=>setBracketMatchDuration(e.target.value)} className="w-full p-2 mt-1 rounded-lg border border-blue-200 text-sm font-bold outline-none" />
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs font-black text-slate-400 mb-2 block">盃賽大會名稱 (獨立分類)</label>
+                              <input type="text" value={bracketEventName} onChange={e=>setBracketEventName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-lg outline-none focus:border-amber-500" placeholder="例如: 2026 校慶盃" />
+                          </div>
+                          <div>
+                              <label className="text-xs font-black text-slate-400 mb-2 block">分組名稱</label>
+                              <input type="text" value={bracketName} onChange={e=>setBracketName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-lg outline-none focus:border-amber-500" placeholder="例如: 男子公開組" />
+                          </div>
+                      </div>
+
+                      <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl flex flex-col md:flex-row gap-3 items-center">
+                          <span className="text-sm font-black text-purple-700 whitespace-nowrap">➕ 邀請外校選手</span>
+                          <input type="text" placeholder="選手名稱 (例: 男拔-李明)" value={extPlayerName} onChange={e=>setExtPlayerName(e.target.value)} className="flex-1 p-2 rounded-lg border border-purple-200 text-sm font-bold outline-none focus:border-purple-500" />
+                          <select value={extPlayerElo} onChange={e=>setExtPlayerElo(e.target.value)} className="p-2 rounded-lg border border-purple-200 text-sm font-bold text-slate-600 outline-none">
+                              <option value="800">新手 (~800分)</option>
+                              <option value="1000">一般 (~1000分)</option>
+                              <option value="1300">種子 (~1300分)</option>
+                              <option value="1600">菁英 (~1600分)</option>
+                          </select>
+                          <button 
+                              onClick={() => {
+                                  if(!extPlayerName.trim()) return;
+                                  const newExt = { id: `ext_${Date.now()}`, name: extPlayerName.trim(), points: parseInt(extPlayerElo, 10), isExternal: true };
+                                  setExternalBracketPlayers([...externalBracketPlayers, newExt]);
+                                  setBracketPlayers([...bracketPlayers, newExt.id]);
+                                  setExtPlayerName('');
+                              }} 
+                              className="px-4 py-2 bg-purple-600 text-white font-bold text-sm rounded-lg hover:bg-purple-700 transition-all shadow-sm"
+                          >
+                              加入籤表
+                          </button>
+                      </div>
+
+                      <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {[...students, ...externalBracketPlayers].map(s => {
+                              const isSelected = bracketPlayers.includes(s.id);
+                              const isExt = s.isExternal;
+                              return (
+                                  <div 
+                                      key={s.id} 
+                                      onClick={() => setBracketPlayers(prev => isSelected ? prev.filter(id => id !== s.id) : [...prev, s.id])}
+                                      className={`p-3 rounded-lg border-2 cursor-pointer transition-all flex items-center gap-2 font-bold text-sm ${isSelected ? (isExt ? 'border-purple-500 bg-purple-50 text-purple-800' : 'border-amber-500 bg-amber-50 text-amber-800') : 'border-slate-200 bg-white text-slate-600 hover:border-amber-300'} shadow-sm`}
+                                  >
+                                      {isSelected ? (
+                                          <CheckCircle2 size={18} className={isExt ? 'text-purple-600' : 'text-amber-500'} />
+                                      ) : (
+                                          <div className="w-[18px] h-[18px] rounded-full border-2 border-slate-300"></div>
+                                      )}
+                                      <span className="truncate">{s.name}</span>
+                                      {isExt && <span className="text-[9px] bg-purple-200 text-purple-700 px-1 py-0.5 rounded ml-auto">外卡</span>}
+                                  </div>
+                              );
+                          })}
+                      </div>
                   </div>
 
-                  <div className="mt-8 flex justify-end gap-3 pt-4 border-t">
+                  <div className="mt-4 flex justify-end gap-3 pt-4 border-t shrink-0">
                       <button onClick={() => setBracketPlayers([])} className="px-6 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl">清空選擇</button>
                       <button onClick={handleGenerateBracket} disabled={isUpdatingMatch} className="px-8 py-3 bg-amber-500 text-white font-black rounded-xl hover:bg-amber-600 shadow-lg flex items-center gap-2">
                           {isUpdatingMatch ? <Loader2 size={18} className="animate-spin"/> : <Zap size={18}/>} 自動排程與生成樹狀圖
