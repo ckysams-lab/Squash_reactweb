@@ -1,9 +1,8 @@
 // File: src/pages/LeaguePage.jsx
-// Version 8.3: 🚀 專業 SaaS 級別升級！引入 @hello-pangea/dnd 實現直覺化的「拖曳排陣 (Drag & Drop Lineup)」功能。
+// Version 8.4: 🛡️ Vercel 編譯完美修復版！移除不相容的第三方插件，引入極致輕量的「原生 HTML5 拖曳排序引擎」，實現 0 報錯的排陣體驗。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2, Clock, Grid, FastForward, ClipboardList, ChevronLeft, ChevronRight, MoreHorizontal, GripVertical } from 'lucide-react';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import html2canvas from 'html2canvas';
 import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
 import { collection, addDoc, doc, updateDoc, writeBatch, increment, serverTimestamp, onSnapshot } from 'firebase/firestore';
@@ -315,9 +314,10 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
   );
 };
 
-// Version 8.3: 引入 @hello-pangea/dnd 重構排陣系統
+// Version 8.4: 徹底移除 @hello-pangea/dnd，使用原生 HTML5 Drag & Drop 實作順滑排陣體驗！
 const TeamLineupModal = ({ match, onClose, onSave }) => {
-    // 初始化兩隊的拖曳排序狀態 (自動合併已分配與未分配的球員)
+    const teamSize = match.teamSize || 3;
+
     const [team1Order, setTeam1Order] = useState(() => {
         const assignedIds = match.rubbers?.map(r => r.p1Id).filter(Boolean) || [];
         const unassigned = (match.team1Roster || []).filter(p => !assignedIds.includes(p.id));
@@ -333,9 +333,8 @@ const TeamLineupModal = ({ match, onClose, onSave }) => {
     });
 
     const [rubbers, setRubbers] = useState(() => {
-        const size = match.teamSize || 3;
         const initial = match.rubbers ? [...match.rubbers] : [];
-        while(initial.length < size) {
+        while(initial.length < teamSize) {
             initial.push({ id: `rubber_${initial.length}`, p1Id: '', p1Name: '', p2Id: '', p2Name: '', score1: 0, score2: 0, status: 'pending' });
         }
         return initial.map((r, i) => ({
@@ -353,24 +352,47 @@ const TeamLineupModal = ({ match, onClose, onSave }) => {
         })));
     };
 
-    const handleDragEnd = (result) => {
-        if (!result.destination) return;
-        const { source, destination } = result;
+    // --- HTML5 Native Drag and Drop Logic ---
+    const [draggedItem, setDraggedItem] = useState(null);
 
-        if (source.droppableId === 'team1') {
-            const items = Array.from(team1Order);
-            const [reorderedItem] = items.splice(source.index, 1);
-            items.splice(destination.index, 0, reorderedItem);
+    const handleDragStart = (e, team, index) => {
+        setDraggedItem({ team, index });
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox fallback required data
+        e.dataTransfer.setData('text/plain', index);
+        setTimeout(() => {
+            if(e.target.classList) e.target.classList.add('opacity-40', 'scale-95', 'border-blue-400', 'shadow-xl');
+        }, 0);
+    };
+
+    const handleDragEnter = (e, team, index) => {
+        e.preventDefault();
+        if (!draggedItem || draggedItem.team !== team || draggedItem.index === index) return;
+        
+        if (team === 'team1') {
+            const items = [...team1Order];
+            const [reorderedItem] = items.splice(draggedItem.index, 1);
+            items.splice(index, 0, reorderedItem);
             setTeam1Order(items);
             updateRubbersFromOrder(items, team2Order);
-        } else if (source.droppableId === 'team2') {
-            const items = Array.from(team2Order);
-            const [reorderedItem] = items.splice(source.index, 1);
-            items.splice(destination.index, 0, reorderedItem);
+            setDraggedItem({ team, index }); // Update current index
+        } else {
+            const items = [...team2Order];
+            const [reorderedItem] = items.splice(draggedItem.index, 1);
+            items.splice(index, 0, reorderedItem);
             setTeam2Order(items);
             updateRubbersFromOrder(team1Order, items);
+            setDraggedItem({ team, index });
         }
     };
+
+    const handleDragEnd = (e) => {
+        if(e.target.classList) e.target.classList.remove('opacity-40', 'scale-95', 'border-blue-400', 'shadow-xl');
+        setDraggedItem(null);
+    };
+
+    const handleDragOver = (e) => { e.preventDefault(); };
+    // --- End Drag and Drop Logic ---
 
     const updateScore = (idx, field, val) => {
         const newRubbers = [...rubbers];
@@ -383,8 +405,7 @@ const TeamLineupModal = ({ match, onClose, onSave }) => {
         let isCompleted = true;
         
         rubbers.forEach((r, i) => {
-            // 只檢查前 teamSize 場 (避免未上場的後備球員影響)
-            if (i < (match.teamSize || 3)) {
+            if (i < teamSize) {
                 if (r.score1 > r.score2) s1++;
                 else if (r.score2 > r.score1) s2++;
                 if (r.score1 === 0 && r.score2 === 0) isCompleted = false;
@@ -403,85 +424,79 @@ const TeamLineupModal = ({ match, onClose, onSave }) => {
         onSave(updatedMatch);
     };
 
-    const teamSize = match.teamSize || 3;
-
     return (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[600] flex items-center justify-center p-4 animate-in fade-in">
             <div className="bg-white rounded-[2rem] p-8 max-w-5xl w-full shadow-2xl flex flex-col max-h-[90vh]">
                 <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
                     <div>
-                        <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2"><ClipboardList className="text-blue-500"/> 團體排陣與賽果 (拖曳排序)</h3>
-                        <p className="text-sm font-bold text-slate-400 mt-1">按住球員旁邊的把手上下拖曳，即可快速安排第 1 至第 {teamSize} 單打。</p>
+                        <h3 className="text-2xl font-black text-slate-800 flex items-center gap-2"><ClipboardList className="text-blue-500"/> 團體排陣與賽果 (極速拖曳版)</h3>
+                        <p className="text-sm font-bold text-slate-400 mt-1">按住球員區塊上下拖曳，即可順滑安排第 1 至第 {teamSize} 單打。</p>
                     </div>
                     <button onClick={onClose} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"><X size={20}/></button>
                 </div>
                 
                 <div className="flex-1 overflow-hidden flex flex-col lg:flex-row gap-6">
-                    <DragDropContext onDragEnd={handleDragEnd}>
-                        {/* 左側：主場隊伍排陣 */}
-                        <div className="flex-1 flex flex-col bg-blue-50/50 rounded-2xl border border-blue-100 p-4">
-                            <h4 className="font-black text-blue-800 mb-4 text-center pb-2 border-b border-blue-200">{match.player1Name} 陣容</h4>
-                            <Droppable droppableId="team1">
-                                {(provided) => (
-                                    <div {...provided.droppableProps} ref={provided.innerRef} className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
-                                        {team1Order.map((p, index) => (
-                                            <Draggable key={p.id} draggableId={p.id} index={index}>
-                                                {(provided, snapshot) => (
-                                                    <div ref={provided.innerRef} {...provided.draggableProps} className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${snapshot.isDragging ? 'bg-white border-blue-400 shadow-xl scale-105' : index < teamSize ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-100 border-dashed border-slate-200 opacity-60'}`}>
-                                                        <div {...provided.dragHandleProps} className="text-slate-400 hover:text-blue-500 cursor-grab active:cursor-grabbing"><GripVertical size={18}/></div>
-                                                        <div className="w-12 h-6 flex items-center justify-center bg-blue-100 text-blue-700 font-black text-[10px] rounded uppercase">
-                                                            {index < teamSize ? `單 ${index + 1}` : '後備'}
-                                                        </div>
-                                                        <span className="font-bold text-sm text-slate-700 truncate">{p.name}</span>
-                                                    </div>
-                                                )}
-                                            </Draggable>
-                                        ))}
-                                        {provided.placeholder}
+                    {/* 左側：主場隊伍排陣 */}
+                    <div className="flex-1 flex flex-col bg-blue-50/50 rounded-2xl border border-blue-100 p-4">
+                        <h4 className="font-black text-blue-800 mb-4 text-center pb-2 border-b border-blue-200">{match.player1Name} 陣容</h4>
+                        <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2 pb-10">
+                            {team1Order.map((p, index) => (
+                                <div 
+                                    key={p.id}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, 'team1', index)}
+                                    onDragEnter={(e) => handleDragEnter(e, 'team1', index)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragOver={handleDragOver}
+                                    className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-grab active:cursor-grabbing hover:border-blue-400 ${index < teamSize ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-100 border-dashed border-slate-200 opacity-60'}`}
+                                >
+                                    <div className="text-slate-400 pointer-events-none"><GripVertical size={18}/></div>
+                                    <div className="w-12 h-6 flex pointer-events-none items-center justify-center bg-blue-100 text-blue-700 font-black text-[10px] rounded uppercase">
+                                        {index < teamSize ? `單 ${index + 1}` : '後備'}
                                     </div>
-                                )}
-                            </Droppable>
-                        </div>
-
-                        {/* 中間：賽果輸入 */}
-                        <div className="w-full lg:w-48 flex flex-col justify-start space-y-2 pt-[3.25rem]">
-                            {rubbers.slice(0, teamSize).map((r, i) => (
-                                <div key={i} className="flex flex-col items-center justify-center p-3 bg-slate-50 border border-slate-200 rounded-xl h-[3.25rem]">
-                                    <span className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Match {i+1}</span>
-                                    <div className="flex items-center gap-2">
-                                        <input type="number" min="0" value={r.score1} onChange={e=>updateScore(i, 'score1', Number(e.target.value))} className="w-10 text-center font-black text-blue-600 bg-white border border-slate-200 rounded outline-none focus:border-blue-400" />
-                                        <span className="text-slate-300 font-bold">:</span>
-                                        <input type="number" min="0" value={r.score2} onChange={e=>updateScore(i, 'score2', Number(e.target.value))} className="w-10 text-center font-black text-orange-500 bg-white border border-slate-200 rounded outline-none focus:border-orange-400" />
-                                    </div>
+                                    <span className="font-bold text-sm pointer-events-none text-slate-700 truncate">{p.name}</span>
                                 </div>
                             ))}
                         </div>
+                    </div>
 
-                        {/* 右側：客場隊伍排陣 */}
-                        <div className="flex-1 flex flex-col bg-orange-50/50 rounded-2xl border border-orange-100 p-4">
-                            <h4 className="font-black text-orange-800 mb-4 text-center pb-2 border-b border-orange-200">{match.player2Name} 陣容</h4>
-                            <Droppable droppableId="team2">
-                                {(provided) => (
-                                    <div {...provided.droppableProps} ref={provided.innerRef} className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
-                                        {team2Order.map((p, index) => (
-                                            <Draggable key={p.id} draggableId={p.id} index={index}>
-                                                {(provided, snapshot) => (
-                                                    <div ref={provided.innerRef} {...provided.draggableProps} className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${snapshot.isDragging ? 'bg-white border-orange-400 shadow-xl scale-105' : index < teamSize ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-100 border-dashed border-slate-200 opacity-60'}`}>
-                                                        <div {...provided.dragHandleProps} className="text-slate-400 hover:text-orange-500 cursor-grab active:cursor-grabbing"><GripVertical size={18}/></div>
-                                                        <div className="w-12 h-6 flex items-center justify-center bg-orange-100 text-orange-700 font-black text-[10px] rounded uppercase">
-                                                            {index < teamSize ? `單 ${index + 1}` : '後備'}
-                                                        </div>
-                                                        <span className="font-bold text-sm text-slate-700 truncate">{p.name}</span>
-                                                    </div>
-                                                )}
-                                            </Draggable>
-                                        ))}
-                                        {provided.placeholder}
+                    {/* 中間：賽果輸入 */}
+                    <div className="w-full lg:w-48 flex flex-col justify-start space-y-2 pt-[3.25rem]">
+                        {rubbers.slice(0, teamSize).map((r, i) => (
+                            <div key={i} className="flex flex-col items-center justify-center p-3 bg-slate-50 border border-slate-200 rounded-xl h-[3.25rem]">
+                                <span className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">Match {i+1}</span>
+                                <div className="flex items-center gap-2">
+                                    <input type="number" min="0" value={r.score1} onChange={e=>updateScore(i, 'score1', Number(e.target.value))} className="w-10 text-center font-black text-blue-600 bg-white border border-slate-200 rounded outline-none focus:border-blue-400" />
+                                    <span className="text-slate-300 font-bold">:</span>
+                                    <input type="number" min="0" value={r.score2} onChange={e=>updateScore(i, 'score2', Number(e.target.value))} className="w-10 text-center font-black text-orange-500 bg-white border border-slate-200 rounded outline-none focus:border-orange-400" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* 右側：客場隊伍排陣 */}
+                    <div className="flex-1 flex flex-col bg-orange-50/50 rounded-2xl border border-orange-100 p-4">
+                        <h4 className="font-black text-orange-800 mb-4 text-center pb-2 border-b border-orange-200">{match.player2Name} 陣容</h4>
+                        <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2 pb-10">
+                            {team2Order.map((p, index) => (
+                                <div 
+                                    key={p.id}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, 'team2', index)}
+                                    onDragEnter={(e) => handleDragEnter(e, 'team2', index)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragOver={handleDragOver}
+                                    className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-grab active:cursor-grabbing hover:border-orange-400 ${index < teamSize ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-100 border-dashed border-slate-200 opacity-60'}`}
+                                >
+                                    <div className="text-slate-400 pointer-events-none"><GripVertical size={18}/></div>
+                                    <div className="w-12 h-6 flex pointer-events-none items-center justify-center bg-orange-100 text-orange-700 font-black text-[10px] rounded uppercase">
+                                        {index < teamSize ? `單 ${index + 1}` : '後備'}
                                     </div>
-                                )}
-                            </Droppable>
+                                    <span className="font-bold text-sm pointer-events-none text-slate-700 truncate">{p.name}</span>
+                                </div>
+                            ))}
                         </div>
-                    </DragDropContext>
+                    </div>
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-3">
@@ -494,6 +509,10 @@ const TeamLineupModal = ({ match, onClose, onSave }) => {
         </div>
     );
 };
+
+const createEmptyRubbers = (size) => Array.from({ length: size }).map((_, i) => ({
+    id: `rubber_${i}`, p1Id: '', p1Name: '', p2Id: '', p2Name: '', score1: 0, score2: 0, status: 'pending'
+}));
 
 export default function LeaguePage({
   role, currentUserInfo, setShowTacticalBoard, setShowUmpirePanel,
@@ -984,7 +1003,7 @@ export default function LeaguePage({
                                   player1Id: p1.id, player1Name: p1.name, player1Seed: p1.seed, team1Roster: p1.roster,
                                   player2Id: p2.id, player2Name: p2.name, player2Seed: p2.seed, team2Roster: p2.roster,
                                   status: 'scheduled', score1: 0, score2: 0, winnerId: null,
-                                  rubbers: isTeam ? null : null,
+                                  rubbers: isTeam ? createEmptyRubbers(teamSize) : null,
                                   date: bracketStartDate, time: matchTime, venue: matchVenue, timestamp: serverTimestamp()
                               }
                           });
@@ -1032,7 +1051,7 @@ export default function LeaguePage({
                       player1Id: p1.id, player1Name: p1.name, player1Seed: p1.seed, team1Roster: p1.roster,
                       player2Id: p2.id, player2Name: p2.name, player2Seed: p2.seed, team2Roster: p2.roster,
                       status: isBye ? 'completed' : 'scheduled', score1: isBye ? 3 : 0, score2: 0, winnerId,
-                      rubbers: isTeam && !isBye ? null : null,
+                      rubbers: isTeam && !isBye ? createEmptyRubbers(teamSize) : null,
                       date: bracketStartDate, time: matchTime, venue: matchVenue, timestamp: serverTimestamp()
                   };
                   currentRoundNodes.push(matchObj); matchesToCreate.push({ ref: matchRef, data: matchObj });
@@ -1059,7 +1078,7 @@ export default function LeaguePage({
                           player1Id: m1.winnerId, player1Name: m1.winnerId ? (m1.winnerId===m1.player1Id ? m1.player1Name : m1.player2Name) : null, team1Roster: m1.winnerId ? (m1.winnerId===m1.player1Id ? m1.team1Roster : m1.team2Roster) : null,
                           player2Id: m2.winnerId, player2Name: m2.winnerId ? (m2.winnerId===m2.player1Id ? m1.player1Name : m2.player2Name) : null, team2Roster: m2.winnerId ? (m2.winnerId===m2.player1Id ? m2.team1Roster : m2.team2Roster) : null,
                           status: 'scheduled', score1: 0, score2: 0, winnerId: null,
-                          rubbers: isTeam ? null : null,
+                          rubbers: isTeam ? createEmptyRubbers(teamSize) : null,
                           date: bracketStartDate, time: matchTime, venue: matchVenue, timestamp: serverTimestamp()
                       };
                       m1.nextMatchId = matchObj.id; m1.nextMatchSlot = 'player1'; m2.nextMatchId = matchObj.id; m2.nextMatchSlot = 'player2';
@@ -1073,7 +1092,7 @@ export default function LeaguePage({
                               id: bronzeMatchRef.id, tournamentName: bracketEventName.trim(), groupName: bracketName.trim(), matchType: isTeam ? 'tournament_team_bracket' : 'tournament_bracket',
                               bracketRound: 1, isBronzeFinal: true, bracketMatchNumber: matchCounter++, isTeamMatch: isTeam, teamSize: isTeam ? teamSize : null,
                               player1Id: null, player1Name: null, player1Seed: null, player2Id: null, player2Name: null, player2Seed: null,
-                              status: 'scheduled', score1: 0, score2: 0, winnerId: null, rubbers: isTeam ? null : null,
+                              status: 'scheduled', score1: 0, score2: 0, winnerId: null, rubbers: isTeam ? createEmptyRubbers(teamSize) : null,
                               date: bracketStartDate, time: bronzeTime, venue: bronzeVenue, timestamp: serverTimestamp()
                           };
                           m1.nextLoserMatchId = bronzeMatchRef.id; m1.nextLoserMatchSlot = 'player1'; m2.nextLoserMatchId = bronzeMatchRef.id; m2.nextLoserMatchSlot = 'player2';
@@ -1183,7 +1202,7 @@ export default function LeaguePage({
                   status: isBye ? 'completed' : 'scheduled',
                   score1: isBye ? 3 : 0, score2: 0,
                   winnerId,
-                  rubbers: isTeam && !isBye ? null : null,
+                  rubbers: isTeam && !isBye ? createEmptyRubbers(currentTeamSize) : null,
                   date: new Date().toISOString().split('T')[0],
                   time: matchTime, venue: matchVenue, timestamp: serverTimestamp()
               };
@@ -1215,7 +1234,7 @@ export default function LeaguePage({
                       player1Id: p1Id, player1Name: p1Name, player1Seed: null, team1Roster: p1Roster,
                       player2Id: p2Id, player2Name: p2Name, player2Seed: null, team2Roster: p2Roster,
                       status: 'scheduled', score1: 0, score2: 0, winnerId: null,
-                      rubbers: isTeam ? null : null,
+                      rubbers: isTeam ? createEmptyRubbers(currentTeamSize) : null,
                       date: new Date().toISOString().split('T')[0], time: matchTime, venue: matchVenue, timestamp: serverTimestamp()
                   };
                   
@@ -1233,7 +1252,7 @@ export default function LeaguePage({
                           bracketRound: 1, isBronzeFinal: true, bracketMatchNumber: matchCounter++,
                           player1Id: null, player1Name: null, player2Id: null, player2Name: null,
                           status: 'scheduled', score1: 0, score2: 0, winnerId: null,
-                          rubbers: isTeam ? null : null,
+                          rubbers: isTeam ? createEmptyRubbers(currentTeamSize) : null,
                           date: new Date().toISOString().split('T')[0], time: bronzeTime, venue: bronzeVenue, timestamp: serverTimestamp()
                       };
                       m1.nextLoserMatchId = bronzeMatchRef.id; m1.nextLoserMatchSlot = 'player1'; m2.nextLoserMatchId = bronzeMatchRef.id; m2.nextLoserMatchSlot = 'player2';
@@ -1324,7 +1343,7 @@ export default function LeaguePage({
              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Medal size={28}/></div>
              <div>
                <h3 className="text-3xl font-black text-slate-800 tracking-tight">聯賽專區</h3>
-               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與大賽賽程 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs text-blue-600">v8.3 專業拖曳版</span></p>
+               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與大賽賽程 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs text-blue-600">v8.4 防報錯原生拖曳版</span></p>
              </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -1490,6 +1509,7 @@ export default function LeaguePage({
           )
       )}
 
+      {/* 單場友誼賽 Modal */}
       {showAddSingleMatch && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[500] flex items-center justify-center p-4 animate-in fade-in">
               <div className="bg-white rounded-[2rem] p-6 max-w-md w-full shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
