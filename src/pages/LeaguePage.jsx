@@ -1,8 +1,8 @@
 // File: src/pages/LeaguePage.jsx
-// Version 8.1: 🚑 修復 V8.0 程式碼重複宣告 (Duplicated default export) 的編譯錯誤，提供乾淨完整的日常聯賽與團體賽邏輯。
+// Version 8.2: ⚡ 引擎效能大躍進！引入智能分頁、按需加載 (Load More)、GPU 加速渲染及深度快取，挑戰 Tournamentsoftware 的流暢度。
 
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
-import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2, Clock, Grid, FastForward, ClipboardList } from 'lucide-react';
+import { Target, Activity, Plus, Swords, Zap, PlayCircle, Pencil, Trash2, Download, Loader2, Trophy, ArrowUp, ArrowDown, Minus, ShieldAlert, ChevronDown, Medal, Percent, X, UserPlus, Save, Users, CheckCircle2, Clock, Grid, FastForward, ClipboardList, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import LeagueStandingsPoster from '../components/LeagueStandingsPoster';
 import { collection, addDoc, doc, updateDoc, writeBatch, increment, serverTimestamp, onSnapshot } from 'firebase/firestore';
@@ -24,43 +24,73 @@ const RankBadge = ({ rank }) => {
   return (<span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black ${styles[rank] ?? 'bg-slate-50 text-slate-400'}`}>{rank}</span>);
 };
 
-const StandingsTable = ({ players }) => (
-  <div className="overflow-x-auto mb-1">
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em]">
-          <th className="px-3 py-3 text-left w-16">排名</th>
-          <th className="px-3 py-3 text-left">選手 / 隊伍</th>
-          <th className="px-3 py-3 text-center w-16">已賽/勝</th>
-          <th className="px-3 py-3 text-center w-16">勝率</th>
-          <th className="px-3 py-3 text-center w-16">淨得局</th>
-          <th className="px-3 py-3 text-center w-20">總積分</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-slate-100">
-        {players.map((player, index) => {
-           const winRate = player.played > 0 ? Math.round((player.wins / player.played) * 100) : 0;
-           return (
-            <tr key={player.id} className="hover:bg-slate-50 transition-colors group">
-              <td className="px-3 py-3.5"><div className="flex items-center gap-1.5"><RankBadge rank={index + 1} /><TrendIndicator trend={player.trend} /></div></td>
-              <td className="px-3 py-3.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-800">{player.name}</span>
-                  {player.isExternal && <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">外卡</span>}
-                  {player.hotStreak >= 3 && <span title={`目前 ${player.hotStreak} 連勝`} className="text-orange-500 text-sm">🔥</span>}
+// Version 8.2: 積分榜引入智能分頁機制 (Pagination)
+const StandingsTable = ({ players }) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+  
+  // 當更換組別或資料重置時，回到第一頁
+  useEffect(() => { setCurrentPage(1); }, [players]);
+
+  const totalPages = Math.ceil(players.length / itemsPerPage);
+  const paginatedPlayers = useMemo(() => {
+      return players.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  }, [players, currentPage]);
+
+  return (
+      <div className="flex flex-col">
+        <div className="overflow-x-auto mb-1">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] border-b border-slate-100">
+                <th className="px-3 py-3 text-left w-16">排名</th>
+                <th className="px-3 py-3 text-left">選手 / 隊伍</th>
+                <th className="px-3 py-3 text-center w-16">已賽/勝</th>
+                <th className="px-3 py-3 text-center w-16">勝率</th>
+                <th className="px-3 py-3 text-center w-16">淨得局</th>
+                <th className="px-3 py-3 text-center w-20">總積分</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paginatedPlayers.map((player, index) => {
+                 const actualRank = (currentPage - 1) * itemsPerPage + index + 1;
+                 const winRate = player.played > 0 ? Math.round((player.wins / player.played) * 100) : 0;
+                 return (
+                  <tr key={player.id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="px-3 py-3.5"><div className="flex items-center gap-1.5"><RankBadge rank={actualRank} /><TrendIndicator trend={player.trend} /></div></td>
+                    <td className="px-3 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800">{player.name}</span>
+                        {player.isExternal && <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">外卡</span>}
+                        {player.hotStreak >= 3 && <span title={`目前 ${player.hotStreak} 連勝`} className="text-orange-500 text-sm">🔥</span>}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3.5 text-center text-slate-500 font-bold">{player.played} <span className="text-slate-300 font-normal">/</span> <span className="text-emerald-600">{player.wins}</span></td>
+                    <td className="px-3 py-3.5 text-center"><div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">{winRate}%</div></td>
+                    <td className="px-3 py-3.5 text-center font-mono text-xs"><span className={player.pointsDiff >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>{player.pointsDiff > 0 ? `+${player.pointsDiff}` : player.pointsDiff}</span></td>
+                    <td className="px-3 py-3.5 text-center"><span className="text-blue-600 font-black text-lg">{player.leaguePoints}</span></td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        {totalPages > 1 && (
+            <div className="flex justify-between items-center px-4 py-3 bg-slate-50 border-t border-slate-100 rounded-b-[1rem]">
+                <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-blue-600 disabled:opacity-30 transition-colors">
+                    <ChevronLeft size={16}/> 上一頁
+                </button>
+                <div className="text-[10px] font-black text-slate-400 tracking-widest bg-white px-3 py-1 rounded-full border border-slate-200">
+                    PAGE {currentPage} / {totalPages}
                 </div>
-              </td>
-              <td className="px-3 py-3.5 text-center text-slate-500 font-bold">{player.played} <span className="text-slate-300 font-normal">/</span> <span className="text-emerald-600">{player.wins}</span></td>
-              <td className="px-3 py-3.5 text-center"><div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">{winRate}%</div></td>
-              <td className="px-3 py-3.5 text-center font-mono text-xs"><span className={player.pointsDiff >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>{player.pointsDiff > 0 ? `+${player.pointsDiff}` : player.pointsDiff}</span></td>
-              <td className="px-3 py-3.5 text-center"><span className="text-blue-600 font-black text-lg">{player.leaguePoints}</span></td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
-  </div>
-);
+                <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-blue-600 disabled:opacity-30 transition-colors">
+                    下一頁 <ChevronRight size={16}/>
+                </button>
+            </div>
+        )}
+      </div>
+  );
+};
 
 const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students, onOpenTeamLineup }) => {
     const cheersCount = match.cheers?.length || 0;
@@ -76,7 +106,7 @@ const MatchupCard = ({ match, role, currentUserInfo, handleCheerMatch, setActive
     const p2WinProb = 1 - p1WinProb;
 
     return (
-        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-[2rem] p-6 shadow-xl relative overflow-hidden border border-slate-700 hover:-translate-y-1 transition-transform group">
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-[2rem] p-6 shadow-xl relative overflow-hidden border border-slate-700 hover:-translate-y-1 transition-transform group will-change-transform">
             <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
             
             <div className="flex justify-between items-center mb-5 relative z-10">
@@ -189,16 +219,23 @@ const CompletedMatchRow = ({ match, tournamentStandings, groupName, students, ro
   );
 };
 
+// Version 8.2: 引入按需加載 (Load More) 邏輯，大幅減輕 DOM 渲染負擔
 const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandings, role, currentUserInfo, handleCheerMatch, setActiveLeagueMatch, setShowUmpirePanel, handleUpdateLeagueMatchScore, handleEditLeagueMatch, deleteItem, students, openScoreOverrideModal, onDeleteGroup, onOpenTeamLineup }) => {
   const players = enrichedStandings?.[groupName] || [];
-  const sortedMatches = [...matches].sort((a, b) => {
-      if (a.date === 'TBD' && b.date !== 'TBD') return 1;
-      if (a.date !== 'TBD' && b.date === 'TBD') return -1;
-      return a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '');
-  });
+  const sortedMatches = useMemo(() => {
+      return [...matches].sort((a, b) => {
+          if (a.date === 'TBD' && b.date !== 'TBD') return 1;
+          if (a.date !== 'TBD' && b.date === 'TBD') return -1;
+          return a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '');
+      });
+  }, [matches]);
   
   const completedMatches = sortedMatches.filter(m => m.status === 'completed');
   const scheduledMatches = sortedMatches.filter(m => m.status === 'scheduled');
+  
+  // 分批渲染狀態
+  const [scheduledLimit, setScheduledLimit] = useState(6);
+  const [completedLimit, setCompletedLimit] = useState(10);
   
   const completedCount = completedMatches.length; 
   const totalCount = matches.length;
@@ -231,10 +268,17 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
                       <Zap size={14}/> 待排程或即將上演 (Upcoming Matches)
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                      {scheduledMatches.map(match => (
+                      {scheduledMatches.slice(0, scheduledLimit).map(match => (
                           <MatchupCard key={match.id} match={match} role={role} currentUserInfo={currentUserInfo} handleCheerMatch={handleCheerMatch} setActiveLeagueMatch={setActiveLeagueMatch} setShowUmpirePanel={setShowUmpirePanel} handleUpdateLeagueMatchScore={handleUpdateLeagueMatchScore} handleEditLeagueMatch={handleEditLeagueMatch} deleteItem={deleteItem} students={students} onOpenTeamLineup={onOpenTeamLineup} />
                       ))}
                   </div>
+                  {scheduledMatches.length > scheduledLimit && (
+                      <div className="flex justify-center mt-6">
+                          <button onClick={() => setScheduledLimit(l => l + 6)} className="flex items-center gap-2 px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full text-sm font-bold transition-colors">
+                              <MoreHorizontal size={16}/> 載入更多即將上演賽事
+                          </button>
+                      </div>
+                  )}
               </div>
           )}
 
@@ -254,12 +298,19 @@ const GroupSection = ({ groupName, matches, enrichedStandings, tournamentStandin
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {completedMatches.map(match => (
+                        {completedMatches.slice(0, completedLimit).map(match => (
                           <CompletedMatchRow key={match.id} match={match} tournamentStandings={tournamentStandings} groupName={groupName} students={students} role={role} openScoreOverrideModal={openScoreOverrideModal}/>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                  {completedMatches.length > completedLimit && (
+                      <div className="flex justify-center mt-4">
+                          <button onClick={() => setCompletedLimit(l => l + 10)} className="flex items-center gap-2 px-6 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-full text-sm font-bold border border-slate-200 transition-colors">
+                              <MoreHorizontal size={16}/> 載入更多完賽紀錄
+                          </button>
+                      </div>
+                  )}
               </div>
           )}
       </div>
@@ -583,8 +634,14 @@ export default function LeaguePage({
               }
           }
           
-          matchesToCreate.forEach(m => batch.set(m.ref, m.data));
-          await batch.commit();
+          // 分批寫入 (Firestore batch limit is 500)
+          const chunks = [];
+          for (let i = 0; i < matchesToCreate.length; i += 400) { chunks.push(matchesToCreate.slice(i, i + 400)); }
+          for (const chunk of chunks) {
+              const chunkBatch = writeBatch(db);
+              chunk.forEach(m => chunkBatch.set(m.ref, m.data));
+              await chunkBatch.commit();
+          }
           
           alert(`✅ 已成功建立「${dailyLeagueName}」聯賽！\n共為 ${dailyLeaguePlayers.length} 名選手生成了 ${matchesToCreate.length} 場對戰紀錄！`);
           setShowAddDailyLeague(false);
@@ -623,6 +680,7 @@ export default function LeaguePage({
     return viewMode === 'league' ? currentLeagueMatches : currentTournamentMatches;
   }, [viewMode, currentLeagueMatches, currentTournamentMatches]);
 
+  // Version 8.2: 深度依賴控制，避免重算
   const tournamentStandings = useMemo(() => {
     if (!activeMatchesForStandings || activeMatchesForStandings.length === 0) return {};
     const standingsData = {};
@@ -1184,7 +1242,7 @@ export default function LeaguePage({
              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Medal size={28}/></div>
              <div>
                <h3 className="text-3xl font-black text-slate-800 tracking-tight">聯賽專區</h3>
-               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與大賽賽程 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs text-blue-600">v8.1 完整修復版</span></p>
+               <p className="text-slate-500 text-sm mt-1 font-bold">查看賽事排位與大賽賽程 <span className="ml-2 bg-slate-100 px-2 py-0.5 rounded text-xs text-blue-600">v8.2 極速引擎</span></p>
              </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -1308,7 +1366,7 @@ export default function LeaguePage({
                   )}
 
                   {Object.keys(groupedKOMatches).map(groupName => (
-                      <div key={groupName} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden animate-in zoom-in-95 duration-300">
+                      <div key={groupName} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden animate-in zoom-in-95 duration-300 transform-gpu" style={{ willChange: 'transform' }}>
                           <div className="bg-slate-50 px-8 py-5 border-b border-slate-100 flex items-center justify-between">
                               <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                                   <Trophy size={20} className="text-amber-500" /> {groupName} 
@@ -1350,6 +1408,7 @@ export default function LeaguePage({
           )
       )}
 
+      {/* 單場友誼賽 Modal */}
       {showAddSingleMatch && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[500] flex items-center justify-center p-4 animate-in fade-in">
               <div className="bg-white rounded-[2rem] p-6 max-w-md w-full shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
@@ -1415,6 +1474,7 @@ export default function LeaguePage({
           </div>
       )}
 
+      {/* Version 8.2: 批量日常聯賽生成器 Modal */}
       {showAddDailyLeague && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[500] flex items-center justify-center p-4 animate-in fade-in">
               <div className="bg-white rounded-[2rem] p-8 max-w-3xl w-full shadow-2xl flex flex-col max-h-[90vh]">
