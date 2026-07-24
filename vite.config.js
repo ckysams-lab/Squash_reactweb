@@ -1,8 +1,8 @@
-// vite.config.js (Version 3.5 - Merged Configuration)
-
+// vite.config.js (Version 3.6 - Merged Configuration with React Flow Fix)
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+
 // import { VitePWA } from 'vite-plugin-pwa' // 保持 PWA 插件的導入（註解狀態）
 
 // https://vitejs.dev/config/
@@ -10,7 +10,6 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(), // <-- 保留您原有的 tailwindcss 插件
-
     /*
     VitePWA({
       registerType: 'autoUpdate',
@@ -39,5 +38,15 @@ export default defineConfig({
     })
     */
   ],
+  // 👇 以下是為了解決 React Flow (Zustand) 編譯報錯新增的核心設定
+  resolve: {
+    // 強制 Vite 在打包時只使用唯一版本的套件，防止模組多重載入導致 undefined
+    dedupe: ['react', 'react-dom', 'zustand']
+  },
+  build: {
+    commonjsOptions: {
+      // 允許 Vite 處理 CJS/ESM 混合模組，確保打包時能正確讀取 React 的 Hook
+      transformMixedEsModules: true,
+    }
+  }
 })
-
