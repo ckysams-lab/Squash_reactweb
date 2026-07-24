@@ -1,7 +1,7 @@
 // File: src/components/TournamentBracket.jsx
 // Version 8.5.1: 🗺️ 升級至官方最新的 @xyflow/react 引擎，徹底解決 useDebugValue 報錯，實現 0 崩潰的無限畫布。
 
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useEffect } from 'react';
 import { ReactFlow, MiniMap, Controls, Background, MarkerType, useNodesState, useEdgesState } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { PlayCircle, Clock, MapPin, Trophy } from 'lucide-react';
