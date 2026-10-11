@@ -69,15 +69,9 @@ export default function EditPlayerModal({
             alert("密碼無效或太短 (最少需要 6 位數)！");
             return;
         }
-        // 為了不更動 App.jsx 裡複雜的 Firebase Auth 邏輯，
-        // 我們用一個小技巧，覆寫 window.prompt，讓它直接回傳我們在這裡輸入的密碼，
-        // 然後再去呼叫 App.jsx 傳進來的 handleSetupStudentAuth 函式。
-        const originalPrompt = window.prompt;
-        window.prompt = () => newPassword; 
-        
-        await handleSetupStudentAuth(student);
-        
-        window.prompt = originalPrompt; // 恢復原本的 prompt 行為
+        // 直接以參數傳遞密碼，零副作用；不再覆寫全域 window.prompt。
+        // （舊寫法若 await 拋錯，window.prompt 會永久卡在覆寫狀態，全站對話框失效。）
+        await handleSetupStudentAuth(student, newPassword);
         setNewPassword(''); // 清空輸入框
     };
 

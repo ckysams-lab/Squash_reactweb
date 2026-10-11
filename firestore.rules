@@ -1,0 +1,87 @@
+rules_version = '2';
+
+// ============================================================================
+// firestore.rules — 正覺壁球校隊管理系統
+// 真正的授權邊界。前端只負責「渲染」，授權一律由此檔強制執行。
+//
+// 設計原則：
+//   1. 租戶（tenant）與角色（role）一律取自 Auth Custom Claims，永不信任
+//      客戶端可寫的 localStorage / 前端變數。
+//   2. 讀取：僅限同租戶成員；寫入：依集合區分權限。
+//   3. 預設拒絕：任何未明確允許的路徑一律拒絕。
+//
+// ⚠️ 部署前置條件（順序不可顛倒，否則全站會被鎖死）：
+//   本檔以 Custom Claims 的 tenantId / role 為唯一授權來源。若使用者的 token
+//   尚未帶有 tenantId，isMemberOf() 恆為 false，所有讀寫都會被拒絕。
+//   因此必須「先」為所有現有帳號寫入 Claims，「後」才部署本規則：
+//     node scripts/set-claims.mjs            # 見 scripts/set-claims.mjs
+//   部署：firebase deploy --only firestore:rules
+//
+// 已知限制（後續應收緊，見程式碼審查報告）：
+//   - 本系統的 Auth uid 與 students 文件的 id 並無對應關係，因此
+//     league_matches 打氣與 player_journals 學生回覆無法以 uid 做「本人」驗證，
+//     目前僅以「同租戶成員 + 僅可改動特定欄位」限制。待建立 uid↔student 對應後
+//     再收緊為本人限定。
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- 身份與租戶輔助函式（唯一可信任的來源）----
+    function claims() {
+      return request.auth.token;
+    }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function tenant() {
+      // 來自 Custom Claims，不可由前端偽造
+      return claims().tenantId;
+    }
+    function role() {
+      return claims().role;
+    }
+    function isMemberOf(t) {
+      return isSignedIn() && tenant() == t;
+    }
+    function isAdminOf(t) {
+      return isMemberOf(t) && role() == 'admin';
+    }
+
+    // ---- 多租戶資料根路徑 ----
+    // 對應前端：collection(db, 'artifacts', appId, 'public', 'data', <name>)
+    match /artifacts/{appId}/public/data/{col}/{docId} {
+
+      // 系統設定（config/system、config/finance）：
+      // 所有同租戶成員皆需讀取（主題、校徽、公告、財務設定於 App.jsx 對所有
+      // 已登入使用者訂閱），故讀取開放給成員；寫入僅限管理員。
+      allow read: if isMemberOf(appId) && col == 'config';
+      allow write: if isAdminOf(appId) && col == 'config';
+
+      // 財務收支明細：僅管理員可讀寫（前端僅 /admin/financial 使用）
+      allow read, write: if isAdminOf(appId) && col == 'financial_items';
+
+      // 打氣：同租戶成員僅可改動 cheers 欄位（不得改動比分等其他欄位）
+      allow update: if isMemberOf(appId)
+                    && col == 'league_matches'
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cheers']);
+
+      // 球員日誌：學生可新增；更新僅限 studentReply / repliedAt 欄位，
+      // 避免學生覆寫教練內容或其他學生的日誌。
+      allow create: if isMemberOf(appId) && col == 'player_journals' && role() == 'student';
+      allow update: if isMemberOf(appId)
+                    && col == 'player_journals'
+                    && role() == 'student'
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['studentReply', 'repliedAt']);
+
+      // 其餘一般集合：讀限同租戶成員、寫限同租戶管理員
+      allow read: if isMemberOf(appId);
+      allow write: if isAdminOf(appId);
+    }
+
+    // 預設拒絕：任何未明確允許的路徑一律拒絕
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

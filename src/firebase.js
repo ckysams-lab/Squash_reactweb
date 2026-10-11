@@ -7,7 +7,11 @@ import {
   onAuthStateChanged,
   createUserWithEmailAndPassword 
 } from 'firebase/auth';
-import { getFirestore, enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from 'firebase/firestore';
 
 // 1. 取得並解析設定
 export let firebaseConfig;
@@ -32,24 +36,15 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 // 3. 直接宣告並匯出實例 (這可以解決 Cannot access before initialization 的問題)
 export const auth = getAuth(app);
-export const db = getFirestore(app);
 
-// 4. 啟動離線快取 (在 db 確定建立之後)
-if (db) {
-    try {
-        enableIndexedDbPersistence(db, {
-            cacheSizeBytes: CACHE_SIZE_UNLIMITED
-        }).catch((err) => {
-            if (err.code === 'failed-precondition') {
-                console.warn("離線快取啟動失敗：可能開啟了多個系統分頁。");
-            } else if (err.code === 'unimplemented') {
-                console.warn("當前瀏覽器不支援離線快取功能。");
-            }
-        });
-    } catch (e) {
-        console.warn("IndexedDB 可能已在運作中", e);
-    }
-}
+// 4. 現代離線快取寫法（取代已棄用的 enableIndexedDbPersistence）
+// persistentMultipleTabManager 讓多分頁同時開啟不再失敗，
+// 原本需要 failed-precondition 分支處理的警告可一併移除。
+export const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+    }),
+});
 
 // 5. 匯出 auth 相關輔助函式 (可選，如果您習慣從 firebase.js 匯入它們)
 export { 
