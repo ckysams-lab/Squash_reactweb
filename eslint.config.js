@@ -24,6 +24,8 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // 禁止正式碼使用裸 console（error 除外）；請改用 src/utils/logger.js
+      'no-console': ['warn', { allow: ['error'] }],
     },
   },
 ])

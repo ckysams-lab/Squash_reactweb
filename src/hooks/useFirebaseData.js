@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
+import { APP_ID } from '../config';
+import { log } from '../utils/logger';
 
 export const useFirebaseData = () => {
     // 1. 宣告所有狀態
@@ -30,15 +32,15 @@ export const useFirebaseData = () => {
         let unsubscribes = [];
 
         // 👇 核心修改：不再寫死 appId，改為動態從 LocalStorage 讀取 👇
-        // 如果沒有抓到，預設還是給你們學校的 ID，作為防呆
-        const currentAppId = localStorage.getItem('tenant_app_id') || 'bcklas-squash-core-v1';
+        // 如果沒抓到，預設還是給你們學校的 ID，作為防呆
+        const currentAppId = localStorage.getItem('tenant_app_id') || APP_ID;
 
         const getCollectionPath = (collectionName) => collection(db, 'artifacts', currentAppId, 'public', 'data', collectionName);
 
         const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
             if (currentUser) {
-                // 在 Console 中印出目前連線的機構 ID，方便你除錯
-                console.log(`✅ Hook: Auth confirmed, fetching data for Tenant: [${currentAppId}]...`);
+                // 注意：不再印出 tenant ID，避免在共用電腦上洩漏可偽造的租戶資訊
+                log('✅ Hook: Auth confirmed, fetching data.');
 
                 const bindListener = (collectionRef, setFunction, name) => {
                     const unsub = onSnapshot(collectionRef, 
@@ -70,7 +72,7 @@ export const useFirebaseData = () => {
                 bindListener(query(getCollectionPath('feed_posts'), orderBy("timestamp", "desc")), setFeedPosts, 'feedPosts');
 
             } else {
-                console.log("❌ Hook: Auth logged out, clearing ALL data.");
+                log('❌ Hook: Auth logged out, clearing ALL data.');
                 
                 // 清空所有狀態，確保不同學校的資料不會殘留在畫面上
                 setStudents([]); setCompetitions([]); setMonthlyStars([]); setLeagueMatches([]);
