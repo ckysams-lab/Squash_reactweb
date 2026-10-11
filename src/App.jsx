@@ -1,5 +1,5 @@
 // File: src/App.jsx
-// Version 1.19: ⚡ 效能優化：全面導入 useCallback，消除因函數重建導致的無效重繪 (Unnecessary Re-renders)。
+// Version 1.19: ⚡ 效能優化：全面導入 useCallback，消除因函式重建導致的無效重繪 (Unnecessary Re-renders)。
 
 import { ACHIEVEMENT_DATA, BADGE_DATA } from './constants/data';
 import TacticalBoardModal from './components/TacticalBoardModal';
@@ -30,6 +30,7 @@ import RankingPage from './pages/RankingPage';
 import SeasonArchivesPage from './pages/SeasonArchivesPage';
 
 import { toDataURL, getAcademicYear, readCSVFile, compressImage, getYouTubeEmbedUrl } from './utils/helpers';
+import { APP_ID, APP_VERSION } from './config';
 import { useFirebaseData } from './hooks/useFirebaseData';
 import LiveScoreboardDisplay from './components/LiveScoreboardDisplay';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'; // 👉 新增 useCallback
@@ -63,10 +64,11 @@ import { db, auth, firebaseConfig, signInWithEmailAndPassword, signOut, onAuthSt
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-const CURRENT_VERSION = "1.19";
+// 設定值單一來源（src/config.js），不再於此重複寫死
+const CURRENT_VERSION = APP_VERSION;
 
 momentLocalizer(moment);
-const appId = 'bcklas-squash-core-v1';
+const appId = APP_ID;
 
 const getGradeLevel = (classStr) => {
     if (!classStr) return 0;
@@ -132,7 +134,7 @@ function MainApp() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // 👉 1.19 優化：將跨元件傳遞的函數加上 useCallback，並指定其依賴陣列
+  // 👉 1.19 優化：將跨元件傳遞的函式加上 useCallback，並指定其依賴陣列
   const syncGoogleDriveGallery = useCallback(async () => {
     setIsSyncingDrive(true);
     try {
@@ -198,7 +200,7 @@ function MainApp() {
         setShowcaseEditorOpen(false);
     } catch (e) {
         console.error("Failed to save featured badges:", e);
-        alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網絡。`);
+        alert(`儲存失敗 (${e.code || '未知錯誤'})，請聯絡教練或檢查網路。`);
     }
     setIsUpdating(false);
   }, [currentUserInfo, students, selectedFeaturedBadges]);
@@ -323,7 +325,7 @@ function MainApp() {
 
   // 👉 1.19 優化
   const savePendingAttendance = useCallback(async () => {
-    if (pendingAttendance.length === 0) { alert('沒有需要儲存的點名紀錄。'); return; }
+    if (pendingAttendance.length === 0) { alert('沒有需要儲存的點名記錄。'); return; }
     let scheduleToUse = todaySchedule;
     if (!scheduleToUse) { scheduleToUse = { trainingClass: '一般練習', date: new Date().toISOString().split('T')[0], location: '學校壁球場' }; }
 
@@ -343,7 +345,7 @@ function MainApp() {
         }
       });
       await batch.commit();
-      alert(`✅ 成功儲存 ${pendingAttendance.length} 筆點名紀錄！`);
+      alert(`✅ 成功儲存 ${pendingAttendance.length} 筆點名記錄！`);
       setPendingAttendance([]);
     } catch (e) { console.error("Batch attendance save failed:", e); alert("儲存失敗，請檢查網絡或聯絡管理員。"); }
     setIsUpdating(false);
@@ -377,7 +379,7 @@ function MainApp() {
   const galleryAlbums = useMemo(() => {
     const albums = {}; const safeGallery = Array.isArray(galleryItems) ? galleryItems : [];
     safeGallery.forEach(item => {
-      const title = item.title || "未分類相簿"; 
+      const title = item.title || "未分類相冊"; 
       if (!albums[title]) { albums[title] = { title, cover: item.url, count: 0, items: [], type: item.type, lastUpdated: item.timestamp?.seconds || 0, isDrive: item.isDrive || false }; }
       albums[title].count += 1; albums[title].items.push(item);
       if (item.timestamp?.seconds && item.timestamp.seconds > albums[title].lastUpdated) { albums[title].cover = item.url; albums[title].lastUpdated = item.timestamp.seconds; }
@@ -430,8 +432,8 @@ function MainApp() {
     if (window.confirm('確定要永久刪除這個項目嗎？')) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id)); }
   }, [role]);
 
-  const handleSetupStudentAuth = useCallback(async (student) => {
-    const password = prompt(`請為 ${student.name} 設定登入密碼 (最少 6 位數):`);
+  // 密碼由呼叫端（EditPlayerModal）以參數明確傳入，不再依賴全域 prompt
+  const handleSetupStudentAuth = useCallback(async (student, password) => {
     if (!password || password.length < 6) { alert("密碼無效或太短 (Firebase 規定最少 6 位數)！已取消操作。"); return; }
     const studentAuthEmail = `${student.class.toLowerCase().trim()}${student.classNo.trim()}@bcklas.squash`;
     setIsUpdating(true);
@@ -615,7 +617,7 @@ function MainApp() {
       if (classStudents.length === 0) { alert(`「${targetClass}」沒有找到任何學員。`); return; }
       const classLogs = attendanceLogs.filter(log => log.trainingClass === targetClass);
       const uniqueDates = [...new Set(classLogs.map(log => log.date))].sort((a, b) => a.localeCompare(b));
-      if (uniqueDates.length === 0) { alert(`「${targetClass}」沒有任何點名紀錄可供匯出。`); return; }
+      if (uniqueDates.length === 0) { alert(`「${targetClass}」沒有任何點名記錄可供匯出。`); return; }
 
       const scheduleInfo = schedules.find(s => s.trainingClass === targetClass) || {};
       let csvContent = "\uFEFF"; 
@@ -633,12 +635,12 @@ function MainApp() {
   }, [students, attendanceLogs, schedules]);
 
   const handleAddMedia = useCallback(async () => {
-      const type = prompt("請選擇類型 (輸入 1 或 2):\n1. 上傳照片 (自動建立相簿)\n2. YouTube 影片連結");
+      const type = prompt("請選擇類型 (輸入 1 或 2):\n1. 上傳照片 (自動建立相冊)\n2. YouTube 影片連結");
       if (type === '1') {
         if (galleryInputRef.current) { galleryInputRef.current.value = ""; galleryInputRef.current.click(); }
       } else if (type === '2') {
         const url = prompt("請輸入 YouTube 影片網址:"); if (!url) return;
-        const title = prompt("請輸入影片標題 (這將作為相簿名稱):"); const desc = prompt("輸入描述 (可選):") || "";
+        const title = prompt("請輸入影片標題 (這將作為相冊名稱):"); const desc = prompt("輸入描述 (可選):") || "";
         try { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), { type: 'video', url, title: title || '未命名影片', description: desc, timestamp: serverTimestamp() }); alert('影片新增成功！'); } 
         catch (e) { console.error(e); alert('新增失敗'); }
       }
@@ -646,7 +648,7 @@ function MainApp() {
 
   const handleGalleryImageUpload = useCallback(async (e) => {
     const files = e.target.files; if (!files || files.length === 0) return;
-    const title = prompt(`您選擇了 ${files.length} 張照片。\n請輸入這些照片的「相簿名稱」(例如：校際比賽花絮):`); if (!title) return;
+    const title = prompt(`您選擇了 ${files.length} 張照片。\n請輸入這些照片的「相冊名稱」(例如：校際比賽花絮):`); if (!title) return;
     const desc = prompt("輸入統一描述 (可選):") || "";
     setIsUploading(true); let successCount = 0;
     for (let i = 0; i < files.length; i++) {
@@ -657,7 +659,7 @@ function MainApp() {
             successCount++;
         } catch (err) { console.error("Upload failed for one image", err); }
     }
-    setIsUploading(false); alert(`成功上傳 ${successCount} 張照片至「${title}」相簿！`); setCurrentAlbum(null);
+    setIsUploading(false); alert(`成功上傳 ${successCount} 張照片至「${title}」相冊！`); setCurrentAlbum(null);
   }, []);
 
   const handleCSVImportSchedules = useCallback(async (e) => {
@@ -821,7 +823,7 @@ function MainApp() {
           if (winnerGrade > 0 && loserGrade > 0 && winnerGrade < loserGrade) {
               const diff = loserGrade - winnerGrade;
               gradeBonus = 1.0 + (diff * 0.1); 
-              gradeMsg = `\n👶 越級挑戰成功！(+${diff * 10}% 額外加成)`;
+              gradeMsg = `\n👦 越級挑戰成功！(+${diff * 10}% 額外加成)`;
           }
       }
 
@@ -858,7 +860,7 @@ function MainApp() {
       const confirmMsg = `✍️ 確認賽果與終極 Elo 結算？\n\n` +
                          `對戰: ${match.player1Name} vs ${match.player2Name}\n` +
                          `大局數: ${score1} - ${score2}\n` +
-                         `統治力系數: ${hybridDominance.toFixed(2)}x` +
+                         `統治力係數: ${hybridDominance.toFixed(2)}x` +
                          `${gradeMsg}` + 
                          `${badgeMsg}\n\n` +
                          `【積分變動】\n` +
@@ -1130,10 +1132,10 @@ function MainApp() {
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
             } catch (canvasError) {
                 console.error('海報生成失敗 (html2canvas stage):', canvasError);
-                alert('海報生成失敗，可能是由於網絡或圖片格式問題。');
+                alert('海報生成失敗，可能是由於網路或圖片格式問題。');
             } finally { setIsGeneratingPoster(false); setPosterData(null); }
         }, 500);
-    } catch (preloadError) { console.error('海報圖片預加載或轉換失敗:', preloadError); alert('海報圖片處理失敗，請檢查網絡連線。'); setIsGeneratingPoster(false); }
+    } catch (preloadError) { console.error('海報圖片預加載或轉換失敗:', preloadError); alert('海報圖片處理失敗，請檢查網路連線。'); setIsGeneratingPoster(false); }
   }, [monthlyStarEditData, systemConfig.schoolLogo, selectedMonthForAdmin]);
 
   return (
